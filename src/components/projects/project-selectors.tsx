@@ -91,6 +91,8 @@ interface StatusSelectorProps {
   displayMode?: SelectorDisplayMode;
   trigger?: React.ReactNode;
   className?: string;
+  /** Position of the popover relative to its trigger. */
+  align?: "start" | "center" | "end";
 }
 
 export function StatusSelector({
@@ -100,6 +102,7 @@ export function StatusSelector({
   displayMode,
   trigger,
   className,
+  align = "start",
 }: StatusSelectorProps) {
   const [open, setOpen] = useState(false);
 
@@ -138,7 +141,7 @@ export function StatusSelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-0">
+      <PopoverContent align={align} className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Search status..." className="h-9" />
           <CommandList>

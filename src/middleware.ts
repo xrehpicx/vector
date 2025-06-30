@@ -38,7 +38,10 @@ export default async function middleware(request: NextRequest) {
   // the admin bootstrap page instead of /auth/login.
   // ---------------------------------------------------------------------
 
-  if (!sessionCookie && !isSetupPage) {
+  // Specific flag for the initial admin bootstrap page to avoid self-redirects
+  const isAdminBootstrapPage = /^\/setup-admin$/.test(pathname);
+
+  if (!sessionCookie && !isAdminBootstrapPage) {
     // Cheap cache – we only call the API once per request but it's fast.
     const res = await fetch(new URL("/api/system/has-admin", request.url), {
       headers: { "x-internal": "true" },
@@ -58,12 +61,6 @@ export default async function middleware(request: NextRequest) {
     const loginUrl = new URL("/auth/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
-  }
-
-  // Redirect unauthenticated users from setup pages to login
-  if (!sessionCookie && isSetupPage) {
-    console.log("[middleware] unauthenticated setup ⇢ redirect to /auth/login");
-    return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
   // Let the client-side handle redirect when a valid session exists to avoid loops

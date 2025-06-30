@@ -9,6 +9,7 @@ import {
   index,
   boolean,
   pgEnum,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "./users-and-auth";
 import { team } from "./teams";
@@ -27,9 +28,6 @@ export const issue = pgTable(
     sequenceNumber: integer("sequence_number").notNull(),
     title: text("title").notNull(),
     description: text("description"),
-    stateId: uuid("state_id").references(() => issueState.id, {
-      onDelete: "set null",
-    }),
     priorityId: uuid("priority_id").references(() => issuePriority.id, {
       onDelete: "set null",
     }),
@@ -37,9 +35,6 @@ export const issue = pgTable(
       onDelete: "set null",
     }),
     projectId: uuid("project_id").references(() => project.id, {
-      onDelete: "set null",
-    }),
-    assigneeId: text("assignee_id").references(() => user.id, {
       onDelete: "set null",
     }),
     reporterId: text("reporter_id").references(() => user.id, {
@@ -99,3 +94,33 @@ export const comment = pgTable("comment", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deleted: boolean("deleted").default(false).notNull(),
 });
+
+// -----------------------------------------------------------------------------
+// Issue Assignees – supports multiple assignees each with independent status
+// -----------------------------------------------------------------------------
+
+export const issueAssignee = pgTable(
+  "issue_assignee",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    issueId: uuid("issue_id")
+      .notNull()
+      .references(() => issue.id, { onDelete: "cascade" }),
+    /** Nullable so an assignment can be created without a user yet ("unassigned") */
+    assigneeId: text("assignee_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    /** Workflow state for this particular assignee */
+    stateId: uuid("state_id")
+      .notNull()
+      .references(() => issueState.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqueAssignee: uniqueIndex("issue_assignee_issue_idx").on(
+      table.issueId,
+      table.assigneeId,
+    ),
+  }),
+);

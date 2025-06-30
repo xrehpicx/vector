@@ -81,6 +81,8 @@ interface ProjectSelectorProps {
   displayMode?: SelectorDisplayMode;
   trigger?: React.ReactElement;
   className?: string;
+  /** Position of the popover relative to its trigger. */
+  align?: "start" | "center" | "end";
 }
 
 export function ProjectSelector({
@@ -90,10 +92,11 @@ export function ProjectSelector({
   displayMode,
   trigger,
   className,
-}: ProjectSelectorProps) {
+  align = "start",
+}: ProjectSelectorProps & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
 
-  if (projects.length === 0) return null;
+  // Always render selector even when no projects to make the control discoverable.
 
   const hasSelection = selectedProject !== "";
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
@@ -115,7 +118,7 @@ export function ProjectSelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-0">
+      <PopoverContent align={align} className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Search project..." className="h-9" />
           <CommandList>
@@ -172,6 +175,8 @@ interface StateSelectorProps {
   displayMode?: SelectorDisplayMode;
   trigger?: React.ReactElement;
   className?: string;
+  /** Position of the popover relative to its trigger. */
+  align?: "start" | "center" | "end";
 }
 
 export function StateSelector({
@@ -181,7 +186,8 @@ export function StateSelector({
   displayMode,
   trigger,
   className,
-}: StateSelectorProps) {
+  align = "start",
+}: StateSelectorProps & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
 
   // Transform states from API into combobox-friendly structure
@@ -242,7 +248,7 @@ export function StateSelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-0">
+      <PopoverContent align={align} className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Search state..." className="h-9" />
           <CommandList>
@@ -302,6 +308,8 @@ interface PrioritySelectorProps {
   displayMode?: SelectorDisplayMode;
   trigger?: React.ReactElement;
   className?: string;
+  /** Position of the popover relative to its trigger. */
+  align?: "start" | "center" | "end";
 }
 
 export function PrioritySelector({
@@ -311,7 +319,8 @@ export function PrioritySelector({
   displayMode,
   trigger,
   className,
-}: PrioritySelectorProps) {
+  align = "start",
+}: PrioritySelectorProps & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
 
   if (priorities.length === 0) return null;
@@ -347,7 +356,7 @@ export function PrioritySelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-0">
+      <PopoverContent align={align} className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Search priority..." className="h-9" />
           <CommandList>
@@ -400,27 +409,69 @@ export function PrioritySelector({
 // Assignee Selector ----------------------------------------------------------
 interface AssigneeSelectorProps {
   members: Member[];
-  selectedAssignee: string;
-  onAssigneeSelect: (assigneeId: string) => void;
+  selectedAssignee?: string;
+  onAssigneeSelect?: (assigneeId: string) => void;
+  selectedAssignees?: string[];
+  onAssigneesSelect?: (assigneeIds: string[]) => void;
+  multiple?: boolean;
   displayMode?: SelectorDisplayMode;
   trigger?: React.ReactElement;
   className?: string;
+  /** Position of the popover relative to its trigger. */
+  align?: "start" | "center" | "end";
 }
 
 export function AssigneeSelector({
   members,
   selectedAssignee,
   onAssigneeSelect,
+  selectedAssignees = [],
+  onAssigneesSelect,
+  multiple = false,
   displayMode,
   trigger,
   className,
-}: AssigneeSelectorProps) {
+  align = "start",
+}: AssigneeSelectorProps & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
 
   if (members.length === 0) return null;
 
-  const hasSelection = selectedAssignee !== "";
+  const hasSelection = multiple
+    ? selectedAssignees.length > 0
+    : (selectedAssignee || "") !== "";
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
+
+  const handleSelect = (userId: string) => {
+    if (multiple && onAssigneesSelect) {
+      const isSelected = selectedAssignees.includes(userId);
+      if (isSelected) {
+        onAssigneesSelect(selectedAssignees.filter((id) => id !== userId));
+      } else {
+        onAssigneesSelect([...selectedAssignees, userId]);
+      }
+      // Keep popover open for multiple selection
+    } else if (onAssigneeSelect) {
+      onAssigneeSelect(userId);
+      setOpen(false);
+    }
+  };
+
+  const getDisplayText = () => {
+    if (multiple) {
+      if (selectedAssignees.length === 0) return "Assignees";
+      if (selectedAssignees.length === 1) {
+        const member = members.find((m) => m.userId === selectedAssignees[0]);
+        return member?.name || "1 assignee";
+      }
+      return `${selectedAssignees.length} assignees`;
+    } else {
+      if (!selectedAssignee) return "Assignee";
+      return (
+        members.find((m) => m.userId === selectedAssignee)?.name || "Assignee"
+      );
+    }
+  };
 
   const DefaultBtn = (
     <Button
@@ -429,52 +480,55 @@ export function AssigneeSelector({
       className={cn("bg-muted/30 hover:bg-muted/50 h-8 gap-2", className)}
     >
       {showIcon && <User className="h-3 w-3" />}
-      {showLabel &&
-        (selectedAssignee
-          ? members.find((m) => m.userId === selectedAssignee)?.name
-          : "Assignee")}
+      {showLabel && getDisplayText()}
     </Button>
   );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-0">
+      <PopoverContent align={align} className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Search assignee..." className="h-9" />
           <CommandList>
             <CommandEmpty>No member found.</CommandEmpty>
             <CommandGroup>
-              <CommandItem
-                value=""
-                onSelect={() => {
-                  onAssigneeSelect("");
-                  setOpen(false);
-                }}
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    selectedAssignee === "" ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                Unassigned
-              </CommandItem>
-              {members.map((member) => (
+              {!multiple && (
                 <CommandItem
-                  key={member.userId}
-                  value={member.name || member.email}
+                  value=""
                   onSelect={() => {
-                    onAssigneeSelect(member.userId);
-                    setOpen(false);
+                    handleSelect("");
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedAssignee === member.userId
+                      (selectedAssignee || "") === ""
                         ? "opacity-100"
                         : "opacity-0",
+                    )}
+                  />
+                  Unassigned
+                </CommandItem>
+              )}
+              {members.map((member) => (
+                <CommandItem
+                  key={member.userId}
+                  value={member.name || member.email}
+                  onSelect={() => {
+                    handleSelect(member.userId);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      multiple
+                        ? selectedAssignees.includes(member.userId)
+                          ? "opacity-100"
+                          : "opacity-0"
+                        : (selectedAssignee || "") === member.userId
+                          ? "opacity-100"
+                          : "opacity-0",
                     )}
                   />
                   <div className="flex flex-col">

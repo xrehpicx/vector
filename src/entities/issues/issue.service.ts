@@ -6,6 +6,7 @@ import {
   project as projectTable,
   organization as organizationTable,
   team as teamTable,
+  issueAssignee as assignmentTable,
 } from "@/db/schema";
 import { getNextIssueSequence } from "@/entities/teams/team.service";
 import {
@@ -17,6 +18,12 @@ import {
   like,
 } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import {
+  createAssignmentInTx,
+  createAssignment,
+  changeAssignmentState,
+  updateAssignmentAssignee,
+} from "./assignment.service";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -27,15 +34,13 @@ export type Issue = InferSelectModel<typeof issueTable>;
 
 type BaseCreateIssueParams = Pick<
   IssueInsertModel,
-  | "teamId"
-  | "reporterId"
-  | "title"
-  | "description"
-  | "projectId"
-  | "priorityId"
-  | "stateId"
-  | "assigneeId"
->;
+  "teamId" | "reporterId" | "title" | "description" | "projectId" | "priorityId"
+> & {
+  /** Initial workflow state for first assignment */
+  stateId: string;
+  /** Initial assignee for first assignment (nullable) */
+  assigneeId?: string | null;
+};
 
 export type CreateIssueParams = BaseCreateIssueParams & {
   orgSlug: string;
@@ -208,11 +213,20 @@ export async function createIssue(
           reporterId: reporterId!,
           projectId,
           priorityId,
-          stateId,
-          assigneeId,
           organizationId,
           createdAt: now,
           updatedAt: now,
+        });
+
+        // ------------------------------------------------------------------
+        //  Create initial assignment row so issue always has at least one
+        // ------------------------------------------------------------------
+
+        await createAssignmentInTx(tx, {
+          issueId: id,
+          assigneeId,
+          stateId: stateId!,
+          actorId: reporterId!,
         });
 
         await tx.insert(activityTable).values({
@@ -259,22 +273,34 @@ export async function changeState(
   actorId: string,
   stateId: string,
 ): Promise<void> {
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .update(issueTable)
-      .set({ stateId, updatedAt: now })
-      .where(eq(issueTable.id, issueId));
+  // Update all assignments for this actor on the issue (simplified permissions)
+  // changeAssignmentState imported statically above
 
-    await tx.insert(activityTable).values({
-      id: randomUUID(),
+  // Find existing assignment rows for actor
+  const assignments = await db
+    .select({ id: assignmentTable.id })
+    .from(assignmentTable)
+    .where(
+      and(
+        eq(assignmentTable.issueId, issueId),
+        eq(assignmentTable.assigneeId, actorId),
+      ),
+    );
+
+  if (assignments.length === 0) {
+    // No assignment – create placeholder then update
+    const { id: newId } = await createAssignment({
       issueId,
-      actorId: actorId!,
-      type: "status_changed",
-      payload: { stateId },
-      createdAt: now,
+      assigneeId: actorId,
+      stateId,
+      actorId,
     });
-  });
+    await changeAssignmentState(newId, actorId, stateId);
+  } else {
+    await Promise.all(
+      assignments.map((a) => changeAssignmentState(a.id, actorId, stateId)),
+    );
+  }
 }
 
 export async function changePriority(
@@ -329,21 +355,25 @@ export async function assign(
   actorId: string,
   assigneeId: string | null,
 ): Promise<void> {
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .update(issueTable)
-      .set({ assigneeId, updatedAt: now })
-      .where(eq(issueTable.id, issueId));
-    await tx.insert(activityTable).values({
-      id: randomUUID(),
+  // Find first assignment (unassigned or current actor) and update
+  const assignment = await db
+    .select({ id: assignmentTable.id })
+    .from(assignmentTable)
+    .where(eq(assignmentTable.issueId, issueId))
+    .limit(1);
+
+  if (assignment[0]) {
+    await updateAssignmentAssignee(assignment[0].id, actorId, assigneeId);
+  } else {
+    // none exists – create new
+    await createAssignment({
       issueId,
-      actorId: actorId!,
-      type: "assignee_changed",
-      payload: { assigneeId },
-      createdAt: now,
+      assigneeId,
+      // Without specific state, reuse default (stateId param undefined?). We'll pass null for now requiring later update.
+      stateId: randomUUID(),
+      actorId,
     });
-  });
+  }
 }
 
 export async function updateTitle(

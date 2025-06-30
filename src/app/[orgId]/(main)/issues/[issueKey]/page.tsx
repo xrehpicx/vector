@@ -21,6 +21,7 @@ import {
   ProjectSelector,
 } from "@/components/issues/issue-selectors";
 import { Separator } from "@/components/ui/separator";
+import { IssueAssignments } from "@/components/issues/issue-assignments";
 
 interface IssueViewPageProps {
   params: Promise<{ orgId: string; issueKey: string }>;
@@ -179,10 +180,6 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     onSuccess: () => refetchIssue(),
   });
 
-  const assignMutation = trpc.issue.assign.useMutation({
-    onSuccess: () => refetchIssue(),
-  });
-
   const changeTeamMutation = trpc.issue.changeTeam.useMutation({
     onSuccess: () => refetchIssue(),
   });
@@ -240,15 +237,6 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     });
   };
 
-  const handleAssigneeChange = (assigneeId: string) => {
-    if (!session?.user?.id) return;
-    assignMutation.mutate({
-      issueId: issue.id,
-      actorId: session.user.id,
-      assigneeId: assigneeId || null,
-    });
-  };
-
   const handleTeamChange = (teamId: string) => {
     if (!session?.user?.id) return;
     changeTeamMutation.mutate({
@@ -270,9 +258,9 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   return (
     <div className="bg-background h-full overflow-y-auto">
       {/* Page Grid: main area + sidebar */}
-      <div className="h-full">
-        {/* LEFT COLUMN */}
-        <div>
+      <div className="flex h-full">
+        {/* LEFT COLUMN - Main Content */}
+        <div className="min-w-0 flex-1">
           {/* Header */}
           <div className="bg-background/95 supports-[backdrop-filter]:bg-background/60 flex items-center justify-between border-b px-2 backdrop-blur">
             <div className="flex h-8 flex-wrap items-center gap-2">
@@ -308,15 +296,6 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
             </div>
 
             <div className="flex items-center">
-              <StatusSelector
-                states={states || []}
-                selectedState={issue.stateId || ""}
-                onStateSelect={handleStateChange}
-                className="border-none bg-transparent shadow-none"
-              />
-
-              <div className="bg-muted-foreground/20 h-4 w-px" />
-
               {/* Priority */}
               <PrioritySelector
                 priorities={priorities || []}
@@ -324,23 +303,13 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                 onPrioritySelect={handlePriorityChange}
                 className="border-none bg-transparent shadow-none"
               />
-
-              <div className="bg-muted-foreground/20 h-4 w-px" />
-
-              {/* Assignee */}
-              <AssigneeSelector
-                members={members || []}
-                selectedAssignee={issue.assigneeId || ""}
-                onAssigneeSelect={handleAssigneeChange}
-                className="border-none bg-transparent shadow-none"
-              />
             </div>
           </div>
 
           {/* Main Content */}
-          <div className="mx-auto max-w-5xl px-4 py-4">
+          <div className="px-4 py-4">
             {/* Issue Header */}
-            <div className="mb-2 max-w-4xl space-y-2">
+            <div className="mb-2 space-y-2">
               <div className="text-muted-foreground flex items-center gap-2 text-xs">
                 <span className="font-mono">{resolvedParams.issueKey}</span>
                 <span>•</span>
@@ -459,6 +428,24 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                 Activity feed coming soon...
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* RIGHT SIDEBAR - Assignments */}
+        <div className="bg-background w-80 overflow-y-auto border-l">
+          <div className="space-y-2">
+            {states && members && (
+              <IssueAssignments
+                issueId={issue.id}
+                states={states as any}
+                members={members as any}
+                defaultStateId={
+                  states.find((s) => s.type === "todo")?.id ||
+                  states[0]?.id ||
+                  ""
+                }
+              />
+            )}
           </div>
         </div>
       </div>

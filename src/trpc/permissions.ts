@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   projectMember as projectMemberTable,
   issue as issueTable,
+  issueAssignee as assignmentTable,
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import type { Context, ProtectedContext } from "@/trpc/init";
@@ -51,21 +52,36 @@ export async function assertAssigneeOrLeadOrAdmin(
 ) {
   if (ctx.session.user.role === "admin") return;
 
-  const rows = await db
-    .select({
-      assigneeId: issueTable.assigneeId,
-      projectId: issueTable.projectId,
-    })
+  // Check if user is assignee on this issue via assignment table
+  const assignmentRows = await db
+    .select({ id: assignmentTable.id })
+    .from(assignmentTable)
+    .where(
+      and(
+        eq(assignmentTable.issueId, issueId),
+        eq(assignmentTable.assigneeId, ctx.session.user.id),
+      ),
+    )
+    .limit(1);
+
+  if (assignmentRows.length > 0) return; // is assignee
+
+  // Fall back to lead/admin via project membership
+  const issueRows = await db
+    .select({ projectId: issueTable.projectId })
     .from(issueTable)
     .where(eq(issueTable.id, issueId))
     .limit(1);
-  if (rows.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
 
-  const issue = rows[0];
-  if (issue.assigneeId === ctx.session.user.id) return; // assignee ok
-  if (issue.projectId) {
-    await assertProjectLeadOrAdmin(ctx, issue.projectId);
+  if (issueRows.length === 0) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+
+  const projectId = issueRows[0].projectId;
+  if (projectId) {
+    await assertProjectLeadOrAdmin(ctx, projectId);
     return;
   }
+
   throw new TRPCError({ code: "FORBIDDEN" });
 }

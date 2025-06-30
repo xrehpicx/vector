@@ -205,31 +205,23 @@ export function IssuesTable({
               </div>
 
               {/* Assignee Selector */}
-              <AssigneeSelector
-                members={members as Member[]}
-                selectedAssignee={issue.assigneeId || ""}
-                onAssigneeSelect={(aid) => onAssigneeChange(issue.id, aid)}
-                displayMode="labelOnly"
-                trigger={
-                  issue.assigneeId ? (
-                    <div className="flex cursor-pointer items-center gap-2">
-                      <Avatar className="size-6">
-                        <AvatarFallback className="text-xs">
-                          {getAssigneeInitials(
-                            issue.assigneeName,
-                            issue.assigneeEmail,
-                          )}
-                        </AvatarFallback>
-                      </Avatar>
-                    </div>
-                  ) : (
-                    <div className="flex size-6 cursor-pointer items-center justify-center">
-                      <span className="text-muted-foreground text-xs">—</span>
-                    </div>
-                  )
-                }
-                className="border-none bg-transparent p-0 shadow-none"
-              />
+              <div className="flex cursor-pointer items-center gap-1">
+                {issue.assigneeId ? (
+                  <Avatar className="size-6">
+                    <AvatarFallback className="text-xs">
+                      {getAssigneeInitials(
+                        issue.assigneeName,
+                        issue.assigneeEmail,
+                      )}
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <div className="flex size-6 cursor-pointer items-center justify-center">
+                    <span className="text-muted-foreground text-xs">—</span>
+                  </div>
+                )}
+                {/* TODO: Show additional assignees as "+N" indicator */}
+              </div>
 
               {/* Actions */}
               <div className="flex-shrink-0">

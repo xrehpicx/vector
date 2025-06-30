@@ -59,6 +59,8 @@ export interface TeamSelectorProps<T extends { id: string; name: string }> {
   displayMode?: SelectorDisplayMode;
   trigger?: React.ReactElement;
   className?: string;
+  /** Position of the popover relative to its trigger. */
+  align?: "start" | "center" | "end";
 }
 
 /**
@@ -72,10 +74,9 @@ export function TeamSelector<T extends { id: string; name: string }>({
   displayMode,
   trigger,
   className,
-}: TeamSelectorProps<T>) {
+  align = "start",
+}: TeamSelectorProps<T> & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
-
-  if (teams.length === 0) return null;
 
   const hasSelection = selectedTeam !== "";
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
@@ -97,7 +98,7 @@ export function TeamSelector<T extends { id: string; name: string }>({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-0">
+      <PopoverContent align={align} className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Search team..." className="h-9" />
           <CommandList>

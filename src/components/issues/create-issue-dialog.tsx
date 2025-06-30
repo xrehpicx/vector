@@ -162,7 +162,7 @@ function CreateIssueDialogContent({
   const [selectedTeam, setSelectedTeam] = useState<string>("");
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [selectedState, setSelectedState] = useState<string>("");
-  const [selectedAssignee, setSelectedAssignee] = useState<string>("");
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [selectedPriority, setSelectedPriority] = useState<string>("");
   const [manualFormatOverride, setManualFormatOverride] = useState<
     "team" | "project" | "org" | null
@@ -262,9 +262,10 @@ function CreateIssueDialogContent({
       description: description.trim() || undefined,
       teamId: selectedTeam || undefined,
       projectId: selectedProject || undefined,
-      stateId: selectedState || undefined,
+      stateId: selectedState,
       priorityId: selectedPriority || undefined,
-      assigneeId: selectedAssignee || undefined,
+      assigneeId:
+        selectedAssignees.length > 0 ? selectedAssignees[0] : undefined,
       issueKeyFormat: effectiveFormat,
     });
   };
@@ -315,9 +316,10 @@ function CreateIssueDialogContent({
 
                 <AssigneeSelector
                   members={members}
-                  selectedAssignee={selectedAssignee}
-                  onAssigneeSelect={setSelectedAssignee}
+                  selectedAssignees={selectedAssignees}
+                  onAssigneesSelect={setSelectedAssignees}
                   displayMode="iconWhenUnselected"
+                  multiple={true}
                 />
 
                 <ProjectSelector

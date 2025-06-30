@@ -10,6 +10,7 @@ import {
   type NonOwnerMemberRole,
   issueState,
   issuePriority,
+  issueAssignee,
 } from "@/db/schema";
 import { eq, and, count, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -187,13 +188,14 @@ export class OrganizationService {
 
     const assigneeUser = alias(user, "assigneeUser");
     const reporterUser = alias(user, "reporterUser");
+    const assignment = alias(issueAssignee, "assignment");
 
     return await db
       .select({
         id: issue.id,
         key: issue.key,
         title: issue.title,
-        stateId: issue.stateId,
+        stateId: assignment.stateId,
         priorityId: issue.priorityId,
         projectName: project.name,
         projectKey: project.key,
@@ -201,7 +203,7 @@ export class OrganizationService {
         teamKey: team.key,
         updatedAt: issue.updatedAt,
         sequenceNumber: issue.sequenceNumber,
-        assigneeId: issue.assigneeId,
+        assigneeId: assignment.assigneeId,
         assigneeName: assigneeUser.name,
         assigneeEmail: assigneeUser.email,
         reporterName: reporterUser.name,
@@ -217,12 +219,12 @@ export class OrganizationService {
         priorityIcon: issuePriority.icon,
       })
       .from(issue)
-      // Optional relations so issues without a project or team are still returned
+      .leftJoin(assignment, eq(issue.id, assignment.issueId))
       .leftJoin(project, eq(issue.projectId, project.id))
       .leftJoin(team, eq(issue.teamId, team.id))
-      .leftJoin(issueState, eq(issue.stateId, issueState.id))
+      .leftJoin(issueState, eq(assignment.stateId, issueState.id))
       .leftJoin(issuePriority, eq(issue.priorityId, issuePriority.id))
-      .leftJoin(assigneeUser, eq(issue.assigneeId, assigneeUser.id))
+      .leftJoin(assigneeUser, eq(assignment.assigneeId, assigneeUser.id))
       .leftJoin(reporterUser, eq(issue.reporterId, reporterUser.id))
       .where(eq(issue.organizationId, orgId))
       .orderBy(desc(issue.updatedAt))
@@ -476,13 +478,14 @@ export class OrganizationService {
     // Base query assembling issue rows similar to getRecentIssues
     const assigneeUser = alias(user, "assigneeUser");
     const reporterUser = alias(user, "reporterUser");
+    const assignment = alias(issueAssignee, "assignment");
 
     const issues = await db
       .select({
         id: issue.id,
         key: issue.key,
         title: issue.title,
-        stateId: issue.stateId,
+        stateId: assignment.stateId,
         priorityId: issue.priorityId,
         projectName: project.name,
         projectKey: project.key,
@@ -491,7 +494,7 @@ export class OrganizationService {
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt,
         sequenceNumber: issue.sequenceNumber,
-        assigneeId: issue.assigneeId,
+        assigneeId: assignment.assigneeId,
         assigneeName: assigneeUser.name,
         assigneeEmail: assigneeUser.email,
         reporterName: reporterUser.name,
@@ -507,11 +510,12 @@ export class OrganizationService {
         priorityIcon: issuePriority.icon,
       })
       .from(issue)
+      .leftJoin(assignment, eq(issue.id, assignment.issueId))
       .leftJoin(project, eq(issue.projectId, project.id))
       .leftJoin(team, eq(issue.teamId, team.id))
-      .leftJoin(issueState, eq(issue.stateId, issueState.id))
+      .leftJoin(issueState, eq(assignment.stateId, issueState.id))
       .leftJoin(issuePriority, eq(issue.priorityId, issuePriority.id))
-      .leftJoin(assigneeUser, eq(issue.assigneeId, assigneeUser.id))
+      .leftJoin(assigneeUser, eq(assignment.assigneeId, assigneeUser.id))
       .leftJoin(reporterUser, eq(issue.reporterId, reporterUser.id))
       .where(eq(issue.organizationId, orgId))
       .orderBy(desc(issue.updatedAt))
@@ -530,7 +534,8 @@ export class OrganizationService {
     const countsRows = await db
       .select({ type: issueState.type, cnt: count() })
       .from(issue)
-      .leftJoin(issueState, eq(issue.stateId, issueState.id))
+      .leftJoin(assignment, eq(issue.id, assignment.issueId))
+      .leftJoin(issueState, eq(assignment.stateId, issueState.id))
       .where(eq(issue.organizationId, orgId))
       .groupBy(issueState.type);
 
@@ -657,5 +662,33 @@ export class OrganizationService {
     const total = totalRows[0]?.cnt ?? 0;
 
     return { teams: teamsRows, total } as const;
+  }
+
+  /**
+   * Get all assignments for a specific issue with user and state details
+   */
+  static async getIssueAssignments(issueId: string) {
+    const assigneeUser = alias(user, "assigneeUser");
+
+    return await db
+      .select({
+        id: issueAssignee.id,
+        issueId: issueAssignee.issueId,
+        assigneeId: issueAssignee.assigneeId,
+        assigneeName: assigneeUser.name,
+        assigneeEmail: assigneeUser.email,
+        stateId: issueAssignee.stateId,
+        stateName: issueState.name,
+        stateColor: issueState.color,
+        stateIcon: issueState.icon,
+        stateType: issueState.type,
+        createdAt: issueAssignee.createdAt,
+        updatedAt: issueAssignee.updatedAt,
+      })
+      .from(issueAssignee)
+      .leftJoin(assigneeUser, eq(issueAssignee.assigneeId, assigneeUser.id))
+      .leftJoin(issueState, eq(issueAssignee.stateId, issueState.id))
+      .where(eq(issueAssignee.issueId, issueId))
+      .orderBy(issueAssignee.createdAt);
   }
 }

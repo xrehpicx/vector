@@ -7,6 +7,7 @@ import {
   project as projectTable,
   issuePriority,
   issueStateTypeEnum,
+  issueAssignee,
 } from "@/db/schema";
 import { projectStatusTypeEnum } from "@/db/schema/projects";
 import { eq, and, count, InferInsertModel } from "drizzle-orm";
@@ -469,7 +470,13 @@ export class WorkflowService {
     const usage = await db
       .select({ cnt: count() })
       .from(issue)
-      .where(eq(issue.priorityId, priorityId));
+      .innerJoin(projectTable, eq(issue.projectId, projectTable.id))
+      .where(
+        and(
+          eq(issue.priorityId, priorityId),
+          eq(projectTable.organizationId, orgId),
+        ),
+      );
 
     if (usage[0].cnt > 0) {
       throw new Error("Priority is in use by existing issues");
@@ -536,10 +543,14 @@ export class WorkflowService {
     // Check usage in issues
     const usage = await db
       .select({ cnt: count() })
-      .from(issue)
+      .from(issueAssignee)
+      .innerJoin(issue, eq(issueAssignee.issueId, issue.id))
       .innerJoin(projectTable, eq(issue.projectId, projectTable.id))
       .where(
-        and(eq(issue.stateId, stateId), eq(projectTable.organizationId, orgId)),
+        and(
+          eq(issueAssignee.stateId, stateId),
+          eq(projectTable.organizationId, orgId),
+        ),
       );
 
     if (usage[0].cnt > 0) {

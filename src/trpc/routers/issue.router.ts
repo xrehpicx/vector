@@ -19,8 +19,14 @@ import {
   updateComment,
   deleteComment,
 } from "@/entities/issues/comment.service";
+import {
+  createAssignment,
+  changeAssignmentState,
+  updateAssignmentAssignee,
+} from "@/entities/issues/assignment.service";
 import { z } from "zod";
 import { assertAssigneeOrLeadOrAdmin } from "@/trpc/permissions";
+import { OrganizationService } from "@/entities/organizations/organization.service";
 
 export const issueRouter = createTRPCRouter({
   getByKey: protectedProcedure
@@ -50,7 +56,7 @@ export const issueRouter = createTRPCRouter({
         description: z.string().optional(),
         projectId: z.string().uuid().optional(),
         priorityId: z.string().uuid().optional(),
-        stateId: z.string().uuid().optional(),
+        stateId: z.string().uuid(),
         assigneeId: z.string().optional(),
         issueKeyFormat: z.enum(["org", "project", "team"]).default("org"),
       }),
@@ -251,5 +257,65 @@ export const issueRouter = createTRPCRouter({
     })
     .mutation(async ({ input }) => {
       await deleteIssue(input.issueId);
+    }),
+
+  // -------------------------------------------------------------------------
+  //  Assignment operations for multi-assignee support
+  // -------------------------------------------------------------------------
+
+  addAssignee: protectedProcedure
+    .input(
+      z.object({
+        issueId: z.string().uuid(),
+        assigneeId: z.string().optional(),
+        stateId: z.string().uuid(),
+      }),
+    )
+    .use(({ ctx, next, input }) => {
+      return assertAssigneeOrLeadOrAdmin(ctx, input.issueId).then(() => next());
+    })
+    .mutation(async ({ ctx, input }) => {
+      const userId = getUserId(ctx);
+      const { id } = await createAssignment({
+        issueId: input.issueId,
+        assigneeId: input.assigneeId ?? null,
+        stateId: input.stateId,
+        actorId: userId,
+      });
+      return { id } as const;
+    }),
+
+  changeAssignmentState: protectedProcedure
+    .input(
+      z.object({
+        assignmentId: z.string().uuid(),
+        stateId: z.string().uuid(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = getUserId(ctx);
+      await changeAssignmentState(input.assignmentId, userId, input.stateId);
+    }),
+
+  updateAssignmentAssignee: protectedProcedure
+    .input(
+      z.object({
+        assignmentId: z.string().uuid(),
+        assigneeId: z.string().nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = getUserId(ctx);
+      await updateAssignmentAssignee(
+        input.assignmentId,
+        userId,
+        input.assigneeId,
+      );
+    }),
+
+  getAssignments: protectedProcedure
+    .input(z.object({ issueId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      return OrganizationService.getIssueAssignments(input.issueId);
     }),
 });
