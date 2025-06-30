@@ -79,6 +79,7 @@ pnpm dlx --yes docker compose -f docker-compose.dev-postgres.yml up -d
    • **Wire-up step**: open `src/db/schema/index.ts` and add `export * from "./blog";`. The aggregated `schema` object is passed to Drizzle automatically, so this keeps type-safety.
    • After every change run `pnpm run db:generate` → commit the generated SQL in `/drizzle`.
    • Push to the dev DB with `pnpm run db:push` if migrations should be applied locally.
+   • **Team membership roles**: `team_member.role` uses the `team_member_role` enum with values `"member" | "lead"`. Creating/updating a team with a `leadId` automatically adds that user as a member with role `lead`.
 
 3. **Env vars**
    • Extend the Zod schema (`src/env.ts`).

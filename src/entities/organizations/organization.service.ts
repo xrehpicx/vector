@@ -442,6 +442,28 @@ export class OrganizationService {
       .where(and(eq(member.organizationId, orgId), eq(member.userId, userId)));
   }
 
+  /**
+   * Remove a member from an organization.
+   * Safeguard: cannot remove the last remaining member.
+   */
+  static async removeMember(orgId: string, userId: string) {
+    // Count current members
+    const countRes = await db
+      .select({ cnt: count() })
+      .from(member)
+      .where(eq(member.organizationId, orgId));
+
+    const memberCount = Number(countRes[0]?.cnt ?? 0);
+
+    if (memberCount <= 1) {
+      throw new Error("Cannot remove the last member of the organization");
+    }
+
+    await db
+      .delete(member)
+      .where(and(eq(member.organizationId, orgId), eq(member.userId, userId)));
+  }
+
   static async getIssuesPaged(orgSlug: string, page = 1, pageSize = 25) {
     const orgRow = await db
       .select({ id: organization.id })

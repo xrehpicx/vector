@@ -149,6 +149,10 @@ export function PrioritiesPageContent({ orgSlug }: PrioritiesPageContentProps) {
             <span className="truncate text-sm font-medium">
               {priority.name}
             </span>
+
+            <span className="text-muted-foreground ml-auto text-xs">
+              {priority.weight}
+            </span>
           </button>
         ))}
       </div>

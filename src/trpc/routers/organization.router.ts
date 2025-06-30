@@ -129,6 +129,27 @@ export const organizationRouter = createTRPCRouter({
       );
     }),
 
+  // Remove member from organization
+  removeMember: protectedProcedure
+    .input(z.object({ orgSlug: z.string(), userId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const requesterId = getUserId(ctx);
+
+      const membership = await OrganizationService.verifyUserOrganizationAccess(
+        requesterId,
+        input.orgSlug,
+      );
+
+      if (!membership || membership.role === "member")
+        throw new Error("FORBIDDEN");
+
+      // Prevent removing owner themselves if they are last member handled in service
+      return OrganizationService.removeMember(
+        membership.organizationId,
+        input.userId,
+      );
+    }),
+
   listTeams: protectedProcedure
     .input(z.object({ orgSlug: z.string() }))
     .query(async ({ input, ctx }) => {

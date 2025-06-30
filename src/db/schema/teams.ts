@@ -5,8 +5,15 @@ import {
   timestamp,
   primaryKey,
   index,
+  pgEnum,
 } from "drizzle-orm/pg-core";
 import { user, organization } from "./users-and-auth";
+
+// Enum for team member roles (must be defined before usage)
+export const teamMemberRoleEnum = pgEnum("team_member_role", [
+  "lead",
+  "member",
+]);
 
 // Teams represent functional groups (e.g. Engineering, Marketing) that own issues.
 // Each team gets a unique `key` which prefixes issue numbers (e.g. ENG-123).
@@ -39,7 +46,7 @@ export const teamMember = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: text("role"), // e.g. "member", "lead"
+    role: teamMemberRoleEnum("role").default("member").notNull(),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
   (table) => ({

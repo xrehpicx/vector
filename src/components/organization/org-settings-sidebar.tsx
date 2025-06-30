@@ -66,7 +66,7 @@ export function OrgSettingsSidebar({
   });
 
   return (
-    <nav className="space-y-1 p-3">
+    <nav className="space-y-1 p-2 pt-0">
       <div className="pb-2">
         <h2 className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
           Organization Settings
@@ -84,19 +84,15 @@ export function OrgSettingsSidebar({
             key={item.href}
             href={item.href}
             className={cn(
-              "group block rounded-md px-3 py-1.5 text-sm transition-colors",
-              "hover:bg-accent hover:text-accent-foreground",
+              "group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "hover:bg-foreground/10 hover:text-foreground",
               isActive
-                ? "bg-accent text-accent-foreground font-medium"
-                : "text-muted-foreground hover:text-foreground",
+                ? "bg-foreground/10 text-foreground"
+                : "text-muted-foreground",
             )}
           >
-            <div className="flex items-center gap-2">
-              <item.icon className="size-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{item.label}</div>
-              </div>
-            </div>
+            <item.icon className="size-4 shrink-0" />
+            <span className="truncate">{item.label}</span>
           </Link>
         );
       })}

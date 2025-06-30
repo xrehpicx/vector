@@ -7,10 +7,8 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import {
   Popover,
   PopoverContent,
@@ -24,10 +22,18 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Settings2, Clock, Check, ChevronsUpDown } from "lucide-react";
+import {
+  Settings2,
+  Clock,
+  Check,
+  ChevronsUpDown,
+  Plus,
+  Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { IconPicker } from "@/components/ui/icon-picker";
+import { getDynamicIcon } from "@/lib/dynamic-icons";
 
 interface StateData {
   id?: string;
@@ -91,6 +97,118 @@ const PROJECT_STATUS_TYPES = [
   { value: "canceled", label: "Canceled", description: "Project was canceled" },
 ];
 
+// Selector components similar to issue-selectors
+interface TypeSelectorProps {
+  typeOptions: Array<{ value: string; label: string; description: string }>;
+  selectedType: string;
+  onTypeSelect: (type: string) => void;
+}
+
+function TypeSelector({
+  typeOptions,
+  selectedType,
+  onTypeSelect,
+}: TypeSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const selectedTypeInfo = typeOptions.find((t) => t.value === selectedType);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="bg-muted/30 hover:bg-muted/50 h-8 gap-2"
+        >
+          {selectedTypeInfo ? selectedTypeInfo.label : "Type"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-0">
+        <Command>
+          <CommandInput placeholder="Search type..." className="h-9" />
+          <CommandList>
+            <CommandEmpty>No type found.</CommandEmpty>
+            <CommandGroup>
+              {typeOptions.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.value}
+                  onSelect={(currentValue) => {
+                    onTypeSelect(currentValue);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      selectedType === option.value
+                        ? "opacity-100"
+                        : "opacity-0",
+                    )}
+                  />
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+interface ColorSelectorProps {
+  colors: string[];
+  selectedColor: string;
+  onColorSelect: (color: string) => void;
+}
+
+function ColorSelector({
+  colors,
+  selectedColor,
+  onColorSelect,
+}: ColorSelectorProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="bg-muted/30 hover:bg-muted/50 h-8 gap-2"
+        >
+          <div
+            className="h-3 w-3 rounded-full"
+            style={{ backgroundColor: selectedColor }}
+          />
+          Color
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-48 p-3">
+        <div className="flex flex-wrap gap-2">
+          {colors.map((colorOption) => (
+            <button
+              key={colorOption}
+              type="button"
+              className={`size-8 rounded-md border-2 transition-all ${
+                selectedColor === colorOption
+                  ? "border-foreground scale-110"
+                  : "border-border hover:scale-105"
+              }`}
+              style={{ backgroundColor: colorOption }}
+              onClick={() => {
+                onColorSelect(colorOption);
+                setOpen(false);
+              }}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function StatesManagementDialog({
   type,
   state,
@@ -123,15 +241,11 @@ export function StatesManagementDialog({
   const [stateType, setStateType] = useState(
     state?.type || (type === "issue" ? "todo" : "planned"),
   );
-  const [typeComboboxOpen, setTypeComboboxOpen] = useState(false);
 
   const isEditing = !!state;
-  const IconComponent = type === "issue" ? Settings2 : Clock;
-  const title = `${isEditing ? "Edit" : "Add"} ${type === "issue" ? "Issue State" : "Project Status"}`;
 
   const typeOptions =
     type === "issue" ? ISSUE_STATE_TYPES : PROJECT_STATUS_TYPES;
-  const selectedTypeInfo = typeOptions.find((t) => t.value === stateType);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,121 +278,61 @@ export function StatesManagementDialog({
     }
   };
 
+  const IconComponent = icon ? getDynamicIcon(icon) || Users : Users;
+
   return (
     <Dialog open onOpenChange={(isOpen: boolean) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent showCloseButton={false} className="gap-2 p-2 sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
+          {/* <DialogTitle className="flex items-center gap-2 text-base">
             <IconComponent className="size-4" />
             {title}
-          </DialogTitle>
+          </DialogTitle> */}
+
+          {/* Properties */}
+          <div className="flex justify-between gap-2">
+            <TypeSelector
+              typeOptions={typeOptions}
+              selectedType={stateType}
+              onTypeSelect={setStateType}
+            />
+            <div className="flex gap-2">
+              <IconPicker
+                value={icon}
+                onValueChange={setIcon}
+                placeholder="Select an icon..."
+                trigger={
+                  <Button variant="outline" size="sm" className="h-8 gap-2">
+                    <IconComponent
+                      className="size-4"
+                      style={{ color: color || "#94a3b8" }}
+                    />
+                  </Button>
+                }
+              />
+
+              <ColorSelector
+                colors={DEFAULT_COLORS}
+                selectedColor={color}
+                onColorSelect={setColor}
+              />
+            </div>
+          </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-2">
           {/* Name */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Name</label>
-            <Input
-              placeholder={`${type === "issue" ? "State" : "Status"} name`}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-9"
-              autoFocus
-            />
-          </div>
-
-          {/* Type Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Type</label>
-            <Popover open={typeComboboxOpen} onOpenChange={setTypeComboboxOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={typeComboboxOpen}
-                  className="h-9 w-full justify-between"
-                >
-                  {selectedTypeInfo ? selectedTypeInfo.label : "Select type..."}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="max-h-[200px] w-[var(--radix-popover-trigger-width)] p-0">
-                <Command>
-                  <CommandInput placeholder="Search type..." className="h-9" />
-                  <CommandList>
-                    <CommandEmpty>No type found.</CommandEmpty>
-                    <CommandGroup>
-                      {typeOptions.map((option) => (
-                        <CommandItem
-                          key={option.value}
-                          value={option.value}
-                          onSelect={(currentValue) => {
-                            setStateType(currentValue);
-                            setTypeComboboxOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              stateType === option.value
-                                ? "opacity-100"
-                                : "opacity-0",
-                            )}
-                          />
-                          {option.label}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            {selectedTypeInfo && (
-              <p className="text-muted-foreground text-xs">
-                {selectedTypeInfo.description}
-              </p>
-            )}
-          </div>
-
-          {/* Icon Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Icon</label>
-            <IconPicker
-              value={icon}
-              onValueChange={setIcon}
-              placeholder="Select an icon..."
-            />
-          </div>
-
-          {/* Color Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Color</label>
-            <div className="flex flex-wrap gap-2">
-              {DEFAULT_COLORS.map((colorOption) => (
-                <button
-                  key={colorOption}
-                  type="button"
-                  className={`size-8 rounded-md border-2 transition-all ${
-                    color === colorOption
-                      ? "border-foreground scale-110"
-                      : "border-border hover:scale-105"
-                  }`}
-                  style={{ backgroundColor: colorOption }}
-                  onClick={() => setColor(colorOption)}
-                />
-              ))}
-            </div>
-            <div className="text-muted-foreground flex items-center gap-2 text-xs">
-              <div
-                className="size-3 rounded-full"
-                style={{ backgroundColor: color }}
-              />
-              {name || `${type === "issue" ? "State" : "Status"} name`}
-            </div>
-          </div>
+          <Input
+            placeholder={`${type === "issue" ? "State" : "Status"} name`}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="text-base"
+            autoFocus
+          />
         </form>
 
-        <DialogFooter>
+        {/* Bottom action row */}
+        <div className="flex w-full flex-row items-center justify-between gap-2">
           {isEditing && (
             <Button
               type="button"
@@ -292,15 +346,17 @@ export function StatesManagementDialog({
               Delete
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handleSubmit} disabled={!name.trim()}>
-            {isEditing
-              ? "Save Changes"
-              : `Add ${type === "issue" ? "State" : "Status"}`}
-          </Button>
-        </DialogFooter>
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSubmit} disabled={!name.trim()}>
+              {isEditing
+                ? "Save Changes"
+                : `Add ${type === "issue" ? "State" : "Status"}`}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

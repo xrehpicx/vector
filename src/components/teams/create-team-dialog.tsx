@@ -3,29 +3,19 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Users, Plus, Check, ChevronsUpDown } from "lucide-react";
+import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Import the LeadSelector to maintain consistency
+import { LeadSelector } from "@/components/projects/project-selectors";
 
 // ---------------------------------------------------------------------------
 // 🧩 Internal content component (dialog body)
@@ -45,7 +35,6 @@ function CreateTeamDialogContent({
   const [key, setKey] = useState("");
   const [description, setDescription] = useState("");
   const [selectedLead, setSelectedLead] = useState<string>("");
-  const [leadComboboxOpen, setLeadComboboxOpen] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -99,134 +88,57 @@ function CreateTeamDialogContent({
 
   return (
     <Dialog open onOpenChange={(isOpen: boolean) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent showCloseButton={false} className="gap-2 p-2 sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Users className="size-4" />
-            Create team
+          <DialogTitle className="flex items-center">
+            <div className="text-muted-foreground flex w-full items-center gap-2 text-sm">
+              {/* Properties Row */}
+              <div className="flex flex-wrap gap-2">
+                <LeadSelector
+                  members={orgMembers}
+                  selectedLead={selectedLead}
+                  onLeadSelect={setSelectedLead}
+                  displayMode="iconWhenUnselected"
+                />
+              </div>
+              <div className="ml-auto">
+                <code className="bg-muted flex h-8 items-center rounded-md px-2.5 font-mono text-sm">
+                  {key || "TEAM"}
+                </code>
+              </div>
+            </div>
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-2">
           {/* Team Name */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Team name</label>
-            <Input
-              placeholder="e.g. Engineering, Marketing, Design"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              autoFocus
-            />
-          </div>
+          <Input
+            placeholder="Team name"
+            value={name}
+            onChange={(e) => handleNameChange(e.target.value)}
+            className="text-base"
+            autoFocus
+          />
 
           {/* Team Key */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Team key</label>
-            <Input
-              placeholder="e.g. ENG, MKT, DES"
-              value={key}
-              onChange={(e) =>
-                setKey(e.target.value.toUpperCase().slice(0, 10))
-              }
-              maxLength={10}
-            />
-            <p className="text-muted-foreground text-xs">
-              Used as prefix for issue IDs (e.g. {key || "ENG"}-123)
-            </p>
-          </div>
+          <Input
+            placeholder="TEAM-KEY"
+            value={key}
+            onChange={(e) => setKey(e.target.value.toUpperCase().slice(0, 10))}
+            maxLength={10}
+            className="h-9"
+          />
 
           {/* Description */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              Description (optional)
-            </label>
-            <textarea
-              placeholder="What does this team work on?"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            />
-          </div>
-
-          {/* Team Lead */}
-          {orgMembers.length > 0 && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Team lead (optional)
-              </label>
-              <Popover
-                open={leadComboboxOpen}
-                onOpenChange={setLeadComboboxOpen}
-              >
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={leadComboboxOpen}
-                    className="h-9 w-full justify-between"
-                  >
-                    {selectedLead
-                      ? orgMembers.find(
-                          (member) => member.userId === selectedLead,
-                        )?.name
-                      : "Select team lead..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="max-h-[200px] w-[var(--radix-popover-trigger-width)] p-0">
-                  <Command>
-                    <CommandInput
-                      placeholder="Search member..."
-                      className="h-9"
-                    />
-                    <CommandList>
-                      <CommandEmpty>No member found.</CommandEmpty>
-                      <CommandGroup>
-                        <CommandItem
-                          value=""
-                          onSelect={() => {
-                            setSelectedLead("");
-                            setLeadComboboxOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              selectedLead === "" ? "opacity-100" : "opacity-0",
-                            )}
-                          />
-                          No lead
-                        </CommandItem>
-                        {orgMembers.map((member) => (
-                          <CommandItem
-                            key={member.userId}
-                            value={member.name}
-                            onSelect={() => {
-                              setSelectedLead(member.userId);
-                              setLeadComboboxOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedLead === member.userId
-                                  ? "opacity-100"
-                                  : "opacity-0",
-                              )}
-                            />
-                            {member.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-          )}
+          <Textarea
+            placeholder="Add description..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring min-h-[120px] w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          />
         </form>
 
-        <DialogFooter>
+        <div className="flex w-full flex-row items-center justify-between gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
@@ -237,7 +149,7 @@ function CreateTeamDialogContent({
           >
             {createMutation.isPending ? "Creating…" : "Create team"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

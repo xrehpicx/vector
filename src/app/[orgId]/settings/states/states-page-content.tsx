@@ -239,7 +239,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {issueGroups.map((group) => (
-            <div key={group.type} className="space-y-3">
+            <div key={group.type} className="space-y-1">
               <div>
                 <h3 className="text-foreground text-sm font-medium">
                   {group.label}
@@ -323,7 +323,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {projectGroups.map((group) => (
-            <div key={group.type} className="space-y-3">
+            <div key={group.type} className="space-y-1">
               <div>
                 <h3 className="text-foreground text-sm font-medium">
                   {group.label}

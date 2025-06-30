@@ -111,6 +111,23 @@ export async function updateTeam(params: UpdateTeamParams): Promise<void> {
     .update(teamTable)
     .set({ ...data, updatedAt: new Date() })
     .where(eq(teamTable.id, id));
+
+  // If leadId updated, ensure the user is also a team member with role 'lead'
+  if (data.leadId) {
+    const now = new Date();
+    await db
+      .insert(teamMemberTable)
+      .values({
+        teamId: id,
+        userId: data.leadId,
+        role: "lead",
+        joinedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [teamMemberTable.teamId, teamMemberTable.userId],
+        set: { role: "lead" },
+      });
+  }
 }
 
 export async function deleteTeam(teamId: string): Promise<void> {
@@ -129,7 +146,7 @@ export async function addMember(
   const now = new Date();
   await db
     .insert(teamMemberTable)
-    .values({ teamId, userId, role, joinedAt: now })
+    .values({ teamId, userId, role: role as "lead" | "member", joinedAt: now })
     .onConflictDoNothing();
 }
 

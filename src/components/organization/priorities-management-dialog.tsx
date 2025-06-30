@@ -3,16 +3,17 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Hash } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog";
+import { Users } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { IconPicker } from "@/components/ui/icon-picker";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { getDynamicIcon } from "@/lib/dynamic-icons";
+import { Label } from "../ui/label";
 
 interface PriorityData {
   id?: string;
@@ -38,6 +39,58 @@ const DEFAULT_COLORS = [
   "#dc2626", // red-600
 ];
 
+interface ColorSelectorProps {
+  colors: string[];
+  selectedColor: string;
+  onColorSelect: (color: string) => void;
+}
+
+function ColorSelector({
+  colors,
+  selectedColor,
+  onColorSelect,
+}: ColorSelectorProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="bg-muted/30 hover:bg-muted/50 h-8 gap-2"
+        >
+          <div
+            className="h-3 w-3 rounded-full"
+            style={{ backgroundColor: selectedColor }}
+          />
+          Color
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-48 p-3">
+        <div className="flex flex-wrap gap-2">
+          {colors.map((colorOption) => (
+            <button
+              key={colorOption}
+              type="button"
+              className={`size-8 rounded-md border-2 transition-all ${
+                selectedColor === colorOption
+                  ? "border-foreground scale-110"
+                  : "border-border hover:scale-105"
+              }`}
+              style={{ backgroundColor: colorOption }}
+              onClick={() => {
+                onColorSelect(colorOption);
+                setOpen(false);
+              }}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function PrioritiesManagementDialog({
   priority,
   existingPriorities,
@@ -61,7 +114,6 @@ export function PrioritiesManagementDialog({
   const [weight, setWeight] = useState(priority?.weight ?? 0);
 
   const isEditing = !!priority;
-  const title = `${isEditing ? "Edit" : "Add"} Priority`;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,87 +143,82 @@ export function PrioritiesManagementDialog({
     deleteMutation.mutate({ orgSlug, priorityId: priority.id });
   };
 
+  const IconComponent = icon ? getDynamicIcon(icon) || Users : Users;
+
   return (
     <Dialog open onOpenChange={(isOpen: boolean) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent showCloseButton={false} className="gap-2 p-2 sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Hash className="size-4" />
-            {title}
-          </DialogTitle>
-        </DialogHeader>
+          {/* Properties */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Input
+                id="priority-weight"
+                type="number"
+                value={weight}
+                onChange={(e) => setWeight(parseInt(e.target.value, 10) || 0)}
+                className="h-8 w-16"
+              />
+              <Label className="text-muted-foreground text-xs">Weight</Label>
+            </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Name</label>
-            <Input
-              placeholder="Priority name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-9"
-              autoFocus
-            />
-          </div>
+            <div className="flex gap-2">
+              <IconPicker
+                value={icon}
+                onValueChange={setIcon}
+                placeholder="Select an icon..."
+                trigger={
+                  <Button variant="outline" size="sm" className="h-8 gap-2">
+                    <IconComponent
+                      className="size-4"
+                      style={{ color: color || "#94a3b8" }}
+                    />
+                  </Button>
+                }
+              />
 
-          {/* Weight */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Weight (ordering)</label>
-            <Input
-              type="number"
-              value={weight}
-              onChange={(e) => setWeight(parseInt(e.target.value, 10) || 0)}
-              className="h-9"
-            />
-            <p className="text-muted-foreground text-xs">
-              Higher weight indicates higher priority. Values must be integers.
-            </p>
-          </div>
-
-          {/* Icon Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Icon</label>
-            <IconPicker
-              value={icon}
-              onValueChange={setIcon}
-              placeholder="Select an icon..."
-            />
-          </div>
-
-          {/* Color Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Color</label>
-            <div className="flex flex-wrap gap-2">
-              {DEFAULT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  className={`size-8 rounded-md border-2 transition-all ${
-                    color === c
-                      ? "border-foreground scale-110"
-                      : "border-border hover:scale-105"
-                  }`}
-                  style={{ backgroundColor: c }}
-                  onClick={() => setColor(c)}
-                />
-              ))}
+              <ColorSelector
+                colors={DEFAULT_COLORS}
+                selectedColor={color}
+                onColorSelect={setColor}
+              />
             </div>
           </div>
+        </DialogHeader>
 
-          <DialogFooter className="mt-4 flex justify-between">
-            {isEditing && (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                Delete
-              </Button>
-            )}
-            <Button type="submit">Save</Button>
-          </DialogFooter>
+        <form onSubmit={handleSubmit} className="space-y-2">
+          {/* Name */}
+          <Input
+            placeholder="Priority name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="text-base"
+            autoFocus
+          />
         </form>
+
+        {/* Bottom action row */}
+        <div className="flex w-full flex-row items-center justify-between gap-2">
+          {isEditing && (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+            >
+              Delete
+            </Button>
+          )}
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSubmit} disabled={!name.trim()}>
+              {isEditing ? "Save Changes" : "Add Priority"}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

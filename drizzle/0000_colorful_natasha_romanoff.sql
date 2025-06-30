@@ -11,6 +11,12 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
+ CREATE TYPE "team_member_role" AS ENUM('lead', 'member');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
  CREATE TYPE "project_status_type" AS ENUM('backlog', 'planned', 'in_progress', 'completed', 'canceled');
 EXCEPTION
  WHEN duplicate_object THEN null;
@@ -133,7 +139,7 @@ CREATE TABLE IF NOT EXISTS "team" (
 CREATE TABLE IF NOT EXISTS "team_member" (
 	"team_id" uuid NOT NULL,
 	"user_id" text NOT NULL,
-	"role" text,
+	"role" "team_member_role" DEFAULT 'member' NOT NULL,
 	"joined_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "team_member_team_id_user_id_pk" PRIMARY KEY("team_id","user_id")
 );

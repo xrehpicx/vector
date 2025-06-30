@@ -52,9 +52,9 @@ export default async function SettingsLayout({
     }));
 
   return (
-    <div className="bg-background flex h-screen">
+    <div className="bg-secondary flex h-screen">
       {/* Settings Sidebar */}
-      <aside className="bg-card hidden w-56 lg:block">
+      <aside className="hidden w-56 lg:block">
         <div className="flex h-full flex-col">
           {/* Organization Options Dropdown */}
           <div className="p-2">
@@ -73,7 +73,7 @@ export default async function SettingsLayout({
       </aside>
 
       {/* Main Content */}
-      <main className="bg-secondary m-2 ml-0 flex-1 overflow-y-auto rounded border">
+      <main className="bg-background m-2 ml-0 flex-1 overflow-y-auto rounded border">
         {children}
       </main>
     </div>

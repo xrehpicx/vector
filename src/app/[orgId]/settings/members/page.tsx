@@ -2,13 +2,6 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth/auth";
 import { OrganizationService } from "@/entities/organizations/organization.service";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
 import { MembersList } from "@/components/organization";
@@ -56,7 +49,8 @@ export default async function MembersSettingsPage({
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <Users className="size-5" />
           Members & Access
         </h1>
         <p className="text-muted-foreground text-sm">
@@ -64,39 +58,28 @@ export default async function MembersSettingsPage({
         </p>
       </div>
 
-      {/* Members & Access */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="size-4" />
-            Organization Members
-          </CardTitle>
-          <CardDescription className="text-sm">
-            View and manage all organization members and their roles
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Total Members</span>
-                <Badge variant="secondary" className="text-xs">
-                  {stats.memberCount}{" "}
-                  {stats.memberCount === 1 ? "member" : "members"}
-                </Badge>
-              </div>
-              <p className="text-muted-foreground text-xs">
-                Invite new members and manage existing member roles
-              </p>
-            </div>
-          </div>
+      {/* Member Stats */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Total Members</span>
+          <Badge variant="secondary" className="text-xs">
+            {stats.memberCount} {stats.memberCount === 1 ? "member" : "members"}
+          </Badge>
+        </div>
+        <p className="text-muted-foreground text-xs">
+          Invite new members and manage existing member roles
+        </p>
+      </div>
 
-          {/* Members list */}
-          <div className="border-t pt-4">
-            <MembersList orgSlug={orgSlug} isAdmin={isAdmin} />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Members List */}
+      <div className="space-y-4">
+        <MembersList
+          orgSlug={orgSlug}
+          isAdmin={isAdmin}
+          currentUserId={session.user.id}
+          memberCount={stats.memberCount}
+        />
+      </div>
     </div>
   );
 }

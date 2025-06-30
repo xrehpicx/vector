@@ -1,5 +1,5 @@
 {
-  "id": "631ea9df-f92c-4931-b679-2094e9075ab4",
+  "id": "84a8bba6-abe1-4609-9ef1-7dc1203b8817",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "5",
   "dialect": "pg",
@@ -652,9 +652,10 @@
         },
         "role": {
           "name": "role",
-          "type": "text",
+          "type": "team_member_role",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'member'"
         },
         "joined_at": {
           "name": "joined_at",
@@ -1535,6 +1536,13 @@
       "values": {
         "owner": "owner",
         "admin": "admin",
+        "member": "member"
+      }
+    },
+    "team_member_role": {
+      "name": "team_member_role",
+      "values": {
+        "lead": "lead",
         "member": "member"
       }
     },

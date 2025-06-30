@@ -97,13 +97,6 @@ export function TeamsPageContent({
           onDelete={isAdminOrOwner ? handleDelete : undefined}
           deletePending={deleteMutation.isPending}
         />
-
-        {/* Empty state with create button */}
-        {!isLoading && total === 0 && isAdminOrOwner && (
-          <div className="mt-4 flex justify-center">
-            <CreateTeamButton orgSlug={orgSlug} />
-          </div>
-        )}
       </div>
 
       {/* Pagination controls */}

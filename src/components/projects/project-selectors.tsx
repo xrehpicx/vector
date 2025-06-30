@@ -2,19 +2,32 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   DropdownMenu,
+  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Circle, Users, User, Activity } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Users, User, Circle, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 
-// Re-export types for convenience
+// Type definitions matching issue selectors
 export type Status = {
   id: string;
   name: string;
@@ -35,7 +48,30 @@ export type Member = {
   email: string;
 };
 
-// Helper function for initials
+// Display mode matching issue selectors
+export type SelectorDisplayMode =
+  | "default" // icon + label
+  | "labelOnly" // label only (no icon)
+  | "iconOnly" // icon only (no label, always)
+  | "iconWhenUnselected"; // icon when unselected, icon+label once a value selected
+
+function resolveVisibility(
+  mode: SelectorDisplayMode | undefined,
+  hasSelection: boolean,
+): { showIcon: boolean; showLabel: boolean } {
+  switch (mode) {
+    case "labelOnly":
+      return { showIcon: false, showLabel: true };
+    case "iconOnly":
+      return { showIcon: true, showLabel: false };
+    case "iconWhenUnselected":
+      return { showIcon: true, showLabel: hasSelection };
+    case "default":
+    default:
+      return { showIcon: true, showLabel: true };
+  }
+}
+
 function getInitials(name?: string | null, email?: string | null): string {
   const displayName = name || email;
   if (!displayName) return "?";
@@ -47,12 +83,12 @@ function getInitials(name?: string | null, email?: string | null): string {
     .slice(0, 2);
 }
 
-// Status Selector Component
+// Status Selector Component - Updated to use Popover + Command
 interface StatusSelectorProps {
   statuses: ReadonlyArray<Status>;
   selectedStatus: string;
   onStatusSelect: (statusId: string) => void;
-  displayMode?: "full" | "iconOnly" | "iconWhenUnselected";
+  displayMode?: SelectorDisplayMode;
   trigger?: React.ReactNode;
   className?: string;
 }
@@ -61,61 +97,87 @@ export function StatusSelector({
   statuses,
   selectedStatus,
   onStatusSelect,
-  displayMode = "full",
+  displayMode,
   trigger,
   className,
 }: StatusSelectorProps) {
   const [open, setOpen] = useState(false);
 
-  const selectedStatusObj = statuses.find((s) => s.id === selectedStatus);
-  const StatusIcon = selectedStatusObj?.icon
-    ? getDynamicIcon(selectedStatusObj.icon) || Circle
-    : Circle;
-  const statusColor = selectedStatusObj?.color || "#94a3b8";
+  if (statuses.length === 0) return null;
 
-  const defaultTrigger = (
+  const hasSelection = selectedStatus !== "";
+  const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
+
+  const selectedStatusObj = statuses.find((s) => s.id === selectedStatus);
+  const currentColor = selectedStatusObj?.color || "#94a3b8";
+  const currentName = selectedStatusObj?.name || "Status";
+  const currentIconName = selectedStatusObj?.icon;
+  const CurrentIcon = currentIconName
+    ? getDynamicIcon(currentIconName) || Circle
+    : Circle;
+
+  const DefaultBtn = (
     <Button
       variant="outline"
       size="sm"
       className={cn("bg-muted/30 hover:bg-muted/50 h-8 gap-2", className)}
     >
-      <StatusIcon className="h-3 w-3" style={{ color: statusColor }} />
-      {(displayMode === "full" ||
-        (displayMode === "iconWhenUnselected" && selectedStatus)) && (
-        <span className="text-sm">{selectedStatusObj?.name || "Status"}</span>
-      )}
+      {showIcon &&
+        (CurrentIcon ? (
+          <CurrentIcon className="h-3 w-3" style={{ color: currentColor }} />
+        ) : (
+          <div
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: currentColor }}
+          />
+        ))}
+      {showLabel && currentName}
     </Button>
   );
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        {trigger || defaultTrigger}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
-        {statuses.map((status) => {
-          const Icon = status.icon
-            ? getDynamicIcon(status.icon) || Circle
-            : Circle;
-          return (
-            <DropdownMenuItem
-              key={status.id}
-              onClick={() => {
-                onStatusSelect(status.id);
-                setOpen(false);
-              }}
-              className="flex items-center gap-2"
-            >
-              <Icon
-                className="size-4"
-                style={{ color: status.color || "#94a3b8" }}
-              />
-              {status.name}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-0">
+        <Command>
+          <CommandInput placeholder="Search status..." className="h-9" />
+          <CommandList>
+            <CommandEmpty>No status found.</CommandEmpty>
+            <CommandGroup>
+              {statuses.map((status) => {
+                const Icon = status.icon
+                  ? getDynamicIcon(status.icon) || Circle
+                  : Circle;
+                return (
+                  <CommandItem
+                    key={status.id}
+                    value={status.name}
+                    onSelect={() => {
+                      onStatusSelect(status.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        selectedStatus === status.id
+                          ? "opacity-100"
+                          : "opacity-0",
+                      )}
+                    />
+                    <Icon
+                      className="mr-2 h-3 w-3"
+                      style={{ color: status.color || "#94a3b8" }}
+                    />
+                    {status.name}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
