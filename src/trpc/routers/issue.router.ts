@@ -35,6 +35,9 @@ import { assertCanManageAssignment } from "@/trpc/permissions";
 import { z } from "zod";
 import { assertAssigneeOrLeadOrAdmin } from "@/trpc/permissions";
 import { OrganizationService } from "@/entities/organizations/organization.service";
+import { PermissionPolicy } from "@/auth/policy-engine";
+import { requirePermission } from "@/auth/permissions";
+import { PERMISSIONS } from "@/auth/permission-constants";
 
 export const issueRouter = createTRPCRouter({
   getByKey: protectedProcedure
@@ -192,7 +195,10 @@ export const issueRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertAssigneeOrLeadOrAdmin(ctx, input.issueId).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.ISSUE_UPDATE, {
+        type: "issue",
+        id: input.issueId,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       await changeState(input.issueId, input.actorId, input.stateId);

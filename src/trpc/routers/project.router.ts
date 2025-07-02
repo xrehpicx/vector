@@ -10,6 +10,7 @@ import {
   findProjectByKey,
   listProjectMembers,
   deleteProject,
+  userHasProjectAccess,
 } from "@/entities/projects/project.service";
 import { OrganizationService } from "@/entities/organizations/organization.service";
 import { z } from "zod";
@@ -20,8 +21,9 @@ import {
   projectMember as projectMemberTable,
 } from "@/db/schema";
 import { TRPCError } from "@trpc/server";
-import { userHasProjectAccess } from "@/entities/projects/project.service";
 import { PERMISSIONS } from "@/auth/permission-constants";
+import { PermissionPolicy } from "@/auth/policy-engine";
+import { requirePermission } from "@/auth/permissions";
 
 export const projectRouter = createTRPCRouter({
   getByKey: protectedProcedure
@@ -40,12 +42,12 @@ export const projectRouter = createTRPCRouter({
         });
       }
 
-      // Access guard
-      const userId = getUserId(ctx);
-      const canAccess = await userHasProjectAccess(userId, project.id);
-      if (!canAccess) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      // Check view permission
+      await PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_VIEW, {
+        type: "project",
+        id: project.id,
+      });
+
       return project;
     }),
 
@@ -56,17 +58,22 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .query(async ({ input, ctx }) => {
-      const userId = getUserId(ctx);
-      const canAccess = await userHasProjectAccess(userId, input.projectId);
-      if (!canAccess) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      // Check if user can view this project
+      await PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_VIEW, {
+        type: "project",
+        id: input.projectId,
+      });
       return await listProjectMembers(input.projectId);
     }),
 
   listTeams: protectedProcedure
     .input(z.object({ projectId: z.string().uuid() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      // Check if user can view this project
+      await PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_VIEW, {
+        type: "project",
+        id: input.projectId,
+      });
       return await listProjectTeams(input.projectId);
     }),
 
@@ -77,6 +84,12 @@ export const projectRouter = createTRPCRouter({
         teamId: z.string().uuid(),
       }),
     )
+    .use(({ ctx, next, input }) => {
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_UPDATE, {
+        type: "project",
+        id: input.projectId,
+      }).then(() => next());
+    })
     .mutation(async ({ input }) => {
       await addProjectTeam(input.projectId, input.teamId);
     }),
@@ -88,6 +101,12 @@ export const projectRouter = createTRPCRouter({
         teamId: z.string().uuid(),
       }),
     )
+    .use(({ ctx, next, input }) => {
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_UPDATE, {
+        type: "project",
+        id: input.projectId,
+      }).then(() => next());
+    })
     .mutation(async ({ input }) => {
       await removeProjectTeam(input.projectId, input.teamId);
     }),
@@ -95,11 +114,10 @@ export const projectRouter = createTRPCRouter({
   delete: protectedProcedure
     .input(z.object({ projectId: z.string().uuid() }))
     .use(({ ctx, next, input }) => {
-      return assertProjectLeadOrPermission(
-        ctx,
-        input.projectId,
-        PERMISSIONS.PROJECT_DELETE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_DELETE, {
+        type: "project",
+        id: input.projectId,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       await deleteProject(input.projectId);
@@ -128,8 +146,15 @@ export const projectRouter = createTRPCRouter({
         input.orgSlug,
       );
       if (!membership) {
-        throw new Error("FORBIDDEN");
+        throw new TRPCError({ code: "FORBIDDEN" });
       }
+
+      // Check project creation permission
+      await requirePermission(
+        userId,
+        membership.organizationId,
+        PERMISSIONS.PROJECT_CREATE,
+      );
 
       const { id } = await createProject({
         organizationId: membership.organizationId,
@@ -161,11 +186,10 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertProjectLeadOrPermission(
-        ctx,
-        input.id,
-        PERMISSIONS.PROJECT_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_UPDATE, {
+        type: "project",
+        id: input.id,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       await updateProject({ id: input.id, data: input.data });
@@ -181,11 +205,10 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertProjectLeadOrPermission(
-        ctx,
-        input.projectId,
-        PERMISSIONS.PROJECT_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_UPDATE, {
+        type: "project",
+        id: input.projectId,
+      }).then(() => next());
     })
     .mutation(async ({ input, ctx }) => {
       await updateProject({
@@ -203,11 +226,10 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertProjectLeadOrPermission(
-        ctx,
-        input.projectId,
-        PERMISSIONS.PROJECT_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_UPDATE, {
+        type: "project",
+        id: input.projectId,
+      }).then(() => next());
     })
     .mutation(async ({ input, ctx }) => {
       await updateProject({
@@ -225,11 +247,10 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertProjectLeadOrPermission(
-        ctx,
-        input.projectId,
-        PERMISSIONS.PROJECT_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_UPDATE, {
+        type: "project",
+        id: input.projectId,
+      }).then(() => next());
     })
     .mutation(async ({ input, ctx }) => {
       await updateProject({
@@ -247,11 +268,10 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertProjectLeadOrPermission(
-        ctx,
-        input.projectId,
-        PERMISSIONS.PROJECT_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_UPDATE, {
+        type: "project",
+        id: input.projectId,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       await addProjectMember(input.projectId, input.userId, input.role);
@@ -265,11 +285,10 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertProjectLeadOrPermission(
-        ctx,
-        input.projectId,
-        PERMISSIONS.PROJECT_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.PROJECT_UPDATE, {
+        type: "project",
+        id: input.projectId,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       try {
@@ -286,7 +305,7 @@ export const projectRouter = createTRPCRouter({
       .from(projectTable)
       .leftJoin(
         projectMemberTable,
-        eq(projectMemberTable.projectId, projectTable.id),
+        eq(projectTable.id, projectMemberTable.projectId),
       )
       .where(eq(projectMemberTable.userId, userId));
     return projects;

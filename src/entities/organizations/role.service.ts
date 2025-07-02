@@ -1,5 +1,10 @@
 import { db } from "@/db";
-import { orgRole, orgRolePermission, orgRoleAssignment } from "@/db/schema";
+import {
+  orgRole,
+  orgRolePermission,
+  orgRoleAssignment,
+  member,
+} from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import type { Permission } from "@/auth/permission-constants";
@@ -139,6 +144,28 @@ export class OrgRoleService {
   // ---------------------------------------------------------------------------
 
   static async assignRole(roleId: string, userId: string, orgId: string) {
+    // First verify the user is actually a member of this organization
+    const membershipRows = await db
+      .select({ id: member.id })
+      .from(member)
+      .where(and(eq(member.userId, userId), eq(member.organizationId, orgId)))
+      .limit(1);
+
+    if (membershipRows.length === 0) {
+      throw new Error("User is not a member of this organization");
+    }
+
+    // Verify the role exists and belongs to this organization
+    const roleRows = await db
+      .select({ id: orgRole.id })
+      .from(orgRole)
+      .where(and(eq(orgRole.id, roleId), eq(orgRole.organizationId, orgId)))
+      .limit(1);
+
+    if (roleRows.length === 0) {
+      throw new Error("Role not found in this organization");
+    }
+
     // Avoid duplicate assignments – ignore unique-violation errors
     try {
       await db.insert(orgRoleAssignment).values({

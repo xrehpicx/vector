@@ -7,13 +7,14 @@ import {
   findTeamByKey,
   deleteTeam,
   listTeamMembers,
-  userHasTeamAccess,
 } from "@/entities/teams/team.service";
 import { OrganizationService } from "@/entities/organizations/organization.service";
 import { z } from "zod";
 import { assertTeamLeadOrPermission } from "@/trpc/permissions";
 import { PERMISSIONS } from "@/auth/permission-constants";
 import { TRPCError } from "@trpc/server";
+import { PermissionPolicy } from "@/auth/policy-engine";
+import { requirePermission } from "@/auth/permissions";
 
 export const teamRouter = createTRPCRouter({
   getByKey: protectedProcedure
@@ -23,7 +24,18 @@ export const teamRouter = createTRPCRouter({
         teamKey: z.string(),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      const userId = getUserId(ctx);
+
+      // Verify user has access to this organization and get team
+      const membership = await OrganizationService.verifyUserOrganizationAccess(
+        userId,
+        input.orgSlug,
+      );
+      if (!membership) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
       const team = await findTeamByKey(input.orgSlug, input.teamKey);
       if (!team) {
         throw new TRPCError({
@@ -31,6 +43,14 @@ export const teamRouter = createTRPCRouter({
           message: "Team not found",
         });
       }
+
+      // Check view permission
+      await requirePermission(
+        userId,
+        membership.organizationId,
+        PERMISSIONS.TEAM_VIEW,
+      );
+
       return team;
     }),
 
@@ -41,11 +61,11 @@ export const teamRouter = createTRPCRouter({
       }),
     )
     .query(async ({ input, ctx }) => {
-      const userId = getUserId(ctx);
-      const canAccess = await userHasTeamAccess(userId, input.teamId);
-      if (!canAccess) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
+      // Check if user can view this team
+      await PermissionPolicy.require(ctx, PERMISSIONS.TEAM_VIEW, {
+        type: "team",
+        id: input.teamId,
+      });
       return await listTeamMembers(input.teamId);
     }),
 
@@ -68,13 +88,15 @@ export const teamRouter = createTRPCRouter({
         input.orgSlug,
       );
       if (!membership) {
-        throw new Error("FORBIDDEN");
+        throw new TRPCError({ code: "FORBIDDEN" });
       }
 
-      // Only admins and owners can create teams
-      if (membership.role !== "admin" && membership.role !== "owner") {
-        throw new Error("FORBIDDEN");
-      }
+      // Check team creation permission
+      await requirePermission(
+        userId,
+        membership.organizationId,
+        PERMISSIONS.TEAM_CREATE,
+      );
 
       const { id } = await createTeam({
         organizationId: membership.organizationId,
@@ -105,11 +127,10 @@ export const teamRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertTeamLeadOrPermission(
-        ctx,
-        input.id,
-        PERMISSIONS.TEAM_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.TEAM_UPDATE, {
+        type: "team",
+        id: input.id,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       await updateTeam({ id: input.id, data: input.data });
@@ -122,11 +143,10 @@ export const teamRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertTeamLeadOrPermission(
-        ctx,
-        input.teamId,
-        PERMISSIONS.TEAM_DELETE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.TEAM_DELETE, {
+        type: "team",
+        id: input.teamId,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       await deleteTeam(input.teamId);
@@ -141,11 +161,10 @@ export const teamRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertTeamLeadOrPermission(
-        ctx,
-        input.teamId,
-        PERMISSIONS.TEAM_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.TEAM_UPDATE, {
+        type: "team",
+        id: input.teamId,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       await addTeamMember(input.teamId, input.userId, input.role);
@@ -159,11 +178,10 @@ export const teamRouter = createTRPCRouter({
       }),
     )
     .use(({ ctx, next, input }) => {
-      return assertTeamLeadOrPermission(
-        ctx,
-        input.teamId,
-        PERMISSIONS.TEAM_UPDATE,
-      ).then(() => next());
+      return PermissionPolicy.require(ctx, PERMISSIONS.TEAM_UPDATE, {
+        type: "team",
+        id: input.teamId,
+      }).then(() => next());
     })
     .mutation(async ({ input }) => {
       try {

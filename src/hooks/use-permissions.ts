@@ -1,3 +1,4 @@
+import React from "react";
 import { trpc } from "@/lib/trpc";
 import type { Permission } from "@/auth/permission-constants";
 
@@ -26,6 +27,9 @@ export function usePermission(orgSlug: string, permission: Permission) {
 /**
  * React hook for checking multiple permissions at once.
  * Returns a map of permission -> boolean for efficient bulk checking.
+ *
+ * This is the preferred method when checking multiple permissions as it
+ * batches all checks into a single request.
  */
 export function usePermissions(orgSlug: string, permissions: Permission[]) {
   const { data: permissionMap = {}, isLoading } =
@@ -44,10 +48,29 @@ export function usePermissions(orgSlug: string, permissions: Permission[]) {
 /**
  * Higher-order component that conditionally renders children based on permission.
  *
+ * For better performance when checking multiple permissions, consider using
+ * usePermissions() with conditional rendering instead.
+ *
  * @example
  * <PermissionGate orgSlug="acme" permission="project:create">
  *   <CreateProjectButton />
  * </PermissionGate>
+ *
+ * @example
+ * // Better for multiple permissions:
+ * const { permissions, isLoading } = usePermissions(orgSlug, [
+ *   PERMISSIONS.PROJECT_CREATE,
+ *   PERMISSIONS.TEAM_CREATE
+ * ]);
+ *
+ * if (isLoading) return <Skeleton />;
+ *
+ * return (
+ *   <>
+ *     {permissions[PERMISSIONS.PROJECT_CREATE] && <CreateProjectButton />}
+ *     {permissions[PERMISSIONS.TEAM_CREATE] && <CreateTeamButton />}
+ *   </>
+ * );
  */
 interface PermissionGateProps {
   orgSlug: string;
@@ -68,4 +91,27 @@ export function PermissionGate({
   if (!hasPermission) return fallback;
 
   return children;
+}
+
+/**
+ * Hook that returns a memoized permission checker function.
+ * Useful for inline permission checks without triggering re-renders.
+ */
+export function usePermissionChecker(
+  orgSlug: string,
+  permissions: Permission[],
+) {
+  const { permissions: permissionMap, isLoading } = usePermissions(
+    orgSlug,
+    permissions,
+  );
+
+  const checker = React.useCallback(
+    (permission: Permission) => {
+      return permissionMap[permission] ?? false;
+    },
+    [permissionMap],
+  );
+
+  return { can: checker, isLoading };
 }

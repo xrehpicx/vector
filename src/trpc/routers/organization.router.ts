@@ -1,5 +1,6 @@
 import { createTRPCRouter, protectedProcedure, getUserId } from "@/trpc/init";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { OrganizationService } from "@/entities/organizations/organization.service";
 
 import { memberRoleEnum } from "@/db/schema/users-and-auth";
@@ -11,7 +12,7 @@ import { issueStateTypeEnum } from "@/db/schema/issue-config";
 import { projectStatusTypeEnum } from "@/db/schema/projects";
 
 import { hasPermission, requirePermission } from "@/auth/permissions";
-import { PERMISSIONS } from "@/auth/permission-constants";
+import { PERMISSIONS, type Permission } from "@/auth/permission-constants";
 
 // Derive type-safe Zod enum based on DB enum values (excluding "owner" for invite/update)
 const roleEnum = ((): ReturnType<typeof import("zod").z.enum> => {
@@ -122,11 +123,17 @@ export const organizationRouter = createTRPCRouter({
         userId,
         input.orgSlug,
       );
-      if (
-        !membership ||
-        (membership.role !== "admin" && membership.role !== "owner")
-      )
-        throw new Error("FORBIDDEN");
+      if (!membership) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      // Check invite permission
+      await requirePermission(
+        userId,
+        membership.organizationId,
+        PERMISSIONS.ORG_INVITE,
+      );
+
       return OrganizationService.inviteMember(
         membership.organizationId,
         input.email,
@@ -714,7 +721,7 @@ export const organizationRouter = createTRPCRouter({
       return hasPermission(
         getUserId(ctx),
         membership.organizationId,
-        input.permission,
+        input.permission as Permission,
       );
     }),
 
@@ -732,7 +739,7 @@ export const organizationRouter = createTRPCRouter({
         results[permission] = await hasPermission(
           getUserId(ctx),
           membership.organizationId,
-          permission,
+          permission as Permission,
         );
       }
       return results;

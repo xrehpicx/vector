@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { auth } from "@/auth/auth";
 import { db } from "@/db";
+import { clearPermissionCache } from "@/auth/permissions";
 
 /**
  * Build the tRPC context for every request.
@@ -9,6 +10,9 @@ import { db } from "@/db";
  * additional per-request data — e.g. Prisma/Drizzle transaction, headers, etc.
  */
 export const createTRPCContext = async (opts: { req: Request }) => {
+  // Clear permission cache at the start of each request
+  clearPermissionCache();
+
   // Better Auth needs the request headers to resolve the session
   const session = await auth.api.getSession({ headers: opts.req.headers });
 

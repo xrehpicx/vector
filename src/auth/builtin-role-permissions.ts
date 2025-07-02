@@ -1,4 +1,4 @@
-import { PERMISSIONS, type Permission } from "./permission-constants";
+import { PERMISSIONS, WILDCARD, type Permission } from "./permission-constants";
 
 // Public type for built-in member roles (system roles)
 export type BuiltinRole = "owner" | "admin" | "member";
@@ -10,27 +10,38 @@ export type BuiltinRole = "owner" | "admin" | "member";
  * bundled on the client side without dragging in the database driver (pg).
  */
 export const BUILTIN_ROLE_PERMISSIONS: Record<BuiltinRole, Permission[]> = {
-  owner: ["*"], // God-mode within the organization
+  owner: [WILDCARD], // God-mode within the organization
   admin: [
+    PERMISSIONS.ORG_VIEW,
     PERMISSIONS.ORG_MANAGE,
     PERMISSIONS.ORG_INVITE,
     PERMISSIONS.ROLE_CREATE,
     PERMISSIONS.ROLE_UPDATE,
     PERMISSIONS.ROLE_DELETE,
     PERMISSIONS.ROLE_ASSIGN,
+    PERMISSIONS.PROJECT_VIEW,
     PERMISSIONS.PROJECT_CREATE,
     PERMISSIONS.PROJECT_UPDATE,
     PERMISSIONS.PROJECT_DELETE,
+    PERMISSIONS.TEAM_VIEW,
     PERMISSIONS.TEAM_CREATE,
     PERMISSIONS.TEAM_UPDATE,
     PERMISSIONS.TEAM_DELETE,
+    PERMISSIONS.ISSUE_VIEW,
     PERMISSIONS.ISSUE_CREATE,
     PERMISSIONS.ISSUE_UPDATE,
+    PERMISSIONS.ISSUE_DELETE,
     PERMISSIONS.ASSIGNMENT_MANAGE,
   ],
   member: [
     PERMISSIONS.ORG_VIEW,
+    PERMISSIONS.PROJECT_VIEW,
+    PERMISSIONS.TEAM_VIEW,
+    PERMISSIONS.ISSUE_VIEW,
     PERMISSIONS.ISSUE_CREATE,
     PERMISSIONS.ISSUE_UPDATE,
   ],
 };
+
+// Default permissions for new admin roles (for migration purposes)
+export const DEFAULT_ADMIN_PERMISSIONS = BUILTIN_ROLE_PERMISSIONS.admin;
