@@ -3,8 +3,14 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Settings2, Plus, Clock, Pencil } from "lucide-react";
-import { StatesManagementDialog } from "@/components/organization";
-import { PrioritiesManagementDialog } from "@/components/organization/priorities-management-dialog";
+import {
+  StatesManagementDialog,
+  StatesManagementPopover,
+} from "@/components/organization";
+import {
+  PrioritiesManagementDialog,
+  PrioritiesManagementPopover,
+} from "@/components/organization";
 import { issueStateTypeEnum } from "@/db/schema/issue-config";
 import { projectStatusTypeEnum } from "@/db/schema/projects";
 import { trpc } from "@/lib/trpc";
@@ -169,6 +175,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
   });
 
   const handleAddState = (type: "issue" | "project") => {
+    // For adding new states, we'll still use the dialog
     setDialogState({
       isOpen: true,
       type,
@@ -176,21 +183,20 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
     });
   };
 
-  const handleEditState = (type: "issue" | "project", state: WorkflowState) => {
-    setDialogState({
-      isOpen: true,
-      type,
-      editingState: state,
-    });
-  };
+  const handleSaveState = (
+    newStateData: Omit<WorkflowState, "id">,
+    editingState?: WorkflowState,
+    type?: "issue" | "project",
+  ) => {
+    const isEditing = !!editingState;
+    const stateType = type || dialogState.type;
 
-  const handleSaveState = (newStateData: Omit<WorkflowState, "id">) => {
-    if (dialogState.editingState) {
+    if (isEditing) {
       // Update existing
-      if (dialogState.type === "issue") {
+      if (stateType === "issue") {
         updateIssueState.mutate({
           orgSlug,
-          stateId: dialogState.editingState.id,
+          stateId: editingState!.id,
           name: newStateData.name,
           position: newStateData.position,
           color: newStateData.color ?? "#94a3b8",
@@ -200,7 +206,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
       } else {
         updateProjectStatus.mutate({
           orgSlug,
-          statusId: dialogState.editingState.id,
+          statusId: editingState!.id,
           name: newStateData.name,
           position: newStateData.position,
           color: newStateData.color ?? "#94a3b8",
@@ -210,7 +216,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
       }
     } else {
       // Create new
-      if (dialogState.type === "issue") {
+      if (stateType === "issue") {
         createIssueState.mutate({
           orgSlug,
           name: newStateData.name,
@@ -231,7 +237,10 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
       }
     }
 
-    setDialogState({ isOpen: false, type: "issue" });
+    // Only close dialog if we're in dialog mode
+    if (!editingState && !type) {
+      setDialogState({ isOpen: false, type: "issue" });
+    }
   };
 
   const closeDialog = () => {
@@ -317,40 +326,46 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
 
               <div className="space-y-1">
                 {group.states.map((state) => (
-                  <button
+                  <StatesManagementPopover
                     key={state.id}
-                    className="bg-background hover:bg-muted/30 group flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors"
-                    onClick={() => handleEditState("issue", state)}
+                    type="issue"
+                    state={state}
+                    existingStates={issueStates as WorkflowState[]}
+                    orgSlug={orgSlug}
+                    onClose={() => {}}
+                    onSave={(data) => handleSaveState(data, state, "issue")}
                   >
-                    {state.icon ? (
-                      (() => {
-                        const IconComponent =
-                          getDynamicIcon(state.icon) ?? null;
-                        return IconComponent ? (
-                          <IconComponent
-                            className="size-3 flex-shrink-0"
-                            style={{ color: state.color || "#94a3b8" }}
-                          />
-                        ) : (
-                          <div
-                            className="size-2.5 flex-shrink-0 rounded-full"
-                            style={{
-                              backgroundColor: state.color || "#94a3b8",
-                            }}
-                          />
-                        );
-                      })()
-                    ) : (
-                      <div
-                        className="size-2.5 flex-shrink-0 rounded-full"
-                        style={{ backgroundColor: state.color || "#94a3b8" }}
-                      />
-                    )}
-                    <span className="flex-1 truncate text-xs font-medium">
-                      {state.name}
-                    </span>
-                    <Pencil className="text-muted-foreground group-hover:text-foreground size-3 opacity-0 transition-colors group-hover:opacity-100" />
-                  </button>
+                    <button className="bg-background hover:bg-muted/30 group flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors">
+                      {state.icon ? (
+                        (() => {
+                          const IconComponent =
+                            getDynamicIcon(state.icon) ?? null;
+                          return IconComponent ? (
+                            <IconComponent
+                              className="size-3 flex-shrink-0"
+                              style={{ color: state.color || "#94a3b8" }}
+                            />
+                          ) : (
+                            <div
+                              className="size-2.5 flex-shrink-0 rounded-full"
+                              style={{
+                                backgroundColor: state.color || "#94a3b8",
+                              }}
+                            />
+                          );
+                        })()
+                      ) : (
+                        <div
+                          className="size-2.5 flex-shrink-0 rounded-full"
+                          style={{ backgroundColor: state.color || "#94a3b8" }}
+                        />
+                      )}
+                      <span className="flex-1 truncate text-xs font-medium">
+                        {state.name}
+                      </span>
+                      <Pencil className="text-muted-foreground group-hover:text-foreground size-3 opacity-0 transition-colors group-hover:opacity-100" />
+                    </button>
+                  </StatesManagementPopover>
                 ))}
                 {group.states.length === 0 && (
                   <div className="text-muted-foreground px-2 py-1.5 text-xs italic">
@@ -401,40 +416,46 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
 
               <div className="space-y-1">
                 {group.states.map((status) => (
-                  <button
+                  <StatesManagementPopover
                     key={status.id}
-                    className="bg-background hover:bg-muted/30 group flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors"
-                    onClick={() => handleEditState("project", status)}
+                    type="project"
+                    state={status}
+                    existingStates={projectStatuses as WorkflowState[]}
+                    orgSlug={orgSlug}
+                    onClose={() => {}}
+                    onSave={(data) => handleSaveState(data, status, "project")}
                   >
-                    {status.icon ? (
-                      (() => {
-                        const IconComponent =
-                          getDynamicIcon(status.icon) ?? null;
-                        return IconComponent ? (
-                          <IconComponent
-                            className="size-3 flex-shrink-0"
-                            style={{ color: status.color || "#94a3b8" }}
-                          />
-                        ) : (
-                          <div
-                            className="size-2.5 flex-shrink-0 rounded-full"
-                            style={{
-                              backgroundColor: status.color || "#94a3b8",
-                            }}
-                          />
-                        );
-                      })()
-                    ) : (
-                      <div
-                        className="size-2.5 flex-shrink-0 rounded-full"
-                        style={{ backgroundColor: status.color || "#94a3b8" }}
-                      />
-                    )}
-                    <span className="flex-1 truncate text-xs font-medium">
-                      {status.name}
-                    </span>
-                    <Pencil className="text-muted-foreground group-hover:text-foreground size-3 opacity-0 transition-colors group-hover:opacity-100" />
-                  </button>
+                    <button className="bg-background hover:bg-muted/30 group flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors">
+                      {status.icon ? (
+                        (() => {
+                          const IconComponent =
+                            getDynamicIcon(status.icon) ?? null;
+                          return IconComponent ? (
+                            <IconComponent
+                              className="size-3 flex-shrink-0"
+                              style={{ color: status.color || "#94a3b8" }}
+                            />
+                          ) : (
+                            <div
+                              className="size-2.5 flex-shrink-0 rounded-full"
+                              style={{
+                                backgroundColor: status.color || "#94a3b8",
+                              }}
+                            />
+                          );
+                        })()
+                      ) : (
+                        <div
+                          className="size-2.5 flex-shrink-0 rounded-full"
+                          style={{ backgroundColor: status.color || "#94a3b8" }}
+                        />
+                      )}
+                      <span className="flex-1 truncate text-xs font-medium">
+                        {status.name}
+                      </span>
+                      <Pencil className="text-muted-foreground group-hover:text-foreground size-3 opacity-0 transition-colors group-hover:opacity-100" />
+                    </button>
+                  </StatesManagementPopover>
                 ))}
                 {group.states.length === 0 && (
                   <div className="text-muted-foreground px-2 py-1.5 text-xs italic">
@@ -476,40 +497,45 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {priorities.map((priority) => (
-            <button
+            <PrioritiesManagementPopover
               key={priority.id}
-              className="bg-background hover:bg-muted/30 group flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors"
-              onClick={() => handleEditPriority(priority as Priority)}
+              priority={priority as Priority}
+              existingPriorities={priorities as Priority[]}
+              orgSlug={orgSlug}
+              onClose={() => {}}
+              onSave={(data) => handleSavePriority(data)}
             >
-              {priority.icon ? (
-                (() => {
-                  const IconComponent = getDynamicIcon(priority.icon) ?? null;
-                  return IconComponent ? (
-                    <IconComponent
-                      className="size-3 flex-shrink-0"
-                      style={{ color: priority.color || "#94a3b8" }}
-                    />
-                  ) : (
-                    <span
-                      className="size-2.5 flex-shrink-0 rounded-full"
-                      style={{ backgroundColor: priority.color || "#94a3b8" }}
-                    />
-                  );
-                })()
-              ) : (
-                <span
-                  className="size-2.5 flex-shrink-0 rounded-full"
-                  style={{ backgroundColor: priority.color || "#94a3b8" }}
-                />
-              )}
-              <span className="truncate text-sm font-medium">
-                {priority.name}
-              </span>
+              <button className="bg-background hover:bg-muted/30 group flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors">
+                {priority.icon ? (
+                  (() => {
+                    const IconComponent = getDynamicIcon(priority.icon) ?? null;
+                    return IconComponent ? (
+                      <IconComponent
+                        className="size-3 flex-shrink-0"
+                        style={{ color: priority.color || "#94a3b8" }}
+                      />
+                    ) : (
+                      <span
+                        className="size-2.5 flex-shrink-0 rounded-full"
+                        style={{ backgroundColor: priority.color || "#94a3b8" }}
+                      />
+                    );
+                  })()
+                ) : (
+                  <span
+                    className="size-2.5 flex-shrink-0 rounded-full"
+                    style={{ backgroundColor: priority.color || "#94a3b8" }}
+                  />
+                )}
+                <span className="truncate text-sm font-medium">
+                  {priority.name}
+                </span>
 
-              <span className="text-muted-foreground ml-auto text-xs">
-                {priority.weight}
-              </span>
-            </button>
+                <span className="text-muted-foreground ml-auto text-xs">
+                  {priority.weight}
+                </span>
+              </button>
+            </PrioritiesManagementPopover>
           ))}
           {priorities.length === 0 && (
             <div className="text-muted-foreground px-2 py-1.5 text-xs italic">
@@ -530,7 +556,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
           }
           orgSlug={orgSlug}
           onClose={closeDialog}
-          onSave={handleSaveState}
+          onSave={(data) => handleSaveState(data)}
         />
       )}
 
