@@ -48,7 +48,7 @@ export function OrgSidebar({ orgId }: OrgSidebarProps) {
 
   const navItems: NavItem[] = [
     {
-      label: "Issues",
+      label: "My Issues",
       href: `/${orgId}/issues`,
       icon: CheckSquare,
       createElement: (
@@ -107,7 +107,7 @@ export function OrgSidebar({ orgId }: OrgSidebarProps) {
       {/* Teams Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-2">
-          <span className="text-muted-foreground/70 text-xs font-normal tracking-wider uppercase">
+          <span className="text-muted-foreground text-xs font-normal tracking-wider uppercase">
             My Teams
           </span>
           <div className="flex items-center gap-1">
@@ -133,7 +133,7 @@ export function OrgSidebar({ orgId }: OrgSidebarProps) {
                   key={team.id}
                   href={teamHref}
                   className={cn(
-                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
                     "hover:bg-foreground/10 hover:text-foreground",
                     isActive
                       ? "bg-foreground/10 text-foreground"
@@ -177,7 +177,7 @@ export function OrgSidebar({ orgId }: OrgSidebarProps) {
       {/* Projects Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-2">
-          <span className="text-muted-foreground/70 text-xs font-normal tracking-wider uppercase">
+          <span className="text-muted-foreground text-xs font-normal tracking-wider uppercase">
             My Projects
           </span>
           <div className="flex items-center gap-1">
@@ -208,7 +208,7 @@ export function OrgSidebar({ orgId }: OrgSidebarProps) {
                   key={project.id}
                   href={projectHref}
                   className={cn(
-                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
                     "hover:bg-foreground/10 hover:text-foreground",
                     isActive
                       ? "bg-foreground/10 text-foreground"

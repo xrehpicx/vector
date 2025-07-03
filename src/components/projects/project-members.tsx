@@ -31,6 +31,7 @@ import {
   UserPlus,
   MoreHorizontal,
   Trash2,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
@@ -86,28 +87,32 @@ export function ProjectMembersSection({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-semibold">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Users className="size-4" />
           Members ({members.length})
-        </h3>
+        </h2>
         {canEdit && (
           <Button
-            variant="outline"
             size="sm"
             onClick={() => setShowAddMemberDialog(true)}
+            className="gap-1"
           >
-            <UserPlus className="mr-1 size-3" /> Add
+            <UserPlus className="size-3" />
+            Add member
           </Button>
         )}
       </div>
 
       {hasMembers ? (
-        <MembersList
-          members={members}
-          canEdit={canEdit}
-          onRemoveMember={handleRemoveMember}
-          removePending={removeMemberMutation.isPending}
-        />
+        <div className="rounded-lg border">
+          <MembersList
+            members={members}
+            canEdit={canEdit}
+            onRemoveMember={handleRemoveMember}
+            removePending={removeMemberMutation.isPending}
+          />
+        </div>
       ) : (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
