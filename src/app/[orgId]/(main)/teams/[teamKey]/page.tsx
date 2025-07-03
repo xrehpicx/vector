@@ -418,6 +418,12 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
   const updateTeamMutation = trpc.team.update.useMutation({
     onSuccess: () => {
       refetchTeam();
+      utils.organization.listTeams.invalidate({
+        orgSlug: resolvedParams?.orgId || "",
+      });
+      utils.organization.listProjects.invalidate({
+        orgSlug: resolvedParams?.orgId || "",
+      });
       setEditingName(false);
       setEditingDescription(false);
       setEditingKey(false);

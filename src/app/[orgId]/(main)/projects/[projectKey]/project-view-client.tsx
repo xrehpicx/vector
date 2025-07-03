@@ -86,10 +86,14 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
     orgSlug: params.orgId,
   });
 
+  const utils = trpc.useUtils();
+
   // Mutations
   const updateTitleMutation = trpc.project.update.useMutation({
     onSuccess: () => {
       projectQuery.refetch();
+      utils.organization.listProjects.invalidate({ orgSlug: params.orgId });
+      utils.organization.listTeams.invalidate({ orgSlug: params.orgId });
       setEditingTitle(false);
       toast.success("Project title updated");
     },
@@ -101,6 +105,8 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const updateDescriptionMutation = trpc.project.update.useMutation({
     onSuccess: () => {
       projectQuery.refetch();
+      utils.organization.listProjects.invalidate({ orgSlug: params.orgId });
+      utils.organization.listTeams.invalidate({ orgSlug: params.orgId });
       setEditingDescription(false);
       toast.success("Project description updated");
     },
@@ -112,6 +118,8 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const changeStatusMutation = trpc.project.changeStatus.useMutation({
     onSuccess: () => {
       projectQuery.refetch();
+      utils.organization.listProjects.invalidate({ orgSlug: params.orgId });
+      utils.organization.listTeams.invalidate({ orgSlug: params.orgId });
       toast.success("Project status updated");
     },
     onError: (error) => {
@@ -122,6 +130,8 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const changeTeamMutation = trpc.project.changeTeam.useMutation({
     onSuccess: () => {
       projectQuery.refetch();
+      utils.organization.listProjects.invalidate({ orgSlug: params.orgId });
+      utils.organization.listTeams.invalidate({ orgSlug: params.orgId });
       toast.success("Project team updated");
     },
     onError: (error) => {
@@ -132,6 +142,8 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const changeLeadMutation = trpc.project.changeLead.useMutation({
     onSuccess: () => {
       projectQuery.refetch();
+      utils.organization.listProjects.invalidate({ orgSlug: params.orgId });
+      utils.organization.listTeams.invalidate({ orgSlug: params.orgId });
       toast.success("Project lead updated");
     },
     onError: (error) => {
@@ -142,6 +154,8 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const updateIconMutation = trpc.project.update.useMutation({
     onSuccess: () => {
       projectQuery.refetch();
+      utils.organization.listProjects.invalidate({ orgSlug: params.orgId });
+      utils.organization.listTeams.invalidate({ orgSlug: params.orgId });
       toast.success("Project icon updated");
     },
     onError: (error) => {
@@ -152,6 +166,8 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const updateColorMutation = trpc.project.update.useMutation({
     onSuccess: () => {
       projectQuery.refetch();
+      utils.organization.listProjects.invalidate({ orgSlug: params.orgId });
+      utils.organization.listTeams.invalidate({ orgSlug: params.orgId });
       toast.success("Project color updated");
     },
     onError: (error) => {

@@ -64,10 +64,10 @@ export function OrgSidebar({ orgId }: OrgSidebarProps) {
               key={item.href}
               className={cn(
                 "group flex h-8 items-center justify-between gap-2 rounded-md px-2 py-1 pr-1 text-sm font-medium transition-colors",
-                "hover:bg-foreground/10 hover:text-foreground",
-                isActive
-                  ? "bg-foreground/10 text-foreground"
-                  : "text-muted-foreground",
+                "hover:bg-foreground/5 text-foreground",
+                {
+                  "bg-foreground/5": isActive,
+                },
               )}
             >
               {/* Clickable area */}
@@ -126,10 +126,10 @@ export function OrgSidebar({ orgId }: OrgSidebarProps) {
                   href={teamHref}
                   className={cn(
                     "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
-                    "hover:bg-foreground/10 hover:text-foreground",
-                    isActive
-                      ? "bg-foreground/10 text-foreground"
-                      : "text-muted-foreground",
+                    "hover:bg-foreground/5 text-foreground",
+                    {
+                      "bg-foreground/5": isActive,
+                    },
                   )}
                 >
                   {(() => {
@@ -201,10 +201,10 @@ export function OrgSidebar({ orgId }: OrgSidebarProps) {
                   href={projectHref}
                   className={cn(
                     "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
-                    "hover:bg-foreground/10 hover:text-foreground",
-                    isActive
-                      ? "bg-foreground/10 text-foreground"
-                      : "text-muted-foreground",
+                    "hover:bg-foreground/5 text-foreground",
+                    {
+                      "bg-foreground/5": isActive,
+                    },
                   )}
                 >
                   {(() => {
