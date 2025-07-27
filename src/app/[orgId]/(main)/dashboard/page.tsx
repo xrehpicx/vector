@@ -44,7 +44,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   const [stats, recentProjects, recentIssues] = await Promise.all([
     OrganizationService.getOrganizationStats(orgSlug),
     OrganizationService.getRecentProjects(orgSlug),
-    OrganizationService.getRecentIssues(orgSlug),
+    OrganizationService.getRecentIssues(orgSlug, session.user.id),
   ]);
 
   const isAdmin = org.role === "admin";
@@ -185,9 +185,17 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recentIssues.length > 0 ? (
+            {Array.isArray(recentIssues) ? (
+              <div className="py-6 text-center">
+                <Bug className="text-muted-foreground mx-auto mb-2 size-12" />
+                <p className="text-muted-foreground">No issues yet</p>
+                <p className="text-muted-foreground text-sm">
+                  Issues will appear when you create projects
+                </p>
+              </div>
+            ) : recentIssues.issues.length > 0 ? (
               <>
-                {recentIssues.map((issue) => (
+                {recentIssues.issues.map((issue: any) => (
                   <Link
                     key={issue.id}
                     href={`/${orgSlug}/issues/${issue.id}`}
