@@ -41,7 +41,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { useConvexAuth } from "convex/react";
+
 import { FunctionReturnType } from "convex/server";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -214,8 +214,6 @@ function AddMemberDialog({
       projectKey,
     }) ?? [];
 
-  const utils = useConvexAuth();
-
   const addMemberMutation = useMutation(api.projects.addMember);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -375,10 +373,8 @@ function MembersList({
   removePending?: boolean;
   canEdit: boolean;
 }) {
-  const authResult = useConvexAuth();
-  const { isAuthenticated } = authResult || { isAuthenticated: false };
-  const currentUser = useQuery(api.users.getCurrentUser);
-  const currentUserId = currentUser?._id;
+  const user = useQuery(api.users.currentUser);
+  const currentUserId = user?._id;
 
   const getInitials = (name?: string, email?: string): string => {
     const displayName = name || email;

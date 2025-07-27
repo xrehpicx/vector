@@ -1,3 +1,4 @@
+"use client";
 import React from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex";
@@ -12,14 +13,25 @@ import type { Permission } from "@/lib/permissions";
  * @returns Object with { hasPermission: boolean, isLoading: boolean }
  */
 export function usePermission(orgSlug: string, permission: Permission) {
+  // Check if we're in a browser environment and Convex is available
+  const isClient = typeof window !== "undefined";
+
   const hasPermission = useQuery(
     api.organizations.hasPermission,
-    orgSlug && permission ? { orgSlug, permission } : "skip",
+    orgSlug && permission && isClient ? { orgSlug, permission } : "skip",
   );
+
+  // During SSR or when the query is skipped, return safe defaults
+  if (!isClient || hasPermission === undefined) {
+    return {
+      hasPermission: false,
+      isLoading: true,
+    };
+  }
 
   return {
     hasPermission: hasPermission ?? false,
-    isLoading: hasPermission === undefined,
+    isLoading: false,
   };
 }
 
@@ -31,14 +43,27 @@ export function usePermission(orgSlug: string, permission: Permission) {
  * batches all checks into a single request.
  */
 export function usePermissions(orgSlug: string, permissions: Permission[]) {
+  // Check if we're in a browser environment and Convex is available
+  const isClient = typeof window !== "undefined";
+
   const permissionMap = useQuery(
     api.organizations.hasPermissions,
-    orgSlug && permissions.length > 0 ? { orgSlug, permissions } : "skip",
+    orgSlug && permissions.length > 0 && isClient
+      ? { orgSlug, permissions }
+      : "skip",
   );
+
+  // During SSR or when the query is skipped, return safe defaults
+  if (!isClient || permissionMap === undefined) {
+    return {
+      permissions: {},
+      isLoading: true,
+    };
+  }
 
   return {
     permissions: permissionMap ?? {},
-    isLoading: permissionMap === undefined,
+    isLoading: false,
   };
 }
 

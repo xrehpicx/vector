@@ -7,9 +7,12 @@ settings:
 importers:
   .:
     dependencies:
+      "@auth/core":
+        specifier: 0.37.0
+        version: 0.37.0(nodemailer@7.0.3)
       "@convex-dev/auth":
         specifier: ^0.0.87
-        version: 0.0.87(@auth/core@0.40.0(nodemailer@7.0.3))(convex@1.25.4(react@19.1.0))(react@19.1.0)
+        version: 0.0.87(@auth/core@0.37.0(nodemailer@7.0.3))(convex@1.25.4(react@19.1.0))(react@19.1.0)
       "@hookform/resolvers":
         specifier: ^5.1.1
         version: 5.1.1(react-hook-form@7.58.1(react@19.1.0))
@@ -70,6 +73,9 @@ importers:
       dotenv:
         specifier: ^16.4.5
         version: 16.5.0
+      jose:
+        specifier: ^6.0.12
+        version: 6.0.12
       lucide-react:
         specifier: ^0.522.0
         version: 0.522.0(react@19.1.0)
@@ -174,10 +180,10 @@ packages:
       }
     engines: { node: ">=6.0.0" }
 
-  "@auth/core@0.40.0":
+  "@auth/core@0.37.0":
     resolution:
       {
-        integrity: sha512-n53uJE0RH5SqZ7N1xZoMKekbHfQgjd0sAEyUbE+IYJnmuQkbvuZnXItCU7d+i7Fj8VGOgqvNO7Mw4YfBTlZeQw==,
+        integrity: sha512-LybAgfFC5dta3Mu3al0UbnzMGVBpZRqLMvvXupQOfETtPNlL7rXgTO13EVRTCdvPqMQrVYjODUDvgVfQM1M3Qg==,
       }
     peerDependencies:
       "@simplewebauthn/browser": ^9.0.1
@@ -2204,6 +2210,12 @@ packages:
         integrity: sha512-6+7nlbMVX/PVDCwaIQ8nTOPveOcFLSt8GcXdx8hD0bt39uWxYT88uXzqTd4fTvqta7oeUJqudepapKNt2DYJFw==,
       }
 
+  "@types/cookie@0.6.0":
+    resolution:
+      {
+        integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==,
+      }
+
   "@types/estree@1.0.8":
     resolution:
       {
@@ -2811,6 +2823,13 @@ packages:
         optional: true
       react:
         optional: true
+
+  cookie@0.7.1:
+    resolution:
+      {
+        integrity: sha512-6DnInpx7SJ2AK3+CTUE/ZM0vWTUboZCegxhC2xiIydHR9jNuTAASBrfEpHhiGOZw/nX51bHt6YQl8jsGo4y/0w==,
+      }
+    engines: { node: ">= 0.6" }
 
   cookie@1.0.2:
     resolution:
@@ -4356,18 +4375,18 @@ packages:
       }
     engines: { node: ^10 || ^12 || >=14 }
 
-  preact-render-to-string@6.5.11:
+  preact-render-to-string@5.2.3:
     resolution:
       {
-        integrity: sha512-ubnauqoGczeGISiOh6RjX0/cdaF8v/oDXIjO85XALCQjwQP+SB4RDXXtvZ6yTYSjG+PC1QRP2AhPgCEsM2EvUw==,
+        integrity: sha512-aPDxUn5o3GhWdtJtW0svRC2SS/l8D9MAgo2+AWml+BhDImb27ALf04Q2d+AHqUUOc6RdSXFIBVa2gxzgMKgtZA==,
       }
     peerDependencies:
       preact: ">=10"
 
-  preact@10.24.3:
+  preact@10.11.3:
     resolution:
       {
-        integrity: sha512-Z2dPnBnMUfyQfSQ+GBdsGa16hz35YmLmtTLhM169uW944hYL6xzTYkJjC07j+Wosz733pMWx0fgON3JNw1jJQA==,
+        integrity: sha512-eY93IVpod/zG3uMF22Unl8h9KkrcKIRs2EGar8hwLZZDU1lkjph303V9HZBwufh2s736U6VXuhD109LYqPoffg==,
       }
 
   prelude-ls@1.2.1:
@@ -4449,6 +4468,12 @@ packages:
       }
     engines: { node: ">=14" }
     hasBin: true
+
+  pretty-format@3.8.0:
+    resolution:
+      {
+        integrity: sha512-WuxUnVtlWL1OfZFQFuqvnvs6MiAGk9UNsBostyBOB0Is9wb5uRESevA6rnl/rkksXaGX3GzZhPup5d6Vp1nFew==,
+      }
 
   prop-types@15.8.1:
     resolution:
@@ -5102,19 +5127,21 @@ snapshots:
       "@jridgewell/gen-mapping": 0.3.8
       "@jridgewell/trace-mapping": 0.3.25
 
-  "@auth/core@0.40.0(nodemailer@7.0.3)":
+  "@auth/core@0.37.0(nodemailer@7.0.3)":
     dependencies:
       "@panva/hkdf": 1.2.1
-      jose: 6.0.12
+      "@types/cookie": 0.6.0
+      cookie: 0.7.1
+      jose: 5.10.0
       oauth4webapi: 3.6.0
-      preact: 10.24.3
-      preact-render-to-string: 6.5.11(preact@10.24.3)
+      preact: 10.11.3
+      preact-render-to-string: 5.2.3(preact@10.11.3)
     optionalDependencies:
       nodemailer: 7.0.3
 
-  "@convex-dev/auth@0.0.87(@auth/core@0.40.0(nodemailer@7.0.3))(convex@1.25.4(react@19.1.0))(react@19.1.0)":
+  "@convex-dev/auth@0.0.87(@auth/core@0.37.0(nodemailer@7.0.3))(convex@1.25.4(react@19.1.0))(react@19.1.0)":
     dependencies:
-      "@auth/core": 0.40.0(nodemailer@7.0.3)
+      "@auth/core": 0.37.0(nodemailer@7.0.3)
       convex: 1.25.4(react@19.1.0)
       cookie: 1.0.2
       is-network-error: 1.1.0
@@ -6211,6 +6238,8 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  "@types/cookie@0.6.0": {}
+
   "@types/estree@1.0.8": {}
 
   "@types/json-schema@7.0.15": {}
@@ -6591,6 +6620,8 @@ snapshots:
       prettier: 3.5.3
     optionalDependencies:
       react: 19.1.0
+
+  cookie@0.7.1: {}
 
   cookie@1.0.2: {}
 
@@ -7661,11 +7692,12 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  preact-render-to-string@6.5.11(preact@10.24.3):
+  preact-render-to-string@5.2.3(preact@10.11.3):
     dependencies:
-      preact: 10.24.3
+      preact: 10.11.3
+      pretty-format: 3.8.0
 
-  preact@10.24.3: {}
+  preact@10.11.3: {}
 
   prelude-ls@1.2.1: {}
 
@@ -7678,6 +7710,8 @@ snapshots:
       prettier: 3.5.3
 
   prettier@3.5.3: {}
+
+  pretty-format@3.8.0: {}
 
   prop-types@15.8.1:
     dependencies:

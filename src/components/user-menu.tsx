@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "@/lib/convex";
 import {
   DropdownMenu,
@@ -16,12 +16,10 @@ import { Button } from "@/components/ui/button";
 import { ChevronsUpDown, LogOut, User, Settings } from "lucide-react";
 
 export function UserMenu() {
-  const authResult = useConvexAuth();
-  const { isAuthenticated } = authResult || { isAuthenticated: false };
   const { signOut } = useAuthActions();
   const user = useQuery(api.users.currentUser);
 
-  if (!isAuthenticated || !user) {
+  if (user === undefined || user === null) {
     return null;
   }
 

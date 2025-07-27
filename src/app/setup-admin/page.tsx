@@ -29,6 +29,8 @@ import Link from "next/link";
 import { useMutation } from "convex/react";
 import { api } from "@/lib/convex";
 
+export const dynamic = "force-dynamic";
+
 const setupAdminSchema = z
   .object({
     name: z.string().min(1, "Name is required"),

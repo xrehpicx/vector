@@ -1,24 +1,21 @@
 "use client";
 
-import { useConvexAuth } from "convex/react";
 import { ProfileForm } from "@/components/profile-form";
 import { redirect } from "next/navigation";
 import { useEffect } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/lib/convex";
 
 export default function ProfilePage() {
-  const authResult = useConvexAuth();
-  const { isAuthenticated, isLoading } = authResult || {
-    isAuthenticated: false,
-    isLoading: true,
-  };
+  const user = useQuery(api.users.currentUser);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (user === null) {
       redirect("/auth/login");
     }
-  }, [isLoading, isAuthenticated]);
+  }, [user]);
 
-  if (isLoading) {
+  if (user === undefined) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-lg font-medium">Loading...</div>
@@ -26,7 +23,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (user === null) {
     return null; // Redirect will handle this
   }
 

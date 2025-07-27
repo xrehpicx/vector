@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Circle, Save, X, Pencil } from "lucide-react";
-import { useQuery, useMutation, useConvexAuth } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { formatDateHuman } from "@/lib/date";
 import Link from "next/link";
@@ -117,9 +117,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     params.then(setResolvedParams);
   }, [params]);
 
-  const authResult = useConvexAuth();
-  const { isAuthenticated } = authResult || { isAuthenticated: false };
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const user = useQuery(api.users.currentUser);
 
   const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
   const [isUpdatingDescription, setIsUpdatingDescription] = useState(false);
@@ -169,7 +167,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   );
 
   const currentUserAssignment = assignments?.find(
-    (assignment) => assignment.assigneeId === currentUser?._id,
+    (assignment) => assignment.assigneeId === user?._id,
   );
 
   useEffect(() => {
@@ -199,7 +197,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   }
 
   const handleTitleSave = async () => {
-    if (!isAuthenticated) return;
+    if (!user) return;
     setIsUpdatingTitle(true);
     try {
       await updateTitleMutation({
@@ -213,7 +211,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   };
 
   const handleDescriptionSave = async () => {
-    if (!isAuthenticated) return;
+    if (!user) return;
     setIsUpdatingDescription(true);
     try {
       await updateDescriptionMutation({
@@ -227,7 +225,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   };
 
   const handleEstimatesSave = async () => {
-    if (!issue || !isAuthenticated) return;
+    if (!issue || !user) return;
     setIsUpdatingEstimates(true);
     try {
       await updateEstimatesMutation({
@@ -242,7 +240,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   };
 
   const handleTeamChange = (teamId: string) => {
-    if (!issue || !isAuthenticated) return;
+    if (!issue || !user) return;
     changeTeamMutation({
       issueId: issue._id,
       teamId: (teamId as Id<"teams">) || null,
@@ -250,7 +248,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   };
 
   const handleProjectChange = (projectId: string) => {
-    if (!issue || !isAuthenticated) return;
+    if (!issue || !user) return;
     changeProjectMutation({
       issueId: issue._id,
       projectId: (projectId as Id<"projects">) || null,
@@ -258,7 +256,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   };
 
   const handlePriorityChange = (priorityId: string) => {
-    if (!issue || !isAuthenticated) return;
+    if (!issue || !user) return;
     if (priorityId === "") return;
     changePriorityMutation({
       issueId: issue._id,
@@ -317,7 +315,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                     states={mappedStates}
                     selectedState={currentUserAssignment.stateId}
                     onStateSelect={(stateId) => {
-                      if (!issue || !isAuthenticated) return;
+                      if (!issue || !user) return;
                       // Update the specific assignment state for this user
                       changeAssignmentStateMutation({
                         assignmentId: currentUserAssignment._id,

@@ -60,7 +60,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { toast } from "sonner";
 import { CreateIssueDialog } from "@/components/issues/create-issue-dialog";
 import { CreateProjectDialog } from "@/components/projects/create-project-dialog";
-import { useConvexAuth } from "convex/react";
+
 import { Id } from "@/convex/_generated/dataModel";
 import { FunctionReturnType } from "convex/server";
 
@@ -386,9 +386,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
   }, [params]);
 
   // Check user permissions for team management
-  const authResult = useConvexAuth();
-  const { isAuthenticated } = authResult || { isAuthenticated: false };
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const user = useQuery(api.users.currentUser);
   const { hasPermission: canUpdateTeam } = usePermission(
     resolvedParams?.orgSlug || "",
     PERMISSIONS.TEAM_UPDATE,
@@ -477,9 +475,9 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
 
   // Determine if user can edit team (team lead or has permission)
   const canEdit = !!(
-    currentUser &&
+    user &&
     team &&
-    (team.leadId === currentUser._id || canUpdateTeam)
+    (team.leadId === user._id || canUpdateTeam)
   );
 
   // Mutations with toast error handling
@@ -510,7 +508,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
   }, [team]);
 
   if (!resolvedParams) return <TeamLoadingSkeleton resolvedParams={null} />;
-  if (!isAuthenticated) return <div>Loading...</div>; // Or a proper loading state
+  if (!user) return <div>Loading...</div>; // Or a proper loading state
   if (!team) return notFound();
 
   const handleNameSave = async () => {
@@ -582,7 +580,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
 
   // Issue handlers
   const handlePriorityChange = async (issueId: string, priorityId: string) => {
-    if (!currentUser?._id || !priorityId) return;
+    if (!user?._id || !priorityId) return;
     setIsUpdatingIssues(true);
     await changePriorityMutation({
       issueId: issueId as Id<"issues">,
@@ -595,7 +593,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
     issueId: string,
     assigneeIds: string[],
   ) => {
-    if (!currentUser?._id) return;
+    if (!user?._id) return;
     setIsUpdatingIssues(true);
     await updateAssigneesMutation({
       issueId: issueId as Id<"issues">,
@@ -605,7 +603,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
   };
 
   const handleIssueTeamChange = async (issueId: string, teamId: string) => {
-    if (!currentUser?._id) return;
+    if (!user?._id) return;
     setIsUpdatingIssues(true);
     await changeTeamMutation({
       issueId: issueId as Id<"issues">,
@@ -618,7 +616,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
     issueId: string,
     projectId: string,
   ) => {
-    if (!currentUser?._id) return;
+    if (!user?._id) return;
     setIsUpdatingIssues(true);
     await changeProjectMutation({
       issueId: issueId as Id<"issues">,
@@ -631,7 +629,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
     assignmentId: string,
     stateId: string,
   ) => {
-    if (!currentUser?._id || !assignmentId || !stateId) return;
+    if (!user?._id || !assignmentId || !stateId) return;
     setIsUpdatingIssues(true);
     await changeAssignmentStateMutation({
       assignmentId: assignmentId as Id<"issueAssignees">,
@@ -649,7 +647,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
 
   // Project handlers
   const handleStatusChange = async (projectId: string, statusId: string) => {
-    if (!currentUser?._id) return;
+    if (!user?._id) return;
     setIsUpdatingProjects(true);
     await changeStatusMutation({
       projectId: projectId as Id<"projects">,
@@ -659,7 +657,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
   };
 
   const handleProjectTeamChange = async (projectId: string, teamId: string) => {
-    if (!currentUser?._id) return;
+    if (!user?._id) return;
     setIsUpdatingProjects(true);
     await changeProjectTeamMutation({
       projectId: projectId as Id<"projects">,
@@ -669,7 +667,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
   };
 
   const handleProjectLeadChange = async (projectId: string, leadId: string) => {
-    if (!currentUser?._id) return;
+    if (!user?._id) return;
     setIsUpdatingProjects(true);
     await changeLeadMutation({
       projectId: projectId as Id<"projects">,
@@ -1114,8 +1112,8 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
                       isUpdatingAssignees={isUpdatingIssues}
                       onAssignmentStateChange={handleAssignmentStateChange}
                       isUpdatingAssignmentStates={isUpdatingIssues}
-                      currentUserId={currentUser?._id || ""}
-                      canChangeAll={currentUser?.role === "admin"}
+                      currentUserId={user?._id || ""}
+                      canChangeAll={user?.role === "admin"}
                       activeFilter="all"
                     />
                   ) : (
@@ -1186,7 +1184,7 @@ export default function TeamViewPage({ params }: TeamViewPageProps) {
           teamKey={team.key}
           onClose={() => setShowAddMemberDialog(false)}
           onSuccess={() => {
-            // No need to refetch here, useConvexAuth will handle re-renders
+            // No need to refetch here, useQuery will handle re-renders
           }}
         />
       )}

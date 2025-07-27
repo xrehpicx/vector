@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useConvexAuth } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { CreateIssueDialog } from "@/components/issues/create-issue-dialog";
@@ -49,13 +49,7 @@ export default function IssuesPage() {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
 
-  const authResult = useConvexAuth();
-  const { isLoading: authLoading, isAuthenticated } = authResult || {
-    isLoading: true,
-    isAuthenticated: false,
-  };
-
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const user = useQuery(api.users.currentUser);
 
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdatingAssignees, setIsUpdatingAssignees] = useState(false);
@@ -85,7 +79,7 @@ export default function IssuesPage() {
   }) ?? { issues: [], total: 0, counts: {} };
 
   const handlePriorityChange = (issueId: string, priorityId: string) => {
-    if (!isAuthenticated || !priorityId) return;
+    if (!user || !priorityId) return;
     changePriorityMutation({
       issueId: issueId as Id<"issues">,
       priorityId: priorityId as Id<"issuePriorities">,
@@ -96,7 +90,7 @@ export default function IssuesPage() {
     issueId: string,
     assigneeIds: string[],
   ) => {
-    if (!isAuthenticated) return;
+    if (!user) return;
     setIsUpdatingAssignees(true);
     try {
       await updateAssigneesMutation({
@@ -109,7 +103,7 @@ export default function IssuesPage() {
   };
 
   const handleTeamChange = (issueId: string, teamId: string) => {
-    if (!isAuthenticated) return;
+    if (!user) return;
     changeTeamMutation({
       issueId: issueId as Id<"issues">,
       teamId: (teamId as Id<"teams">) || null,
@@ -117,7 +111,7 @@ export default function IssuesPage() {
   };
 
   const handleProjectChange = (issueId: string, projectId: string) => {
-    if (!isAuthenticated) return;
+    if (!user) return;
     changeProjectMutation({
       issueId: issueId as Id<"issues">,
       projectId: (projectId as Id<"projects">) || null,
@@ -128,7 +122,7 @@ export default function IssuesPage() {
     assignmentId: string,
     stateId: string,
   ) => {
-    if (!isAuthenticated || !assignmentId || !stateId) return;
+    if (!user || !assignmentId || !stateId) return;
     setIsUpdatingAssignmentStates(true);
     try {
       await changeAssignmentStateMutation({
@@ -150,8 +144,8 @@ export default function IssuesPage() {
     }
   };
 
-  const currentUserId = currentUser?._id || "";
-  const canChangeAll = currentUser?.role === "admin";
+  const currentUserId = user?._id || "";
+  const canChangeAll = user?.role === "admin";
 
   const updatedTabs = filterTabs.map((tab) => ({
     ...tab,
@@ -163,7 +157,7 @@ export default function IssuesPage() {
 
   const visibleTabs = updatedTabs.filter((t) => t.key === "all" || t.count > 0);
 
-  if (authLoading && issues.length === 0) {
+  if (user === undefined && issues.length === 0) {
     return (
       <PageSkeleton
         showTabs={true}

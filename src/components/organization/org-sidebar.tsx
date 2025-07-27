@@ -14,7 +14,7 @@ import { api } from "@/lib/convex";
 import { withIds } from "@/lib/convex-helpers";
 import type { ReactNode } from "react";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
@@ -33,6 +33,12 @@ interface OrgSidebarProps {
 export function OrgSidebar({ orgSlug }: OrgSidebarProps) {
   const pathname = usePathname();
   const [createIssueOpen, setCreateIssueOpen] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  // Ensure we're on the client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Fetch user's teams and projects
   const userTeamsData = useQuery(api.organizations.listTeams, {
@@ -46,6 +52,20 @@ export function OrgSidebar({ orgSlug }: OrgSidebarProps) {
   // Transform data to maintain frontend compatibility
   const userTeams = userTeamsData ? withIds(userTeamsData) : [];
   const userProjects = userProjectsData ? withIds(userProjectsData) : [];
+
+  // Don't render during SSR
+  if (!isClient) {
+    return (
+      <nav className="space-y-4 p-2 pt-0">
+        <div className="space-y-1">
+          <div className="flex h-8 items-center gap-2 rounded-md px-2 py-1 text-sm font-medium">
+            <CheckSquare className="size-4" />
+            <span>Loading...</span>
+          </div>
+        </div>
+      </nav>
+    );
+  }
 
   const navItems: NavItem[] = [
     {

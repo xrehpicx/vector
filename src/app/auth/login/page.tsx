@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
 import {
@@ -17,7 +17,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, LogIn, Bot, Shield, Zap, Users } from "lucide-react";
 import Link from "next/link";
 
-export default function LoginPage() {
+export const dynamic = "force-dynamic";
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") || "/";
@@ -100,77 +102,34 @@ export default function LoginPage() {
                     Welcome Back
                   </h2>
                   <p className="text-xl leading-relaxed font-light text-slate-200">
-                    Continue your intelligent conversations and unlock the full
-                    potential of AI assistance.
+                    Sign in to your account to continue managing your projects.
                   </p>
                 </div>
-              </div>
 
-              {/* Feature Highlights */}
-              <div className="space-y-6">
-                <div className="grid gap-4">
-                  <div className="group flex items-start space-x-4">
-                    <div className="mt-1 rounded-lg bg-emerald-500/20 p-2 transition-colors group-hover:bg-emerald-500/30">
-                      <Zap className="h-4 w-4 text-emerald-300" />
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
+                      <Shield className="h-4 w-4 text-emerald-400" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white">
-                        Lightning Fast
-                      </h3>
-                      <p className="text-sm text-slate-300">
-                        Get instant responses to your queries
-                      </p>
-                    </div>
+                    <span className="text-sm text-slate-300">
+                      Secure authentication
+                    </span>
                   </div>
-
-                  <div className="group flex items-start space-x-4">
-                    <div className="mt-1 rounded-lg bg-blue-500/20 p-2 transition-colors group-hover:bg-blue-500/30">
-                      <Shield className="h-4 w-4 text-blue-300" />
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/20">
+                      <Zap className="h-4 w-4 text-blue-400" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white">
-                        Secure & Private
-                      </h3>
-                      <p className="text-sm text-slate-300">
-                        Your data is encrypted and protected
-                      </p>
+                    <span className="text-sm text-slate-300">
+                      Real-time collaboration
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-500/20">
+                      <Users className="h-4 w-4 text-purple-400" />
                     </div>
-                  </div>
-
-                  <div className="group flex items-start space-x-4">
-                    <div className="mt-1 rounded-lg bg-purple-500/20 p-2 transition-colors group-hover:bg-purple-500/30">
-                      <Users className="h-4 w-4 text-purple-300" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-white">
-                        Multi-Platform
-                      </h3>
-                      <p className="text-sm text-slate-300">
-                        Access from web, mobile, or Discord
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="flex items-center space-x-8 border-t border-white/10 pt-8">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-white">10K+</div>
-                  <div className="text-xs tracking-wider text-slate-400 uppercase">
-                    Active Users
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-white">99.9%</div>
-                  <div className="text-xs tracking-wider text-slate-400 uppercase">
-                    Uptime
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-white">24/7</div>
-                  <div className="text-xs tracking-wider text-slate-400 uppercase">
-                    Available
+                    <span className="text-sm text-slate-300">
+                      Team management
+                    </span>
                   </div>
                 </div>
               </div>
@@ -179,120 +138,95 @@ export default function LoginPage() {
         </div>
 
         {/* Right Form Panel */}
-        <div className="flex w-full flex-col justify-center p-6 sm:p-8 lg:w-1/2 lg:p-12 xl:p-16">
-          <div className="mx-auto w-full max-w-sm space-y-8">
-            {/* Mobile Header */}
-            <div className="space-y-4 text-center lg:hidden">
-              <div className="mx-auto flex items-center justify-center space-x-3">
-                <div className="rounded-xl bg-slate-900 p-3 dark:bg-slate-800">
-                  <Bot className="h-6 w-6 text-white" />
-                </div>
-                <div className="text-left">
-                  <h1 className="text-2xl font-bold">AIKP</h1>
-                  <p className="text-muted-foreground text-sm">
-                    AI Assistant Platform
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold">Welcome Back</h2>
-                <p className="text-muted-foreground">
-                  Sign in to continue your conversation
-                </p>
-              </div>
+        <div className="flex w-full items-center justify-center lg:w-1/2">
+          <div className="w-full max-w-md space-y-8 px-4">
+            {/* Header */}
+            <div className="text-center">
+              <h1 className="text-3xl font-bold tracking-tight">Sign In</h1>
+              <p className="text-muted-foreground mt-2">
+                Welcome back to your account
+              </p>
             </div>
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <Card className="border-0 bg-white/90 shadow-xl backdrop-blur-sm dark:bg-slate-900/90">
-              <CardHeader className="space-y-3 pb-6">
-                <div className="flex items-center space-x-2">
-                  <LogIn className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                  <CardTitle className="text-xl">Sign In</CardTitle>
-                </div>
-                <CardDescription className="text-base">
+            {/* Form Card */}
+            <Card className="border-border/40 bg-background/95 supports-[backdrop-filter]:bg-background/80 shadow-xl backdrop-blur">
+              <CardHeader className="space-y-1">
+                <CardTitle className="text-2xl">Sign in</CardTitle>
+                <CardDescription>
                   Enter your credentials to access your account
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <form onSubmit={onLogin} className="space-y-5">
+              <CardContent>
+                <form onSubmit={onLogin} className="space-y-4">
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+
                   <div className="space-y-2">
-                    <Label htmlFor="identifier" className="text-sm font-medium">
-                      Email or Username
-                    </Label>
+                    <Label htmlFor="identifier">Email or Username</Label>
                     <Input
                       id="identifier"
                       type="text"
-                      required
                       placeholder="you@example.com or username"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
                       disabled={loading}
-                      className="h-12 text-base"
+                      required
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-sm font-medium">
-                      Password
-                    </Label>
+                    <Label htmlFor="password">Password</Label>
                     <Input
                       id="password"
                       type="password"
-                      required
-                      placeholder="Enter your password"
+                      placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={loading}
-                      className="h-12 text-base"
+                      required
                     />
                   </div>
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="h-12 w-full text-base font-medium"
-                  >
-                    {loading ? "Signing In..." : "Sign In"}
+
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading && <LogIn className="mr-2 h-4 w-4 animate-spin" />}
+                    {loading ? "Signing in..." : "Sign in"}
                   </Button>
                 </form>
+
+                <div className="mt-6 text-center text-sm">
+                  <span className="text-muted-foreground">
+                    Don&apos;t have an account?{" "}
+                  </span>
+                  <Link
+                    href="/auth/signup"
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Sign up
+                  </Link>
+                </div>
               </CardContent>
             </Card>
-
-            <div className="space-y-4 text-center">
-              <p className="text-muted-foreground text-sm">
-                Don&apos;t have an account?{" "}
-                <Link
-                  href="/auth/signup"
-                  className="text-primary hover:text-primary/80 font-medium underline underline-offset-4"
-                >
-                  Create one
-                </Link>
-              </p>
-
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                By signing in, you agree to our{" "}
-                <a
-                  href="#"
-                  className="hover:text-foreground underline underline-offset-4"
-                >
-                  Terms
-                </a>{" "}
-                and{" "}
-                <a
-                  href="#"
-                  className="hover:text-foreground underline underline-offset-4"
-                >
-                  Privacy Policy
-                </a>
-              </p>
-            </div>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-full items-center justify-center">
+          <div className="text-2xl font-semibold">Loading...</div>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save, X, Plus, FolderOpen } from "lucide-react";
-import { useQuery, useMutation, useConvexAuth } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,9 +51,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const [iconValue, setIconValue] = useState<string | null>(null);
   const [colorValue, setColorValue] = useState<string | null>(null);
 
-  const authResult = useConvexAuth();
-  const { isAuthenticated } = authResult || { isAuthenticated: false };
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const user = useQuery(api.users.currentUser);
 
   const { hasPermission: canUpdateProject } = usePermission(
     params.orgSlug,
@@ -143,9 +141,9 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   };
 
   const canEdit = !!(
-    currentUser &&
+    user &&
     project &&
-    (project.leadId === currentUser._id || canUpdateProject)
+    (project.leadId === user._id || canUpdateProject)
   );
 
   useEffect(() => {

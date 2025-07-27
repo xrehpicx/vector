@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
 import {
@@ -17,7 +17,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, UserPlus, Bot, Shield, Zap, Users } from "lucide-react";
 import Link from "next/link";
 
-export default function SignupPage() {
+export const dynamic = "force-dynamic";
+
+function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") || "/";
@@ -96,218 +98,148 @@ export default function SignupPage() {
                     Join AIKP Today
                   </h2>
                   <p className="text-xl leading-relaxed font-light text-slate-200">
-                    Create your account and start experiencing the future of AI
-                    assistance.
+                    Create your account and start managing your projects with
+                    AI-powered insights.
                   </p>
                 </div>
-              </div>
 
-              {/* Feature Highlights */}
-              <div className="space-y-6">
-                <div className="grid gap-4">
-                  <div className="group flex items-start space-x-4">
-                    <div className="mt-1 rounded-lg bg-emerald-500/20 p-2 transition-colors group-hover:bg-emerald-500/30">
-                      <Zap className="h-4 w-4 text-emerald-300" />
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
+                      <Shield className="h-4 w-4 text-emerald-400" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white">
-                        Instant Setup
-                      </h3>
-                      <p className="text-sm text-slate-300">
-                        Get started in under 30 seconds
-                      </p>
-                    </div>
+                    <span className="text-sm text-slate-300">
+                      Secure authentication
+                    </span>
                   </div>
-
-                  <div className="group flex items-start space-x-4">
-                    <div className="mt-1 rounded-lg bg-blue-500/20 p-2 transition-colors group-hover:bg-blue-500/30">
-                      <Shield className="h-4 w-4 text-blue-300" />
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/20">
+                      <Zap className="h-4 w-4 text-blue-400" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white">
-                        Enterprise Security
-                      </h3>
-                      <p className="text-sm text-slate-300">
-                        Bank-level encryption for your data
-                      </p>
-                    </div>
+                    <span className="text-sm text-slate-300">
+                      Real-time collaboration
+                    </span>
                   </div>
-
-                  <div className="group flex items-start space-x-4">
-                    <div className="mt-1 rounded-lg bg-purple-500/20 p-2 transition-colors group-hover:bg-purple-500/30">
-                      <Users className="h-4 w-4 text-purple-300" />
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-500/20">
+                      <Users className="h-4 w-4 text-purple-400" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white">
-                        Free to Start
-                      </h3>
-                      <p className="text-sm text-slate-300">
-                        No credit card required
-                      </p>
-                    </div>
+                    <span className="text-sm text-slate-300">
+                      Team management
+                    </span>
                   </div>
                 </div>
-              </div>
-
-              {/* Testimonial */}
-              <div className="space-y-4 border-t border-white/10 pt-8">
-                <div className="flex items-center space-x-3">
-                  <div className="flex">
-                    {[...Array(5)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="h-4 w-4 fill-current text-yellow-400"
-                      >
-                        ⭐
-                      </div>
-                    ))}
-                  </div>
-                  <span className="text-sm font-medium text-slate-300">
-                    5.0 rating
-                  </span>
-                </div>
-                <blockquote className="text-slate-200 italic">
-                  &ldquo;AIKP has transformed how I work. It&apos;s like having
-                  a brilliant assistant available 24/7.&rdquo;
-                </blockquote>
-                <cite className="text-sm text-slate-400">
-                  — Sarah Chen, Product Manager
-                </cite>
               </div>
             </div>
           </div>
         </div>
 
         {/* Right Form Panel */}
-        <div className="flex w-full flex-col justify-center p-6 sm:p-8 lg:w-1/2 lg:p-12 xl:p-16">
-          <div className="mx-auto w-full max-w-sm space-y-8">
-            {/* Mobile Header */}
-            <div className="space-y-4 text-center lg:hidden">
-              <div className="mx-auto flex items-center justify-center space-x-3">
-                <div className="rounded-xl bg-slate-900 p-3 dark:bg-slate-800">
-                  <Bot className="h-6 w-6 text-white" />
-                </div>
-                <div className="text-left">
-                  <h1 className="text-2xl font-bold">AIKP</h1>
-                  <p className="text-muted-foreground text-sm">
-                    AI Assistant Platform
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold">Join AIKP Today</h2>
-                <p className="text-muted-foreground">
-                  Create your account to get started
-                </p>
-              </div>
+        <div className="flex w-full items-center justify-center lg:w-1/2">
+          <div className="w-full max-w-md space-y-8 px-4">
+            {/* Header */}
+            <div className="text-center">
+              <h1 className="text-3xl font-bold tracking-tight">
+                Create Account
+              </h1>
+              <p className="text-muted-foreground mt-2">
+                Get started with your free account
+              </p>
             </div>
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <Card className="border-0 bg-white/90 shadow-xl backdrop-blur-sm dark:bg-slate-900/90">
-              <CardHeader className="space-y-3 pb-6">
-                <div className="flex items-center space-x-2">
-                  <UserPlus className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                  <CardTitle className="text-xl">Create Account</CardTitle>
-                </div>
-                <CardDescription className="text-base">
-                  Fill in your details to create your account
+            {/* Form Card */}
+            <Card className="border-border/40 bg-background/95 supports-[backdrop-filter]:bg-background/80 shadow-xl backdrop-blur">
+              <CardHeader className="space-y-1">
+                <CardTitle className="text-2xl">Sign up</CardTitle>
+                <CardDescription>
+                  Enter your details to create your account
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <form onSubmit={onSignUp} className="space-y-5">
+              <CardContent>
+                <form onSubmit={onSignUp} className="space-y-4">
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm font-medium">
-                      Email Address
-                    </Label>
+                    <Label htmlFor="email">Email</Label>
                     <Input
                       id="email"
                       type="email"
-                      required
-                      placeholder="name@example.com"
+                      placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={loading}
-                      className="h-12 text-base"
+                      required
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="username" className="text-sm font-medium">
-                      Username
-                    </Label>
+                    <Label htmlFor="username">Username (optional)</Label>
                     <Input
                       id="username"
                       type="text"
-                      required
-                      placeholder="Choose a unique username"
+                      placeholder="your-username"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       disabled={loading}
-                      className="h-12 text-base"
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-sm font-medium">
-                      Password
-                    </Label>
+                    <Label htmlFor="password">Password</Label>
                     <Input
                       id="password"
                       type="password"
-                      required
-                      placeholder="Create a secure password"
+                      placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={loading}
-                      className="h-12 text-base"
+                      required
                     />
                   </div>
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="h-12 w-full text-base font-medium"
-                  >
-                    {loading ? "Creating Account..." : "Create Account"}
+
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading && (
+                      <UserPlus className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    {loading ? "Creating account..." : "Create account"}
                   </Button>
                 </form>
+
+                <div className="mt-6 text-center text-sm">
+                  <span className="text-muted-foreground">
+                    Already have an account?{" "}
+                  </span>
+                  <Link
+                    href="/auth/login"
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Sign in
+                  </Link>
+                </div>
               </CardContent>
             </Card>
-
-            <div className="space-y-4 text-center">
-              <p className="text-muted-foreground text-sm">
-                Already have an account?{" "}
-                <Link
-                  href="/auth/login"
-                  className="text-primary hover:text-primary/80 font-medium underline underline-offset-4"
-                >
-                  Sign in
-                </Link>
-              </p>
-
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                By creating an account, you agree to our{" "}
-                <a
-                  href="#"
-                  className="hover:text-foreground underline underline-offset-4"
-                >
-                  Terms
-                </a>{" "}
-                and{" "}
-                <a
-                  href="#"
-                  className="hover:text-foreground underline underline-offset-4"
-                >
-                  Privacy Policy
-                </a>
-              </p>
-            </div>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-full items-center justify-center">
+          <div className="text-2xl font-semibold">Loading...</div>
+        </div>
+      }
+    >
+      <SignupForm />
+    </Suspense>
   );
 }
