@@ -1,51 +1,55 @@
-import { headers } from "next/headers";
+"use client";
+
+import { useConvexAuth } from "convex/react";
 import { redirect } from "next/navigation";
-import { ReactNode } from "react";
-import { auth } from "@/auth/auth";
+import { ReactNode, useEffect } from "react";
 import { UserSettingsSidebar } from "@/components/settings/user-settings-sidebar";
-import { UserMenu } from "@/components/user-menu";
 
 interface SettingsLayoutProps {
   children: ReactNode;
 }
 
-export default async function SettingsLayout({
-  children,
-}: SettingsLayoutProps) {
-  const session = await auth.api.getSession({ headers: await headers() });
+export default function SettingsLayout({ children }: SettingsLayoutProps) {
+  const authResult = useConvexAuth();
+  const { isAuthenticated, isLoading } = authResult || {
+    isAuthenticated: false,
+    isLoading: true,
+  };
 
-  if (!session?.user) {
-    redirect("/auth/login");
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      redirect("/auth/login");
+    }
+  }, [isLoading, isAuthenticated]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-lg font-medium">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null; // Redirect will handle this
   }
 
   return (
-    <div className="bg-secondary flex h-screen">
-      {/* Settings Sidebar */}
-      <aside className="hidden w-56 lg:block">
-        <div className="flex h-full flex-col">
-          {/* User Info Section */}
-          <div className="p-2">
-            <div className="text-muted-foreground mb-4 text-xs font-medium tracking-wider uppercase">
-              Account Settings
-            </div>
-          </div>
-
-          {/* Settings Navigation */}
-          <div className="flex-1 overflow-y-auto">
-            <UserSettingsSidebar />
-          </div>
-
-          {/* User menu at bottom */}
-          <div className="border-border border-t p-2">
-            <UserMenu user={session.user} />
-          </div>
+    <div className="container mx-auto p-6">
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-lg font-medium">Settings</h3>
+          <p className="text-muted-foreground text-sm">
+            Manage your account settings and set e-mail preferences.
+          </p>
         </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="bg-background m-2 ml-0 flex-1 overflow-y-auto rounded-md border">
-        {children}
-      </main>
+        <div className="flex flex-col space-y-8 lg:flex-row lg:space-y-0 lg:space-x-12">
+          <aside className="-mx-4 lg:w-1/5">
+            <UserSettingsSidebar />
+          </aside>
+          <div className="flex-1 lg:max-w-2xl">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }

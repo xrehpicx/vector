@@ -2,7 +2,7 @@
 
 import { Badge } from "./badge";
 import { usePermission } from "@/hooks/use-permissions";
-import type { Permission } from "@/auth/permission-constants";
+import type { Permission } from "@/lib/permissions";
 
 interface PermissionIndicatorProps {
   orgSlug: string;

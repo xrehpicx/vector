@@ -1,174 +1,96 @@
 "use client";
 
-import { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/lib/convex";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert } from "@/components/ui/alert";
-import { authClient } from "@/lib/auth-client";
-import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  image?: string | null;
-  username?: string | null;
-}
+const profileFormSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters."),
+  displayUsername: z.string().optional(),
+});
 
-interface ProfileFormProps {
-  user: User;
-}
+type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
-export function ProfileForm({ user }: ProfileFormProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: user.name || "",
-    username: user.username || "",
-    image: user.image || "",
+export function ProfileForm() {
+  const user = useQuery(api.users.currentUser);
+  const updateProfile = useMutation(api.users.updateProfile);
+
+  const form = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileFormSchema),
+    values: {
+      name: user?.name ?? "",
+      displayUsername: user?.displayUsername ?? "",
+    },
+    mode: "onChange",
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-    setSuccess(false);
-
+  async function onSubmit(data: ProfileFormValues) {
     try {
-      // Update user profile
-      await authClient.updateUser({
-        name: formData.name.trim(),
-        image: formData.image.trim() || null,
-      });
-
-      setSuccess(true);
-
-      // Auto-hide success message after 3 seconds
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      console.error("Profile update failed:", err);
-      setError(err instanceof Error ? err.message : "Failed to update profile");
-    } finally {
-      setIsLoading(false);
+      await updateProfile(data);
+      toast.success("Profile updated successfully");
+    } catch (error) {
+      toast.error((error as Error).message);
     }
-  };
+  }
 
-  const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    // Clear success/error messages when user starts typing
-    if (success) setSuccess(false);
-    if (error) setError(null);
-  };
+  if (!user) {
+    return <div>Loading...</div>;
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {success && <Alert>Profile updated successfully!</Alert>}
-
-      {error && <Alert variant="destructive">{error}</Alert>}
-
-      <div className="space-y-2">
-        <Label htmlFor="email">Email Address</Label>
-        <Input
-          id="email"
-          type="email"
-          value={user.email}
-          disabled
-          className="bg-muted"
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Full Name</FormLabel>
+              <FormControl>
+                <Input placeholder="Your full name" {...field} />
+              </FormControl>
+              <FormDescription>
+                This is your public display name.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-        <p className="text-muted-foreground text-sm">
-          Email address cannot be changed. Contact support if you need to update
-          it.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="name">Full Name</Label>
-        <Input
-          id="name"
-          type="text"
-          value={formData.name}
-          onChange={(e) => handleChange("name", e.target.value)}
-          disabled={isLoading}
-          required
+        <FormField
+          control={form.control}
+          name="displayUsername"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Username</FormLabel>
+              <FormControl>
+                <Input placeholder="Your username" {...field} />
+              </FormControl>
+              <FormDescription>This is your unique username.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="username">Username</Label>
-        <Input
-          id="username"
-          type="text"
-          value={formData.username}
-          onChange={(e) => handleChange("username", e.target.value)}
-          disabled={isLoading}
-          placeholder="Optional"
-        />
-        <p className="text-muted-foreground text-sm">
-          Your username can be used for @mentions and quick references.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="image">Profile Image URL</Label>
-        <Input
-          id="image"
-          type="url"
-          value={formData.image}
-          onChange={(e) => handleChange("image", e.target.value)}
-          disabled={isLoading}
-          placeholder="https://example.com/avatar.jpg"
-        />
-        <p className="text-muted-foreground text-sm">
-          Provide a URL to your profile image. Leave empty to use the default
-          avatar.
-        </p>
-      </div>
-
-      {formData.image && (
-        <div className="space-y-2">
-          <Label>Preview</Label>
-          <div className="flex items-center gap-4">
-            <img
-              src={formData.image}
-              alt="Profile preview"
-              className="size-16 rounded-full border object-cover"
-              onError={(e) => {
-                e.currentTarget.src = ""; // Clear broken image
-                setError("Failed to load image from the provided URL");
-              }}
-            />
-            <p className="text-muted-foreground text-sm">
-              This is how your profile image will appear
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex gap-3 pt-4">
-        <Button type="submit" disabled={isLoading}>
-          {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
-          {isLoading ? "Saving..." : "Save Changes"}
-        </Button>
-
         <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setFormData({
-              name: user.name || "",
-              username: user.username || "",
-              image: user.image || "",
-            });
-            setError(null);
-            setSuccess(false);
-          }}
-          disabled={isLoading}
+          type="submit"
+          disabled={form.formState.isSubmitting || !form.formState.isDirty}
         >
-          Reset
+          {form.formState.isSubmitting ? "Saving..." : "Save Changes"}
         </Button>
-      </div>
-    </form>
+      </form>
+    </Form>
   );
 }

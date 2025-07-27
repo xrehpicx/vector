@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SquareDashed } from "lucide-react";
-import { trpc } from "@/lib/trpc";
 import { IconPicker } from "@/components/ui/icon-picker";
 import {
   Popover,
@@ -19,9 +20,10 @@ import {
 } from "@/components/ui/popover";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 import { Label } from "../ui/label";
+import { Id } from "@/convex/_generated/dataModel";
 
 interface PriorityData {
-  id?: string;
+  id?: Id<"issuePriorities">;
   name: string;
   weight: number;
   color: string | null;
@@ -103,15 +105,8 @@ export function PrioritiesManagementDialog({
   onSave,
   orgSlug,
 }: PrioritiesManagementDialogProps) {
-  const utils = trpc.useUtils();
-  const deleteMutation = trpc.organization.deleteIssuePriority.useMutation({
-    onSuccess: () => {
-      utils.organization.listIssuePriorities
-        .invalidate({ orgSlug: orgSlug! })
-        .catch(() => {});
-      onClose();
-    },
-  });
+  const deleteMutation = useMutation(api.organizations.deleteIssuePriority);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [name, setName] = useState(priority?.name || "");
   const [color, setColor] = useState(priority?.color || DEFAULT_COLORS[0]);
@@ -138,7 +133,7 @@ export function PrioritiesManagementDialog({
     });
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!priority?.id || !orgSlug) return;
     if (
       !confirm(
@@ -147,7 +142,15 @@ export function PrioritiesManagementDialog({
     )
       return;
 
-    deleteMutation.mutate({ orgSlug, priorityId: priority.id });
+    setIsDeleting(true);
+    try {
+      await deleteMutation({ orgSlug, priorityId: priority.id });
+      onClose();
+    } catch (error) {
+      console.error("Failed to delete priority:", error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const IconComponent = icon
@@ -215,9 +218,9 @@ export function PrioritiesManagementDialog({
               variant="destructive"
               size="sm"
               onClick={handleDelete}
-              disabled={deleteMutation.isPending}
+              disabled={isDeleting}
             >
-              Delete
+              {isDeleting ? "Deleting..." : "Delete"}
             </Button>
           )}
           <div className="ml-auto flex gap-2">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { trpc } from "@/lib/trpc";
+import { useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Edit, Check, X, Loader2, AlertCircle } from "lucide-react";
@@ -27,19 +28,11 @@ export function OrgNameEditor({ orgSlug, initialValue }: EditorProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const mutation = trpc.organization.update.useMutation({
-    onSuccess: () => {
-      setEditing(false);
-      setError(null);
-      router.refresh();
-    },
-    onError: (error) => {
-      setError(error.message || "Failed to update organization name");
-    },
-  });
+  const mutation = useMutation(api.organizations.update);
 
   // Reset value when editing starts
   useEffect(() => {
@@ -51,95 +44,119 @@ export function OrgNameEditor({ orgSlug, initialValue }: EditorProps) {
     }
   }, [editing, initialValue]);
 
-  const handleSave = () => {
-    const trimmedValue = value.trim();
-    if (!trimmedValue) {
+  const save = async () => {
+    if (!value.trim()) {
       setError("Organization name cannot be empty");
       return;
     }
-    if (trimmedValue === initialValue) {
+
+    try {
+      setIsLoading(true);
+      await mutation({
+        orgSlug,
+        data: { name: value.trim() },
+      });
       setEditing(false);
-      return;
+      setError(null);
+      router.refresh();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to update organization name";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
-    mutation.mutate({ orgSlug, data: { name: trimmedValue } });
   };
 
-  const handleCancel = () => {
+  const cancel = () => {
     setValue(initialValue);
-    setError(null);
     setEditing(false);
+    setError(null);
   };
 
-  if (!editing) {
-    return (
-      <div
-        className="group hover:bg-muted/50 flex cursor-pointer items-center justify-between rounded-md border px-3 py-2 transition-colors"
-        onClick={() => setEditing(true)}
-        title="Click to edit"
-      >
-        <span className="truncate text-sm" title={initialValue}>
-          {initialValue}
-        </span>
-      </div>
-    );
-  }
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      save();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancel();
+    }
+  };
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Input
-          ref={inputRef}
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            if (error) setError(null);
-          }}
-          className={cn(
-            "h-9",
-            error && "border-destructive focus-visible:ring-destructive",
-          )}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleSave();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              handleCancel();
+    <div className="flex items-center gap-2">
+      {editing ? (
+        <>
+          <div className="flex-1">
+            <Input
+              ref={inputRef}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className={cn(
+                "h-9",
+                error && "border-red-500 focus-visible:ring-red-500",
+              )}
+            />
+            {error && (
+              <div className="mt-1 flex items-center gap-1 text-xs text-red-600">
+                <AlertCircle className="h-3 w-3" />
+                {error}
+              </div>
+            )}
+          </div>
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={isLoading}
+            className="h-9 w-9 p-0"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={cancel}
+            disabled={
+              !value.trim() || isLoading || value.trim() === initialValue
             }
-          }}
-          disabled={mutation.isPending}
-          placeholder="Enter organization name"
-        />
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleSave}
-          disabled={
-            !value.trim() || mutation.isPending || value.trim() === initialValue
-          }
-          className="h-9 shrink-0"
-        >
-          {mutation.isPending ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <Check className="size-3" />
-          )}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleCancel}
-          disabled={mutation.isPending}
-          className="h-9 shrink-0"
-        >
-          <X className="size-3" />
-        </Button>
-      </div>
-      {error && (
-        <div className="text-destructive flex items-center gap-1 text-xs">
-          <AlertCircle className="size-3" />
-          {error}
-        </div>
+            className="h-9 w-9 p-0"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <X className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={cancel}
+            disabled={isLoading}
+            className="h-9 w-9 p-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="flex-1 font-medium">{initialValue}</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setEditing(true)}
+            className="h-9 w-9 p-0"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        </>
       )}
     </div>
   );
@@ -150,24 +167,11 @@ export function OrgSlugEditor({ orgSlug, initialValue }: EditorProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const mutation = trpc.organization.update.useMutation({
-    onSuccess: (data) => {
-      setEditing(false);
-      setError(null);
-      if (data?.slug && data.slug !== orgSlug) {
-        // Redirect to new slug path
-        router.push(`/${data.slug}/settings`);
-      } else {
-        router.refresh();
-      }
-    },
-    onError: (error) => {
-      setError(error.message || "Failed to update organization slug");
-    },
-  });
+  const mutation = useMutation(api.organizations.update);
 
   // Reset value when editing starts
   useEffect(() => {
@@ -193,7 +197,7 @@ export function OrgSlugEditor({ orgSlug, initialValue }: EditorProps) {
     return null;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const trimmedValue = value.trim();
     const validationError = validateSlug(trimmedValue);
 
@@ -207,7 +211,26 @@ export function OrgSlugEditor({ orgSlug, initialValue }: EditorProps) {
       return;
     }
 
-    mutation.mutate({ orgSlug, data: { slug: trimmedValue } });
+    try {
+      setIsLoading(true);
+      const result = await mutation({ orgSlug, data: { slug: trimmedValue } });
+      setEditing(false);
+      setError(null);
+      if (result?.success && trimmedValue !== orgSlug) {
+        // Redirect to new slug path
+        router.push(`/${trimmedValue}/settings`);
+      } else {
+        router.refresh();
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to update organization slug";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -265,7 +288,7 @@ export function OrgSlugEditor({ orgSlug, initialValue }: EditorProps) {
                 handleCancel();
               }
             }}
-            disabled={mutation.isPending}
+            disabled={isLoading}
             placeholder="my-org"
           />
         </div>
@@ -273,12 +296,10 @@ export function OrgSlugEditor({ orgSlug, initialValue }: EditorProps) {
           variant="default"
           size="sm"
           onClick={handleSave}
-          disabled={
-            !value.trim() || mutation.isPending || value.trim() === initialValue
-          }
+          disabled={!value.trim() || isLoading || value.trim() === initialValue}
           className="h-9 shrink-0"
         >
-          {mutation.isPending ? (
+          {isLoading ? (
             <Loader2 className="size-3 animate-spin" />
           ) : (
             <Check className="size-3" />
@@ -288,7 +309,7 @@ export function OrgSlugEditor({ orgSlug, initialValue }: EditorProps) {
           variant="outline"
           size="sm"
           onClick={handleCancel}
-          disabled={mutation.isPending}
+          disabled={isLoading}
           className="h-9 shrink-0"
         >
           <X className="size-3" />
@@ -326,11 +347,7 @@ export function OrgLogoEditor({ orgSlug, initialValue }: LogoEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const updateMutation = trpc.organization.update.useMutation({
-    onSuccess: () => {
-      router.refresh();
-    },
-  });
+  const updateMutation = useMutation(api.organizations.update);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -367,7 +384,7 @@ export function OrgLogoEditor({ orgSlug, initialValue }: LogoEditorProps) {
       }
 
       // Step 3: persist the logo key in DB
-      await updateMutation.mutateAsync({
+      await updateMutation({
         orgSlug,
         data: { logo: key },
       });

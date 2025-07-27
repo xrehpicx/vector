@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authClient } from "@/lib/auth-client";
+import { useAuthActions } from "@convex-dev/auth/react";
 import {
   Card,
   CardContent,
@@ -28,24 +28,31 @@ export default function SignupPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
+  const { signIn } = useAuthActions();
+
   const onSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    const { error } = await authClient.signUp.email({
-      email,
-      username,
-      password,
-      name: username || email,
-    });
+    try {
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("password", password);
+      formData.append("name", username || email);
+      formData.append("flow", "signUp");
 
-    setLoading(false);
-    if (error) {
-      setError(error.message ?? "Failed to create account");
-    } else {
+      await signIn("password", formData);
+
       router.refresh();
       router.push(redirectTo);
+    } catch (error) {
+      console.error("Sign up error:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to create account",
+      );
+    } finally {
+      setLoading(false);
     }
   };
 

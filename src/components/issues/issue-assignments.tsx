@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -13,9 +14,9 @@ import {
 import { Plus, X, User } from "lucide-react";
 import { StateSelector, AssigneeSelector } from "./issue-selectors";
 import type { Member, State } from "./issue-selectors";
-import { PERMISSIONS } from "@/auth/permission-constants";
-import { authClient } from "@/lib/auth-client";
+import { PERMISSIONS } from "@/lib/permissions";
 import { usePermission } from "@/hooks/use-permissions";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 // Helper to derive initials from a name/email
 function getAssigneeInitials(
@@ -34,7 +35,7 @@ function getAssigneeInitials(
 
 export interface IssueAssignmentsProps {
   orgSlug: string;
-  issueId: string;
+  issueId: Id<"issues">;
   /**
    * The list of workflow states available within the organization. Accepts either
    * mutable or readonly arrays so callers don't need to cast or clone.
@@ -45,7 +46,7 @@ export interface IssueAssignmentsProps {
    * don't need to cast or clone.
    */
   members: readonly Member[] | Member[];
-  defaultStateId: string;
+  defaultStateId: Id<"issueStates">;
 }
 
 export function IssueAssignments({
@@ -58,8 +59,8 @@ export function IssueAssignments({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   // Current user info
-  const { data: session } = authClient.useSession();
-  const currentUserId = session?.user?.id || "";
+  const currentUser = useQuery(api.users.currentUser);
+  const currentUserId = currentUser?._id || "";
 
   // Permission check (manage assignments)
   const { hasPermission: canManage } = usePermission(
@@ -68,38 +69,25 @@ export function IssueAssignments({
   );
 
   // Fetch assignments for this issue
-  const { data: assignments = [], refetch } =
-    trpc.issue.getAssignments.useQuery({ issueId });
+  const assignments = useQuery(api.issues.getAssignments, { issueId }) ?? [];
 
   // Mutations
-  const addAssigneeMutation = trpc.issue.addAssignee.useMutation({
-    onSuccess: () => {
-      refetch();
-      setAddDialogOpen(false);
-    },
-  });
-
-  const changeAssignmentStateMutation =
-    trpc.issue.changeAssignmentState.useMutation({
-      onSuccess: () => refetch(),
-    });
-
-  const updateAssignmentAssigneeMutation =
-    trpc.issue.updateAssignmentAssignee.useMutation({
-      onSuccess: () => refetch(),
-    });
-
-  const deleteAssignmentMutation = trpc.issue.deleteAssignment.useMutation({
-    onSuccess: () => refetch(),
-  });
+  const addAssigneeMutation = useMutation(api.issues.addAssignee);
+  const changeAssignmentStateMutation = useMutation(
+    api.issues.changeAssignmentState,
+  );
+  const updateAssignmentAssigneeMutation = useMutation(
+    api.issues.updateAssignmentAssignee,
+  );
+  const deleteAssignmentMutation = useMutation(api.issues.deleteAssignment);
 
   // Helper to filter members so the same user cannot be assigned twice
   const assignedUserIds = assignments
     .map((a) => a.assigneeId)
-    .filter((id): id is string => !!id);
+    .filter((id): id is Id<"users"> => !!id);
 
   let availableMembers = members.filter(
-    (m) => !assignedUserIds.includes(m.userId),
+    (m) => !assignedUserIds.includes(m.userId as Id<"users">),
   );
 
   // If the user cannot manage assignments, they may only assign themselves
@@ -109,30 +97,52 @@ export function IssueAssignments({
     );
   }
 
-  const handleAddAssignee = (assigneeId: string) => {
-    addAssigneeMutation.mutate({
-      issueId,
-      assigneeId: assigneeId || undefined,
-      stateId: defaultStateId,
-    });
+  const handleAddAssignee = async (assigneeId: string) => {
+    try {
+      await addAssigneeMutation({
+        issueId,
+        assigneeId: assigneeId as Id<"users">,
+        stateId: defaultStateId,
+      });
+      setAddDialogOpen(false);
+    } catch (error) {
+      console.error("Failed to add assignee:", error);
+    }
   };
 
-  const handleStateChange = (assignmentId: string, stateId: string) => {
-    changeAssignmentStateMutation.mutate({
-      assignmentId,
-      stateId,
-    });
+  const handleStateChange = async (assignmentId: string, stateId: string) => {
+    try {
+      await changeAssignmentStateMutation({
+        assignmentId: assignmentId as Id<"issueAssignees">,
+        stateId: stateId as Id<"issueStates">,
+      });
+    } catch (error) {
+      console.error("Failed to change state:", error);
+    }
   };
 
-  const handleRemoveAssignment = (assignmentId: string) => {
-    deleteAssignmentMutation.mutate({ assignmentId });
+  const handleRemoveAssignment = async (assignmentId: string) => {
+    try {
+      await deleteAssignmentMutation({
+        assignmentId: assignmentId as Id<"issueAssignees">,
+      });
+    } catch (error) {
+      console.error("Failed to remove assignment:", error);
+    }
   };
 
-  const handleUpdateAssignee = (assignmentId: string, assigneeId: string) => {
-    updateAssignmentAssigneeMutation.mutate({
-      assignmentId,
-      assigneeId: assigneeId || null,
-    });
+  const handleUpdateAssignee = async (
+    assignmentId: string,
+    assigneeId: string,
+  ) => {
+    try {
+      await updateAssignmentAssigneeMutation({
+        assignmentId: assignmentId as Id<"issueAssignees">,
+        assigneeId: assigneeId as Id<"users">,
+      });
+    } catch (error) {
+      console.error("Failed to update assignee:", error);
+    }
   };
 
   return (
@@ -157,7 +167,7 @@ export function IssueAssignments({
 
           return (
             <div
-              key={assignment.id}
+              key={assignment._id}
               className="hover:bg-muted/50 flex items-center gap-3 p-2 transition-colors"
             >
               {/* Assignee - clickable like issues table */}
@@ -166,29 +176,30 @@ export function IssueAssignments({
                   members={members.filter(
                     (m) =>
                       m.userId === assignment.assigneeId ||
-                      !assignedUserIds.includes(m.userId),
+                      !assignedUserIds.includes(m.userId as Id<"users">),
                   )}
-                  selectedAssignee={assignment.assigneeId || ""}
+                  selectedAssignee={assignment.assigneeId?.toString() || ""}
                   onAssigneeSelect={
                     canManage || assignment.assigneeId === currentUserId
-                      ? (userId) => handleUpdateAssignee(assignment.id, userId)
+                      ? (userId) => handleUpdateAssignee(assignment._id, userId)
                       : undefined
                   }
                   displayMode="labelOnly"
                   trigger={
                     <div className="hover:bg-muted/30 -m-1 flex cursor-pointer items-center gap-2 rounded-md p-1 transition-colors">
-                      {assignment.assigneeId ? (
+                      {assignment.assigneeId && assignment.assignee ? (
                         <>
                           <Avatar className="h-6 w-6 flex-shrink-0">
                             <AvatarFallback className="text-xs">
                               {getAssigneeInitials(
-                                assignment.assigneeName,
-                                assignment.assigneeEmail,
+                                assignment.assignee.name,
+                                assignment.assignee.email,
                               )}
                             </AvatarFallback>
                           </Avatar>
                           <span className="truncate text-sm">
-                            {assignment.assigneeName}
+                            {assignment.assignee.name ||
+                              assignment.assignee.email}
                           </span>
                         </>
                       ) : (
@@ -209,10 +220,10 @@ export function IssueAssignments({
               {/* State badge - clickable like issues table */}
               <StateSelector
                 states={states}
-                selectedState={assignment.stateId}
+                selectedState={assignment.stateId?.toString() || ""}
                 onStateSelect={
                   canManage || assignment.assigneeId === currentUserId
-                    ? (stateId) => handleStateChange(assignment.id, stateId)
+                    ? (stateId) => handleStateChange(assignment._id, stateId)
                     : () => {}
                 }
                 align="end"
@@ -223,7 +234,7 @@ export function IssueAssignments({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleRemoveAssignment(assignment.id)}
+                onClick={() => handleRemoveAssignment(assignment._id)}
                 disabled={
                   !(canManage || assignment.assigneeId === currentUserId)
                 }

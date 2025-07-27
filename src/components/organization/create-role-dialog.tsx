@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { trpc } from "@/lib/trpc";
-import { PERMISSIONS } from "@/auth/permission-constants";
+import { useMutation } from "convex/react";
+import { api } from "@/lib/convex";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface CreateRoleDialogProps {
   orgSlug: string;
@@ -138,22 +139,27 @@ export function CreateRoleDialog({
   const [description, setDescription] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
-  const createMutation = trpc.role.create.useMutation({
-    onSuccess: () => {
-      onSuccess();
-    },
-  });
+  const createMutation = useMutation(api.roles.create);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    await createMutation.mutateAsync({
-      orgSlug,
-      name: name.trim(),
-      description: description.trim() || undefined,
-      permissions: selectedPermissions,
-    });
+    setIsSubmitting(true);
+    try {
+      await createMutation({
+        orgSlug,
+        name: name.trim(),
+        description: description.trim() || undefined,
+        permissions: selectedPermissions,
+      });
+      onSuccess();
+    } catch (error) {
+      console.error("Failed to create role:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePermissionToggle = (permissionId: string) => {
@@ -259,10 +265,10 @@ export function CreateRoleDialog({
           </Button>
           <Button
             size="sm"
-            disabled={!name.trim() || createMutation.isPending}
+            disabled={!name.trim() || isSubmitting}
             onClick={handleSubmit}
           >
-            {createMutation.isPending ? "Creating…" : "Create Role"}
+            {isSubmitting ? "Creating…" : "Create Role"}
           </Button>
         </div>
       </DialogContent>

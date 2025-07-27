@@ -1,6 +1,7 @@
 "use client";
-import { trpc } from "@/lib/trpc";
-import { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/lib/convex";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,13 +19,6 @@ import {
 import { formatDateHuman } from "@/lib/date";
 import { CustomRolesManager } from "@/components/organization/custom-roles-manager";
 
-interface Invite {
-  id: string;
-  email: string;
-  role: string | null;
-  createdAt: string;
-}
-
 function getInitials(name?: string, email?: string): string {
   const displayName = name || email;
   if (!displayName) return "?";
@@ -38,48 +32,37 @@ function getInitials(name?: string, email?: string): string {
 
 export function MembersList({
   orgSlug,
-  isAdmin,
-  currentUserId,
+  memberCount,
 }: {
   orgSlug: string;
-  isAdmin: boolean;
-  currentUserId: string;
   memberCount?: number;
 }) {
-  const utils = trpc.useUtils();
-  const { data: members, isLoading } =
-    trpc.organization.listMembersWithRoles.useQuery({
-      orgSlug,
-    });
-  const { data: invites } = trpc.organization.listInvites.useQuery(
-    { orgSlug },
-    { enabled: isAdmin },
-  );
+  const members = useQuery(api.organizations.listMembersWithRoles, { orgSlug });
+  const invites = useQuery(api.organizations.listInvites, { orgSlug });
+  const currentUser = useQuery(api.users.getCurrentUser);
   const [showInvite, setShowInvite] = useState(false);
 
-  const removeMemberMutation = trpc.organization.removeMember.useMutation({
-    onSuccess: () => {
-      utils.organization.listMembersWithRoles.invalidate({ orgSlug });
-    },
-  });
+  const removeMemberMutation = useMutation(api.organizations.removeMember);
+  const revokeInviteMutation = useMutation(api.organizations.revokeInvite);
+  const resendInviteMutation = useMutation(api.organizations.resendInvite);
 
-  const revokeInviteMutation = trpc.organization.revokeInvite.useMutation({
-    onSuccess: () => {
-      utils.organization.listInvites.invalidate({ orgSlug });
-    },
-  });
-
-  const resendInviteMutation = trpc.organization.resendInvite.useMutation({
-    onSuccess: () => {
-      utils.organization.listInvites.invalidate({ orgSlug });
-    },
-  });
+  const { isAdmin, currentUserId } = useMemo(() => {
+    if (!currentUser || !members) {
+      return { isAdmin: false, currentUserId: "" };
+    }
+    const currentMember = members.find((m) => m.userId === currentUser._id);
+    return {
+      isAdmin:
+        currentMember?.role === "admin" || currentMember?.role === "owner",
+      currentUserId: currentUser._id,
+    };
+  }, [currentUser, members]);
 
   const handleRoleChange = () => {
-    utils.organization.listMembersWithRoles.invalidate({ orgSlug });
+    // Convex automatically updates the UI when data changes
   };
 
-  if (isLoading) {
+  if (members === undefined || currentUser === undefined) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-muted-foreground text-sm">Loading members...</div>
@@ -190,7 +173,7 @@ export function MembersList({
 
                   {/* Join Date */}
                   <div className="text-muted-foreground flex-shrink-0 text-xs">
-                    {formatDateHuman(new Date(member.joinedAt))}
+                    {formatDateHuman(new Date(member._creationTime))}
                   </div>
 
                   {/* Actions */}
@@ -210,14 +193,13 @@ export function MembersList({
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             variant="destructive"
-                            disabled={removeMemberMutation.isPending}
                             onClick={() => {
                               if (
                                 confirm(
                                   `Remove ${member.name || member.email} from organization?`,
                                 )
                               ) {
-                                removeMemberMutation.mutate({
+                                removeMemberMutation({
                                   orgSlug,
                                   userId: member.userId,
                                 });
@@ -246,14 +228,14 @@ export function MembersList({
           </h4>
           <div className="divide-y">
             <AnimatePresence initial={false}>
-              {invites.map((invite: Invite) => (
+              {invites.map((invite) => (
                 <motion.div
                   layout
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
                   transition={{ duration: 0.2 }}
-                  key={invite.id}
+                  key={invite._id}
                   className="hover:bg-muted/50 flex items-center gap-3 px-3 py-2 transition-colors"
                 >
                   {/* Avatar Placeholder */}
@@ -278,7 +260,7 @@ export function MembersList({
 
                   {/* Invite Date */}
                   <div className="text-muted-foreground flex-shrink-0 text-xs">
-                    {formatDateHuman(new Date(invite.createdAt))}
+                    {formatDateHuman(new Date(invite._creationTime))}
                   </div>
 
                   {/* Actions */}
@@ -296,11 +278,9 @@ export function MembersList({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          disabled={resendInviteMutation.isPending}
                           onClick={() => {
-                            resendInviteMutation.mutate({
-                              token: invite.id,
-                              orgSlug,
+                            resendInviteMutation({
+                              token: invite._id,
                             });
                           }}
                         >
@@ -310,13 +290,12 @@ export function MembersList({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           variant="destructive"
-                          disabled={revokeInviteMutation.isPending}
                           onClick={() => {
                             if (
                               confirm(`Revoke invitation for ${invite.email}?`)
                             ) {
-                              revokeInviteMutation.mutate({
-                                token: invite.id,
+                              revokeInviteMutation({
+                                inviteId: invite._id,
                               });
                             }
                           }}

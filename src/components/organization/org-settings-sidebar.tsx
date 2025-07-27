@@ -21,12 +21,12 @@ interface SettingsNavItem {
 }
 
 interface OrgSettingsSidebarProps {
-  orgId: string;
+  orgSlug: string;
   userRole: string;
 }
 
 export function OrgSettingsSidebar({
-  orgId,
+  orgSlug,
   userRole,
 }: OrgSettingsSidebarProps) {
   const pathname = usePathname();
@@ -37,27 +37,27 @@ export function OrgSettingsSidebar({
   const settingsItems: SettingsNavItem[] = [
     {
       label: "General",
-      href: `/${orgId}/settings`,
+      href: `/${orgSlug}/settings`,
       icon: Building,
       description: "Organization info and branding",
     },
     {
       label: "Members",
-      href: `/${orgId}/settings/members`,
+      href: `/${orgSlug}/settings/members`,
       icon: Users,
       description: "Manage team members and roles",
       requiresAdmin: true,
     },
     {
       label: "Roles",
-      href: `/${orgId}/settings/roles`,
+      href: `/${orgSlug}/settings/roles`,
       icon: Shield,
       description: "Manage custom roles and permissions",
       requiresAdmin: true,
     },
     {
       label: "States",
-      href: `/${orgId}/settings/states`,
+      href: `/${orgSlug}/settings/states`,
       icon: Settings2,
       description: "Configure issue and project states",
       requiresAdmin: true,
@@ -82,7 +82,7 @@ export function OrgSettingsSidebar({
       {visibleItems.map((item) => {
         const isActive =
           pathname === item.href ||
-          (item.href !== `/${orgId}/settings` &&
+          (item.href !== `/${orgSlug}/settings` &&
             pathname.startsWith(item.href));
 
         return (

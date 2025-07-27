@@ -1,49 +1,74 @@
-# AIKP — AI Assistant 📚
+# AIKP - Issue Tracking Platform
 
-AIKP is an AI assistant you can talk to through the web (Next.js) and external platforms (Discord first, more to come).
-This repository contains the **monolithic web service** that powers AIKP's dashboard, authentication, database, and public API.
+A modern issue tracking platform built with Next.js and Convex.
 
----
+## Tech Stack
 
-## Documentation
+- **Frontend:** Next.js 14, React, TypeScript, Tailwind CSS
+- **Backend:** Convex (Database, Functions, Auth, Storage)
+- **UI Components:** shadcn/ui
+- **Development:** Local Convex instance
 
-All documentation for this project, including setup guides, architectural overviews, and development conventions, can be found in the **[`/docs`](./docs/index.md)** directory.
+## Quick Start
 
-- **[Getting Started](./docs/getting-started/01-local-setup.md)**: How to set up your local development environment.
-- **[Full Documentation](./docs/index.md)**: The main entry point for all documentation.
+1. **Clone and install:**
 
-## Tech Stack Summary
+   ```bash
+   git clone <repo>
+   cd aikp
+   pnpm install
+   ```
 
-| Layer       | Tech                                      |
-| ----------- | ----------------------------------------- |
-| Runtime     | **Next.js 15** (App Router, React 19)     |
-| Language    | **TypeScript strict**                     |
-| Styling     | **Tailwind CSS 4** + cva + tailwind-merge |
-| Database    | **Convex** (local development)            |
-| Legacy ORM  | **Drizzle ORM** (PostgreSQL) - migrating  |
-| Auth        | **better-auth** (NextAuth-inspired)       |
-| Package Mgr | **pnpm**                                  |
+2. **Start development:**
 
-## Local Development
+   ```bash
+   pnpm run dev
+   ```
 
-### Convex Backend
+3. **Access the app:**
+   - App: http://localhost:3000
+   - Convex Dashboard: http://127.0.0.1:6790/?d=anonymous-aikp
+
+## Architecture
+
+- **Convex Database:** Document-based with multi-tenant design
+- **Convex Functions:** Type-safe queries, mutations, and actions
+- **Convex Auth:** Built-in authentication with password provider
+- **Convex Storage:** File upload/download with organization scoping
+- **Real-time:** Automatic subscriptions and live updates
+
+## Development
+
+- **Local Development:** Uses local Convex instance (no cloud account needed)
+- **Type Safety:** Full TypeScript integration with schema-driven types
+- **Hot Reload:** Automatic function updates during development
+- **Dashboard:** Real-time monitoring and debugging capabilities
+
+## Features
+
+- **Multi-tenant Organizations:** Isolated workspaces for teams
+- **Project Management:** Create and manage projects with teams
+- **Issue Tracking:** Full issue lifecycle with states, priorities, and assignments
+- **Team Management:** Organize users into teams with roles
+- **Custom Roles:** Flexible permission system
+- **Real-time Updates:** Live data synchronization across clients
+
+## Environment Variables
+
+Create `.env.local`:
 
 ```bash
-# Start the local Convex development server
-pnpm run convex:dev
-
-# View the Convex dashboard
-# http://localhost:6790/?d=anonymous-aikp
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_CONVEX_URL=http://127.0.0.1:3210
 ```
 
-### Next.js Frontend
+## Commands
 
-```bash
-# Start the Next.js development server
-pnpm run dev
+- `pnpm run dev` - Start development server
+- `pnpm run build` - Build for production
+- `pnpm run convex:dev` - Start Convex development server
+- `pnpm run lint` - Run ESLint
 
-# Visit the application
-# http://localhost:3000
-```
+## Migration Status
 
-**Note:** Both Convex and Next.js need to be running simultaneously during development.
+This project has been migrated from a legacy stack (tRPC, Drizzle, Better-Auth, S3) to a modern Convex-only architecture. Legacy code has been archived in the `/archive` directory.

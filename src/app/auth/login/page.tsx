@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authClient } from "@/lib/auth-client";
+import { useAuthActions } from "@convex-dev/auth/react";
 import {
   Card,
   CardContent,
@@ -27,28 +27,36 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
+  const { signIn } = useAuthActions();
+
   const onLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    const isEmail = identifier.includes("@");
-    const result = isEmail
-      ? await authClient.signIn.email({
-          email: identifier,
-          password,
-        })
-      : await authClient.signIn.username({
-          username: identifier,
-          password,
-        });
+    try {
+      const isEmail = identifier.includes("@");
+      const formData = new FormData();
 
-    setLoading(false);
-    if (result.error) {
-      setError(result.error.message ?? "Authentication failed");
-    } else {
+      if (isEmail) {
+        formData.append("email", identifier);
+      } else {
+        formData.append("email", identifier); // Convex Auth typically uses email
+      }
+      formData.append("password", password);
+      formData.append("flow", "signIn");
+
+      await signIn("password", formData);
+
       router.refresh();
       router.push(redirectTo);
+    } catch (error) {
+      console.error("Sign in error:", error);
+      setError(
+        error instanceof Error ? error.message : "Authentication failed",
+      );
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/lib/convex";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Plus, Check } from "lucide-react";
 import {
@@ -19,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 interface CustomRoleAssignerProps {
   orgSlug: string;
-  userId: string;
+  userId: Id<"users">;
   disabled?: boolean;
   className?: string;
   onSuccess?: () => void;
@@ -35,23 +37,21 @@ export function CustomRoleAssigner({
   const [open, setOpen] = useState(false);
 
   // Fetch custom (non-system) roles for this organization
-  const { data: roles = [] } = trpc.role.list.useQuery(
-    { orgSlug },
-    {
-      enabled: !disabled && open, // fetch when popover opens
-      staleTime: 5 * 60 * 1000,
-    },
-  );
+  const roles = useQuery(api.roles.list, { orgSlug }) || [];
+  const assignMutation = useMutation(api.roles.assign);
+  const [isAssigning, setIsAssigning] = useState(false);
 
-  const assignMutation = trpc.role.assign.useMutation({
-    onSuccess: () => {
+  const handleAssign = async (roleId: Id<"orgRoles">) => {
+    setIsAssigning(true);
+    try {
+      await assignMutation({ orgSlug, roleId, userId });
       setOpen(false);
       onSuccess?.();
-    },
-  });
-
-  const handleAssign = (roleId: string) => {
-    assignMutation.mutate({ orgSlug, roleId, userId });
+    } catch (error) {
+      console.error("Failed to assign role:", error);
+    } finally {
+      setIsAssigning(false);
+    }
   };
 
   const customRoles = roles.filter((r: { system: boolean }) => !r.system);
@@ -63,39 +63,25 @@ export function CustomRoleAssigner({
           variant="ghost"
           size="sm"
           className={cn("h-6 w-6 p-0", className)}
-          disabled={disabled || assignMutation.isPending}
+          disabled={disabled || isAssigning}
           aria-label="Assign custom role"
         >
           <Plus className="size-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search role…" className="h-9" />
-          <CommandList>
-            <CommandEmpty>No custom roles.</CommandEmpty>
-            <CommandGroup>
-              {customRoles.map((role) => (
-                <CommandItem
-                  key={role.id}
-                  value={role.name}
-                  onSelect={() => handleAssign(role.id)}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      assignMutation.isPending &&
-                        assignMutation.variables?.roleId === role.id
-                        ? "opacity-100"
-                        : "opacity-0",
-                    )}
-                  />
-                  {role.name}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
+      <PopoverContent className="w-80 p-0" align="end">
+        <div className="p-2">
+          {customRoles.map((role) => (
+            <Button
+              key={role._id}
+              onClick={() => handleAssign(role._id)}
+              disabled={isAssigning}
+              className="mb-1 w-full"
+            >
+              {role.name}
+            </Button>
+          ))}
+        </div>
       </PopoverContent>
     </Popover>
   );

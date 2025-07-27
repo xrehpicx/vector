@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
-import { authClient } from "@/lib/auth-client";
+import { useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { Loader2 } from "lucide-react";
 
 export function OrgSetupForm() {
@@ -17,6 +18,8 @@ export function OrgSetupForm() {
     name: "",
     slug: "",
   });
+
+  const createOrgMutation = useMutation(api.organizations.create);
 
   const handleNameChange = (value: string) => {
     setFormData((prev) => ({
@@ -47,26 +50,17 @@ export function OrgSetupForm() {
         throw new Error("Organization slug is required");
       }
 
-      // Check if slug is available
-      const slugCheck = await authClient.organization.checkSlug({
-        slug: formData.slug,
-      });
-
-      if (!slugCheck.data?.status) {
-        throw new Error(
-          "This organization name is already taken. Please choose a different one.",
-        );
-      }
-
       // Create organization
-      const result = await authClient.organization.create({
-        name: formData.name.trim(),
-        slug: formData.slug.trim(),
+      const result = await createOrgMutation({
+        data: {
+          name: formData.name.trim(),
+          slug: formData.slug.trim(),
+        },
       });
 
-      if (result.data?.slug) {
+      if (result.orgId) {
         // Redirect to the new organization's issues page using slug
-        router.push(`/${result.data.slug}/issues`);
+        router.push(`/${formData.slug}/issues`);
       } else {
         throw new Error("Failed to create organization");
       }

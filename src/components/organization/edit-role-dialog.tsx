@@ -12,12 +12,14 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { trpc } from "@/lib/trpc";
-import { PERMISSIONS } from "@/auth/permission-constants";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/lib/convex";
+import type { Id } from "@/convex/_generated/dataModel";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface EditRoleDialogProps {
   orgSlug: string;
-  roleId: string;
+  roleId: Id<"orgRoles">;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -141,7 +143,7 @@ export function EditRoleDialog({
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
   // Fetch the role details from the API
-  const { data: roleData } = trpc.role.get.useQuery({ orgSlug, roleId });
+  const roleData = useQuery(api.roles.get, { orgSlug, roleId });
 
   // Populate state when the role data is loaded
   useEffect(() => {
@@ -152,23 +154,28 @@ export function EditRoleDialog({
     }
   }, [roleData]);
 
-  const updateMutation = trpc.role.update.useMutation({
-    onSuccess: () => {
-      onSuccess();
-    },
-  });
+  const updateMutation = useMutation(api.roles.update);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    await updateMutation.mutateAsync({
-      orgSlug,
-      roleId,
-      name: name.trim(),
-      description: description.trim() || undefined,
-      permissions: selectedPermissions,
-    });
+    setIsSubmitting(true);
+    try {
+      await updateMutation({
+        orgSlug,
+        roleId,
+        name: name.trim(),
+        description: description.trim() || undefined,
+        permissions: selectedPermissions,
+      });
+      onSuccess();
+    } catch (error) {
+      console.error("Failed to update role:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePermissionToggle = (permissionId: string) => {
@@ -274,10 +281,10 @@ export function EditRoleDialog({
           </Button>
           <Button
             size="sm"
-            disabled={!name.trim() || updateMutation.isPending}
+            disabled={!name.trim() || isSubmitting}
             onClick={handleSubmit}
           >
-            {updateMutation.isPending ? "Updating…" : "Update Role"}
+            {isSubmitting ? "Updating…" : "Update Role"}
           </Button>
         </div>
       </DialogContent>

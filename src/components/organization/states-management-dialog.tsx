@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,12 +26,12 @@ import {
 } from "@/components/ui/command";
 import { Check, SquareDashed } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { trpc } from "@/lib/trpc";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
+import { Id } from "@/convex/_generated/dataModel";
 
 interface StateData {
-  id?: string;
+  id?: Id<"issueStates"> | Id<"projectStatuses">;
   name: string;
   position: number;
   color: string | null;
@@ -210,30 +212,19 @@ export function StatesManagementDialog({
   onSave,
   orgSlug,
 }: StatesManagementDialogProps) {
-  const utils = trpc.useUtils();
-  const deleteIssueMutation = trpc.organization.deleteIssueState.useMutation({
-    onSuccess: () => {
-      utils.organization.listIssueStates
-        .invalidate({ orgSlug: orgSlug! })
-        .catch(() => {});
-      onClose();
-    },
-  });
-  const deleteStatusMutation =
-    trpc.organization.deleteProjectStatus.useMutation({
-      onSuccess: () => {
-        utils.organization.listProjectStatuses
-          .invalidate({ orgSlug: orgSlug! })
-          .catch(() => {});
-        onClose();
-      },
-    });
   const [name, setName] = useState(state?.name || "");
   const [color, setColor] = useState(state?.color || DEFAULT_COLORS[0]);
   const [icon, setIcon] = useState(state?.icon || null);
   const [stateType, setStateType] = useState(
     state?.type || (type === "issue" ? "todo" : "planned"),
   );
+
+  const deleteIssueState = useMutation(api.organizations.deleteIssueState);
+  const deleteProjectStatus = useMutation(
+    api.organizations.deleteProjectStatus,
+  );
+
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const isEditing = !!state;
 
@@ -265,17 +256,32 @@ export function StatesManagementDialog({
     });
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!state?.id || !orgSlug) return;
     if (
       !confirm("Are you sure you want to delete this? This cannot be undone.")
     )
       return;
 
-    if (type === "issue") {
-      deleteIssueMutation.mutate({ orgSlug, stateId: state.id });
-    } else {
-      deleteStatusMutation.mutate({ orgSlug, statusId: state.id });
+    setIsDeleting(true);
+    try {
+      if (type === "issue") {
+        await deleteIssueState({
+          orgSlug,
+          stateId: state.id as Id<"issueStates">,
+        });
+      } else {
+        await deleteProjectStatus({
+          orgSlug,
+          statusId: state.id as Id<"projectStatuses">,
+        });
+      }
+      onClose();
+    } catch (error) {
+      // Handle error (e.g., show a toast notification)
+      console.error("Failed to delete state/status:", error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -339,11 +345,9 @@ export function StatesManagementDialog({
               variant="destructive"
               size="sm"
               onClick={handleDelete}
-              disabled={
-                deleteIssueMutation.isPending || deleteStatusMutation.isPending
-              }
+              disabled={isDeleting}
             >
-              Delete
+              {isDeleting ? "Deleting..." : "Delete"}
             </Button>
           )}
           <div className="ml-auto flex gap-2">

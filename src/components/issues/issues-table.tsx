@@ -23,21 +23,21 @@ import {
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 import { formatDateHuman } from "@/lib/date";
 
-// Re-exported entity types from the selector module give us fully-typed data
+// Re-exported entity from the selector module give us fully-typed data
 import type {
   Team,
   Project,
   State,
   Priority,
 } from "@/components/issues/issue-selectors";
+import { api } from "@/convex/_generated/api";
+import { Prettify } from "@/lib/utils";
+import { FunctionReturnType } from "convex/server";
 
 // Infer issue row type directly from tRPC router output to stay in sync with DB.
-import type { inferRouterOutputs } from "@trpc/server";
-import type { AppRouter } from "@/trpc/routers/_app";
-
-type RouterOutputs = inferRouterOutputs<AppRouter>;
-export type IssueRowData =
-  RouterOutputs["organization"]["listIssuesPaged"]["issues"][number];
+export type IssueRowData = Prettify<
+  FunctionReturnType<typeof api.issues.listIssues>["issues"][number]
+>;
 
 export interface IssuesTableProps {
   orgSlug: string;
@@ -109,6 +109,7 @@ export function IssuesTable({
     >();
 
     issues.forEach((row) => {
+      if (row.id === "unassigned") return; // Skip empty assignments
       const existing = map.get(row.id);
 
       if (existing) {
@@ -118,20 +119,20 @@ export function IssuesTable({
         }
 
         existing.assignments.push({
-          assignmentId: row.assignmentId as unknown as string,
-          assigneeId: row.assigneeId,
-          assigneeName: row.assigneeName,
-          assigneeEmail: row.assigneeEmail,
-          stateId: row.stateId,
-          stateIcon: row.stateIcon,
-          stateColor: row.stateColor,
-          stateName: row.stateName,
-          stateType: row.stateType,
+          assignmentId: row.assignmentId!,
+          assigneeId: row.assigneeId ?? null,
+          assigneeName: row.assigneeName ?? null,
+          assigneeEmail: row.assigneeEmail ?? null,
+          stateId: row.stateId ?? null,
+          stateIcon: row.stateIcon ?? null,
+          stateColor: row.stateColor ?? null,
+          stateName: row.stateName ?? null,
+          stateType: row.stateType ?? null,
         });
 
         // Update user-specific metadata
         if (row.assigneeId === currentUserId) {
-          existing.currentUserStateType = row.stateType;
+          existing.currentUserStateType = row.stateType ?? null;
           if (activeFilter !== "all" && row.stateType === activeFilter) {
             existing.hasCurrentUserWithActiveFilter = true;
           }
@@ -154,20 +155,20 @@ export function IssuesTable({
           assigneeIds: row.assigneeId ? [row.assigneeId] : [],
           assignments: [
             {
-              assignmentId: row.assignmentId as unknown as string,
-              assigneeId: row.assigneeId,
-              assigneeName: row.assigneeName,
-              assigneeEmail: row.assigneeEmail,
-              stateId: row.stateId,
-              stateIcon: row.stateIcon,
-              stateColor: row.stateColor,
-              stateName: row.stateName,
-              stateType: row.stateType,
+              assignmentId: row.assignmentId!,
+              assigneeId: row.assigneeId ?? null,
+              assigneeName: row.assigneeName ?? null,
+              assigneeEmail: row.assigneeEmail ?? null,
+              stateId: row.stateId ?? null,
+              stateIcon: row.stateIcon ?? null,
+              stateColor: row.stateColor ?? null,
+              stateName: row.stateName ?? null,
+              stateType: row.stateType ?? null,
             },
           ],
           hasCurrentUserWithActiveFilter,
           currentUserStateType:
-            row.assigneeId === currentUserId ? row.stateType : null,
+            row.assigneeId === currentUserId ? (row.stateType ?? null) : null,
         });
       }
     });
@@ -215,10 +216,7 @@ export function IssuesTable({
       }
 
       // Default sort by update time
-      return (
-        new Date(b.row.updatedAt).getTime() -
-        new Date(a.row.updatedAt).getTime()
-      );
+      return b.row.updatedAt - a.row.updatedAt;
     });
   }, [groupedIssues, activeFilter]);
 
@@ -328,9 +326,12 @@ export function IssuesTable({
                 {/* Team / Project selectors */}
                 {issue.teamKey && (
                   <TeamSelector
-                    teams={teams as Team[]}
+                    teams={teams.map((team) => ({
+                      ...team,
+                      id: team._id,
+                    }))}
                     selectedTeam={
-                      teams.find((t) => t.key === issue.teamKey)?.id || ""
+                      teams.find((t) => t.key === issue.teamKey)?._id || ""
                     }
                     onTeamSelect={(tid) => onTeamChange(issue.id, tid)}
                   />
@@ -338,9 +339,13 @@ export function IssuesTable({
 
                 {issue.projectKey && (
                   <ProjectSelector
-                    projects={projects as Project[]}
+                    projects={projects.map((project) => ({
+                      ...project,
+                      id: project._id,
+                    }))}
                     selectedProject={
-                      projects.find((p) => p.key === issue.projectKey)?.id || ""
+                      projects.find((p) => p.key === issue.projectKey)?._id ||
+                      ""
                     }
                     onProjectSelect={(pid) => onProjectChange(issue.id, pid)}
                   />
@@ -349,7 +354,7 @@ export function IssuesTable({
                 {/* Last Updated */}
                 <div className="flex-shrink-0">
                   <span className="text-muted-foreground text-xs">
-                    {formatDateHuman(issue.updatedAt)}
+                    {formatDateHuman(new Date(issue.updatedAt))}
                   </span>
                 </div>
 
@@ -357,7 +362,7 @@ export function IssuesTable({
                 <MultiAssigneeSelector
                   orgSlug={orgSlug}
                   selectedAssigneeIds={assigneeIds}
-                  onAssigneesChange={(ids) => onAssigneesChange(issue.id, ids)}
+                  onAssigneesChange={(ids) => onAssigneesChange(issue.id!, ids)}
                   isLoading={isUpdatingAssignees}
                   highlightAssigneeId={highlightAssigneeId}
                   assignments={assignments}
@@ -383,7 +388,7 @@ export function IssuesTable({
                       <DropdownMenuItem
                         variant="destructive"
                         disabled={deletePending}
-                        onClick={() => onDelete(issue.id)}
+                        onClick={() => onDelete(issue.id!)}
                       >
                         <Trash2 className="size-4" />
                         Delete

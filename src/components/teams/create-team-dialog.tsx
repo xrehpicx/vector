@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
+import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 
 // Import the LeadSelector to maintain consistency
@@ -36,38 +38,45 @@ function CreateTeamDialogContent({
   const [key, setKey] = useState("");
   const [description, setDescription] = useState("");
   const [selectedLead, setSelectedLead] = useState<string>("");
-
-  const utils = trpc.useUtils();
+  const [isLoading, setIsLoading] = useState(false);
 
   // Get organization members for lead selection
-  const { data: orgMembers = [] } = trpc.organization.listMembers.useQuery({
-    orgSlug,
-  });
+  const orgMembersData =
+    useQuery(api.organizations.listMembers, { orgSlug }) ?? [];
 
-  const createMutation = trpc.team.create.useMutation({
-    onSuccess: (result) => {
-      // Refresh teams list (both full and paged) so the UI updates
-      Promise.all([
-        utils.organization.listTeams.invalidate({ orgSlug }),
-        utils.organization.listTeamsPaged.invalidate({ orgSlug }),
-      ]).catch(() => {});
-      onSuccess?.(result.id);
-      onClose();
-    },
-    onError: (e) => console.error(e.message),
-  });
+  // Transform orgMembers to match the expected Member interface
+  const orgMembers = orgMembersData.map((member) => ({
+    userId: member.userId,
+    name: member.user?.name || "Unknown User",
+    email: member.user?.email || "",
+  }));
+
+  const createMutation = useMutation(api.teams.create);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !key.trim()) return;
 
-    createMutation.mutate({
+    setIsLoading(true);
+    createMutation({
       orgSlug,
-      name: name.trim(),
-      key: key.trim().toUpperCase(),
-      description: description.trim() || undefined,
-      leadId: selectedLead || undefined,
-    });
+      data: {
+        name: name.trim(),
+        key: key.trim().toUpperCase(),
+        description: description.trim() || undefined,
+        leadId: selectedLead ? (selectedLead as Id<"users">) : undefined,
+      },
+    })
+      .then((result) => {
+        onSuccess?.(result.teamId);
+        onClose();
+      })
+      .catch((e) => {
+        console.error(e.message);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   // Auto-generate key from name (alphanumeric, max 10 chars)
@@ -157,10 +166,10 @@ function CreateTeamDialogContent({
           </Button>
           <Button
             size="sm"
-            disabled={!name.trim() || !key.trim() || createMutation.isPending}
+            disabled={!name.trim() || !key.trim() || isLoading}
             onClick={handleSubmit}
           >
-            {createMutation.isPending ? "Creating…" : "Create team"}
+            {isLoading ? "Creating…" : "Create team"}
           </Button>
         </div>
       </DialogContent>

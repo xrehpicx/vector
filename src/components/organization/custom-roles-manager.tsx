@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Plus, Check } from "lucide-react";
 import {
@@ -16,16 +17,13 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { Id, Doc } from "@/convex/_generated/dataModel";
 
-interface CustomRole {
-  id: string;
-  name: string;
-  description: string | null;
-}
+type CustomRole = Doc<"orgRoles">;
 
 interface CustomRolesManagerProps {
   orgSlug: string;
-  userId: string;
+  userId: Id<"users">;
   assignedRoles: CustomRole[];
   disabled?: boolean;
   className?: string;
@@ -41,37 +39,36 @@ export function CustomRolesManager({
   onRoleChange,
 }: CustomRolesManagerProps) {
   const [open, setOpen] = useState(false);
+  const [processingRoleId, setProcessingRoleId] =
+    useState<Id<"orgRoles"> | null>(null);
 
   // Fetch all custom (non-system) roles for this organization
-  const { data: allRoles = [] } = trpc.role.list.useQuery(
-    { orgSlug },
-    {
-      enabled: !disabled && open, // fetch when popover opens
-      staleTime: 5 * 60 * 1000,
-    },
-  );
+  const allRoles = useQuery(api.roles.list, { orgSlug });
 
-  const assignMutation = trpc.role.assign.useMutation({
-    onSuccess: () => onRoleChange?.(),
-  });
+  const assignMutation = useMutation(api.roles.assign);
+  const removeAssignmentMutation = useMutation(api.roles.removeAssignment);
 
-  const removeAssignmentMutation = trpc.role.removeAssignment.useMutation({
-    onSuccess: () => onRoleChange?.(),
-  });
-
-  const handleToggleRole = (roleId: string, isAssigned: boolean) => {
-    if (isAssigned) {
-      removeAssignmentMutation.mutate({ orgSlug, roleId, userId });
-    } else {
-      assignMutation.mutate({ orgSlug, roleId, userId });
+  const handleToggleRole = async (
+    roleId: Id<"orgRoles">,
+    isAssigned: boolean,
+  ) => {
+    setProcessingRoleId(roleId);
+    try {
+      if (isAssigned) {
+        await removeAssignmentMutation({ orgSlug, roleId, userId });
+      } else {
+        await assignMutation({ orgSlug, roleId, userId });
+      }
+      onRoleChange?.();
+    } finally {
+      setProcessingRoleId(null);
     }
   };
 
-  const customRoles = allRoles.filter((r: { system: boolean }) => !r.system);
-  const assignedRoleIds = new Set(assignedRoles.map((r) => r.id));
+  const customRoles = allRoles?.filter((r) => !r.system) ?? [];
+  const assignedRoleIds = new Set(assignedRoles.map((r) => r._id));
 
-  const isLoading =
-    assignMutation.isPending || removeAssignmentMutation.isPending;
+  const isLoading = !!processingRoleId;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -102,19 +99,15 @@ export function CustomRolesManager({
 
             <CommandGroup>
               {customRoles.map((role) => {
-                const isAssigned = assignedRoleIds.has(role.id);
-                const isProcessing =
-                  (assignMutation.isPending &&
-                    assignMutation.variables?.roleId === role.id) ||
-                  (removeAssignmentMutation.isPending &&
-                    removeAssignmentMutation.variables?.roleId === role.id);
+                const isAssigned = assignedRoleIds.has(role._id);
+                const isProcessing = processingRoleId === role._id;
 
                 return (
                   <CommandItem
-                    key={role.id}
+                    key={role._id}
                     value={role.name}
                     onSelect={() =>
-                      !disabled && handleToggleRole(role.id, isAssigned)
+                      !disabled && handleToggleRole(role._id, isAssigned)
                     }
                     disabled={disabled || isProcessing}
                   >

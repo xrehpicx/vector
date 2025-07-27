@@ -9,10 +9,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { SquareDashed } from "lucide-react";
-import { trpc } from "@/lib/trpc";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/lib/convex";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 import { Label } from "../ui/label";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 interface PriorityData {
   id?: string;
@@ -99,15 +101,8 @@ export function PrioritiesManagementPopover({
   orgSlug,
   children,
 }: PrioritiesManagementPopoverProps) {
-  const utils = trpc.useUtils();
-  const deleteMutation = trpc.organization.deleteIssuePriority.useMutation({
-    onSuccess: () => {
-      utils.organization.listIssuePriorities
-        .invalidate({ orgSlug: orgSlug! })
-        .catch(() => {});
-      onClose();
-    },
-  });
+  const [isDeleting, setIsDeleting] = useState(false);
+  const deleteMutation = useMutation(api.organizations.deleteIssuePriority);
 
   const [name, setName] = useState(priority?.name || "");
   const [color, setColor] = useState(priority?.color || DEFAULT_COLORS[0]);
@@ -134,7 +129,7 @@ export function PrioritiesManagementPopover({
     setOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!priority?.id || !orgSlug) return;
     if (
       !confirm(
@@ -143,8 +138,19 @@ export function PrioritiesManagementPopover({
     )
       return;
 
-    deleteMutation.mutate({ orgSlug, priorityId: priority.id });
-    setOpen(false);
+    setIsDeleting(true);
+    try {
+      await deleteMutation({
+        orgSlug,
+        priorityId: priority.id as Id<"issuePriorities">,
+      });
+      onClose();
+      setOpen(false);
+    } catch (error) {
+      console.error("Failed to delete priority:", error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const IconComponent = icon
@@ -210,7 +216,7 @@ export function PrioritiesManagementPopover({
                   variant="destructive"
                   size="sm"
                   onClick={handleDelete}
-                  disabled={deleteMutation.isPending}
+                  disabled={isDeleting}
                 >
                   Delete
                 </Button>

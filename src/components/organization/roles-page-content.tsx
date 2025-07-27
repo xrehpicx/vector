@@ -12,14 +12,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { trpc } from "@/lib/trpc";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/lib/convex";
 import { CreateRoleDialog } from "./create-role-dialog";
 import { EditRoleDialog } from "./edit-role-dialog";
 import { AssignRoleDialog } from "./assign-role-dialog";
 import { CustomRolesTable } from "./custom-roles-table";
 import { usePermission } from "@/hooks/use-permissions";
-import { PERMISSIONS } from "@/auth/permission-constants";
-import { BUILTIN_ROLE_PERMISSIONS } from "@/auth/builtin-role-permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { BUILTIN_ROLE_PERMISSIONS } from "@/lib/builtin-role-permissions";
+import type { Id } from "@/convex/_generated/dataModel";
 
 interface RolesPageContentProps {
   orgSlug: string;
@@ -51,8 +53,10 @@ const PERMISSION_LABELS: Record<string, string> = {
 
 export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [editingRole, setEditingRole] = useState<string | null>(null);
-  const [assigningRole, setAssigningRole] = useState<string | null>(null);
+  const [editingRole, setEditingRole] = useState<Id<"orgRoles"> | null>(null);
+  const [assigningRole, setAssigningRole] = useState<Id<"orgRoles"> | null>(
+    null,
+  );
 
   const { hasPermission: canCreateRoles } = usePermission(
     orgSlug,
@@ -72,9 +76,7 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
   );
 
   // Fetch members to compute real counts for system roles
-  const { data: members = [] } = trpc.organization.listMembers.useQuery({
-    orgSlug,
-  });
+  const members = useQuery(api.organizations.listMembers, { orgSlug }) || [];
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { owner: 0, admin: 0, member: 0 };
@@ -84,14 +86,19 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
     return counts;
   }, [members]);
 
-  const { data: roles = [], refetch } = trpc.role.list.useQuery({ orgSlug });
-  const deleteMutation = trpc.role.delete.useMutation({
-    onSuccess: () => refetch(),
-  });
+  const rolesRaw = useQuery(api.roles.list, { orgSlug }) || [];
+  const roles = rolesRaw.map((role) => ({
+    _id: role._id,
+    name: role.name,
+    description: role.description,
+    createdAt: role._creationTime,
+    system: role.system,
+  }));
+  const deleteMutation = useMutation(api.roles.deleteRole);
 
-  const handleDeleteRole = async (roleId: string) => {
+  const handleDeleteRole = async (roleId: Id<"orgRoles">) => {
     if (confirm("Are you sure you want to delete this role?")) {
-      await deleteMutation.mutateAsync({ orgSlug, roleId });
+      await deleteMutation({ orgSlug, roleId });
     }
   };
 
@@ -119,7 +126,6 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
       bgColor: "bg-blue-50",
       borderColor: "border-blue-200",
       permissions: BUILTIN_ROLE_PERMISSIONS.admin
-        .filter((p) => p !== "*")
         .slice(0, 6) // show up to 6 key permissions
         .map((p) => PERMISSION_LABELS[p] ?? p),
       memberCount: roleCounts.admin.toString(),
@@ -134,7 +140,6 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
       bgColor: "bg-green-50",
       borderColor: "border-green-200",
       permissions: BUILTIN_ROLE_PERMISSIONS.member
-        .filter((p) => p !== "*")
         .slice(0, 6)
         .map((p) => PERMISSION_LABELS[p] ?? p),
       memberCount: roleCounts.member.toString(),
@@ -268,7 +273,6 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
           onClose={() => setShowCreateDialog(false)}
           onSuccess={() => {
             setShowCreateDialog(false);
-            refetch();
           }}
         />
       )}
@@ -280,7 +284,6 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
           onClose={() => setEditingRole(null)}
           onSuccess={() => {
             setEditingRole(null);
-            refetch();
           }}
         />
       )}
@@ -292,7 +295,6 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
           onClose={() => setAssigningRole(null)}
           onSuccess={() => {
             setAssigningRole(null);
-            refetch();
           }}
         />
       )}

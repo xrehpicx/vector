@@ -1,85 +1,60 @@
 "use client";
 
-import Link from "next/link";
-import { authClient } from "@/lib/auth-client";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvexAuth, useQuery } from "convex/react";
+import { api } from "@/lib/convex";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Settings, Mail } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { ChevronsUpDown, LogOut, User, Settings } from "lucide-react";
 
-interface UserMenuProps {
-  user: {
-    name?: string | null;
-    email: string;
-    image?: string | null;
-  };
-}
+export function UserMenu() {
+  const authResult = useConvexAuth();
+  const { isAuthenticated } = authResult || { isAuthenticated: false };
+  const { signOut } = useAuthActions();
+  const user = useQuery(api.users.currentUser);
 
-export function UserMenu({ user }: UserMenuProps) {
-  const router = useRouter();
-
-  const onLogout = async () => {
-    // Ignore errors – UI will refresh regardless
-    await authClient.signOut?.();
-    router.refresh();
-    router.push("/auth/login");
-  };
-
-  const initial = (user.name ?? user.email.charAt(0)).charAt(0).toUpperCase();
+  if (!isAuthenticated || !user) {
+    return null;
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          className="text-muted-foreground hover:bg-foreground/10 flex w-full items-center gap-2 rounded-md p-1.5 transition-colors"
-          aria-label="User menu"
-        >
-          <Avatar className="size-6">
-            {user.image ? (
-              <AvatarImage src={user.image} alt={user.name ?? "User avatar"} />
-            ) : (
-              <AvatarFallback className="text-xs">{initial}</AvatarFallback>
-            )}
+        <Button variant="ghost" className="w-full justify-start gap-2 p-2">
+          <Avatar className="size-8">
+            {user.image && <AvatarImage src={user.image} alt={user.name} />}
+            <AvatarFallback>{user.name?.[0]}</AvatarFallback>
           </Avatar>
-          <span className="truncate text-left text-sm font-medium">
-            {user.name ?? user.email}
-          </span>
-        </button>
+          <div className="flex flex-col items-start">
+            <span className="text-sm font-medium">{user.name}</span>
+            <span className="text-muted-foreground text-xs">{user.email}</span>
+          </div>
+          <ChevronsUpDown className="ml-auto size-4" />
+        </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-56">
-        <DropdownMenuItem asChild>
-          <Link
-            href="/settings/profile"
-            className="flex items-center gap-2 px-2 py-1.5"
-          >
-            <Settings className="size-4" />{" "}
-            <span className="text-sm">Settings</span>
-          </Link>
+      <DropdownMenuContent className="w-56" align="end" forceMount>
+        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem>
+          <User className="mr-2 size-4" />
+          <span>Profile</span>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link
-            href="/settings/invites"
-            className="flex items-center gap-2 px-2 py-1.5"
-          >
-            <Mail className="size-4" /> <span className="text-sm">Invites</span>
-          </Link>
+        <DropdownMenuItem>
+          <Settings className="mr-2 size-4" />
+          <span>Settings</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={(e) => {
-            e.preventDefault();
-            onLogout();
-          }}
-          variant="destructive"
-          className="flex items-center gap-2 px-2 py-1.5"
-        >
-          <LogOut className="size-4" /> <span className="text-sm">Logout</span>
+        <DropdownMenuItem onClick={() => signOut()}>
+          <LogOut className="mr-2 size-4" />
+          <span>Log out</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

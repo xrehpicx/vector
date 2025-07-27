@@ -3,7 +3,7 @@
 import type React from "react";
 import { CreateProjectDialog } from "./create-project-dialog";
 import { PermissionGate } from "@/hooks/use-permissions";
-import { PERMISSIONS } from "@/auth/permission-constants";
+import { PERMISSIONS } from "@/lib/permissions";
 
 /**
  * Thin wrapper kept for backwards-compatibility. Accepts the previous props

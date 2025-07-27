@@ -2,17 +2,24 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { trpc } from "@/lib/trpc";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/lib/convex";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { ProjectsTable } from "./projects-table";
 import type { ProjectRowData } from "./projects-table";
 import { CreateProjectButton } from "./create-project-button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { projectStatusTypeEnum } from "@/db/schema/projects";
 import { PageSkeleton } from "@/components/ui/table-skeleton";
-import { authClient } from "@/lib/auth-client";
+import { useAuthActions } from "@convex-dev/auth/react";
 
-type StatusType = (typeof projectStatusTypeEnum.enumValues)[number];
+// Define project status types based on Convex schema
+type StatusType =
+  | "backlog"
+  | "planned"
+  | "in_progress"
+  | "completed"
+  | "canceled";
 type FilterType = "all" | StatusType;
 
 const TAB_LABELS: Record<FilterType, string> = {
@@ -30,11 +37,19 @@ const BASE_TABS: { key: FilterType; label: string; count: number }[] = [
   // status tabs appended dynamically below
 ];
 
+const statusValues: StatusType[] = [
+  "backlog",
+  "planned",
+  "in_progress",
+  "completed",
+  "canceled",
+];
+
 const filterTabs = [
   ...BASE_TABS,
-  ...projectStatusTypeEnum.enumValues.map((value) => ({
+  ...statusValues.map((value) => ({
     key: value as FilterType,
-    label: TAB_LABELS[value as StatusType],
+    label: TAB_LABELS[value],
     count: 0,
   })),
 ];
@@ -51,113 +66,112 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   const [page, setPage] = useState(1);
 
   // Current user session – needed for actorId in mutations
-  const { data: session } = authClient.useSession();
-  const currentUserId = session?.user?.id;
+  const { signOut } = useAuthActions();
 
   // Queries
-  const pagedQuery = trpc.organization.listProjectsPaged.useQuery({
+  const projectsData = useQuery(api.projects.list, { orgSlug });
+  const statusesData = useQuery(api.organizations.listProjectStatuses, {
     orgSlug,
-    page,
-    pageSize: PAGE_SIZE,
   });
+  const teamsData = useQuery(api.organizations.listTeams, { orgSlug });
+  const membersData = useQuery(api.organizations.listMembers, { orgSlug });
 
-  const statusesQuery = trpc.organization.listProjectStatuses.useQuery({
-    orgSlug,
-  });
-  const teamsQuery = trpc.organization.listTeams.useQuery({ orgSlug });
-  const membersQuery = trpc.organization.listMembers.useQuery({ orgSlug });
+  // Transform data to match expected interfaces
+  const projects: ProjectRowData[] = (projectsData ?? []).map((project) => ({
+    id: project._id,
+    name: project.name,
+    description: project.description,
+    key: project.key,
+    updatedAt: new Date(project._creationTime), // Using creation time as update time for now
+    createdAt: new Date(project._creationTime),
+    statusId: project.status?._id,
+    statusName: project.status?.name,
+    statusColor: project.status?.color,
+    statusIcon: project.status?.icon,
+    statusType: project.status?.type,
+    teamId: project.teamId,
+    teamName: undefined, // Will need to be populated from teams data
+    teamKey: undefined, // Will need to be populated from teams data
+    leadId: project.lead?._id,
+    leadName: project.lead?.name,
+    leadEmail: project.lead?.email,
+  }));
+
+  const statuses = (statusesData ?? []).map((status) => ({
+    id: status._id,
+    name: status.name,
+    color: status.color,
+    icon: status.icon,
+    type: status.type,
+  }));
+
+  const teams = (teamsData ?? []).map((team) => ({
+    id: team._id,
+    name: team.name,
+    key: team.key,
+    color: team.color,
+    icon: team.icon,
+  }));
+
+  const members = (membersData ?? []).map((member) => ({
+    id: member._id,
+    name: member.user?.name || "",
+    email: member.user?.email || "",
+    role: member.role,
+    userId: member.userId,
+  }));
 
   // Mutations
-  const changeStatusMutation = trpc.project.changeStatus.useMutation({
-    onSuccess: () => {
-      pagedQuery.refetch();
-      toast.success("Project status updated");
-    },
-    onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      toast.error(`Failed to update status: ${message}`);
-    },
-  });
-
-  const changeTeamMutation = trpc.project.changeTeam.useMutation({
-    onSuccess: () => {
-      pagedQuery.refetch();
-      toast.success("Project team updated");
-    },
-    onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      toast.error(`Failed to update team: ${message}`);
-    },
-  });
-
-  const utils = trpc.useUtils();
-
-  const changeLeadMutation = trpc.project.changeLead.useMutation({
-    onSuccess: (_, variables) => {
-      pagedQuery.refetch();
-      // Invalidate project members for the specific project that was updated
-      utils.project.listMembers.invalidate({ projectId: variables.projectId });
-      toast.success("Project lead updated");
-    },
-    onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      toast.error(`Failed to update lead: ${message}`);
-    },
-  });
-
-  const deleteMutation = trpc.project.delete.useMutation({
-    onSuccess: () => {
-      pagedQuery.refetch();
-      toast.success("Project deleted");
-    },
-    onError: (err: unknown) => {
-      const message =
-        err instanceof Error ? err.message : "Failed to delete project";
-      toast.error(message);
-    },
-  });
+  const changeStatusMutation = useMutation(api.projects.update);
+  const changeTeamMutation = useMutation(api.projects.update);
+  const changeLeadMutation = useMutation(api.projects.update);
+  const deleteMutation = useMutation(api.projects.deleteProject);
 
   // Event handlers
   const handleStatusChange = (projectId: string, statusId: string) => {
-    if (!currentUserId) return;
-    changeStatusMutation.mutate({
-      projectId,
-      statusId: statusId || null,
-      actorId: currentUserId,
-    });
+    // Find the project by id to get the projectKey
+    const project = projects.find((p) => p.id === projectId);
+    if (project && statusId) {
+      changeStatusMutation({
+        orgSlug,
+        projectKey: project.key,
+        data: { statusId: statusId as Id<"projectStatuses"> },
+      });
+    }
   };
 
   const handleTeamChange = (projectId: string, teamId: string) => {
-    if (!currentUserId) return;
-    changeTeamMutation.mutate({
-      projectId,
-      teamId: teamId || null,
-      actorId: currentUserId,
-    });
+    // Find the project by id to get the projectKey
+    const project = projects.find((p) => p.id === projectId);
+    if (project && teamId) {
+      changeTeamMutation({
+        orgSlug,
+        projectKey: project.key,
+        data: { teamId: teamId as Id<"teams"> },
+      });
+    }
   };
 
   const handleLeadChange = (projectId: string, leadId: string) => {
-    if (!currentUserId) return;
-    changeLeadMutation.mutate({
-      projectId,
-      leadId: leadId || null,
-      actorId: currentUserId,
-    });
+    // Find the project by id to get the projectKey
+    const project = projects.find((p) => p.id === projectId);
+    if (project && leadId) {
+      changeLeadMutation({
+        orgSlug,
+        projectKey: project.key,
+        data: { leadId: leadId as Id<"users"> },
+      });
+    }
   };
 
   const handleDelete = (projectId: string) => {
     if (!confirm("Delete this project? This cannot be undone.")) return;
-    deleteMutation.mutate({ projectId });
+    // Find the project by id to get the projectKey
+    const project = projects.find((p) => p.id === projectId);
+    if (project) {
+      deleteMutation({ orgSlug, projectKey: project.key });
+    }
   };
-
-  // Transform data - convert string dates to Date objects
-  const projects: ProjectRowData[] = (pagedQuery.data?.projects || []).map(
-    (project) => ({
-      ...project,
-      updatedAt: new Date(project.updatedAt),
-      createdAt: new Date(project.createdAt),
-    }),
-  );
 
   // Filter projects based on active filter
   const filteredProjects = projects.filter((project) => {
@@ -165,32 +179,25 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
     return project.statusType === activeFilter;
   });
 
-  const statuses = statusesQuery.data || [];
-  const teams = teamsQuery.data || [];
-  const members = (membersQuery.data || []).map((member) => ({
-    userId: member.userId,
-    name: member.name,
-    email: member.email,
-  }));
-
-  // Compute counts for each status type
   const statusCounts: Record<StatusType, number> = projects.reduce(
     (acc, proj) => {
-      acc[proj.statusType as StatusType] =
-        (acc[proj.statusType as StatusType] || 0) + 1;
+      const statusType = proj.statusType as StatusType;
+      if (statusType) {
+        acc[statusType] = (acc[statusType] || 0) + 1;
+      }
       return acc;
     },
     {} as Record<StatusType, number>,
   );
 
   // Use counts from backend if available, fallback to computed
-  const backendCounts: Record<string, number> = pagedQuery.data?.counts ?? {};
+  const backendCounts: Record<string, number> = {}; // No longer available from Convex
 
   const updatedTabs = filterTabs.map((tab) => ({
     ...tab,
     count:
       tab.key === "all"
-        ? (pagedQuery.data?.total ?? 0)
+        ? (projectsData?.length ?? 0)
         : (backendCounts[tab.key as string] ??
           statusCounts[tab.key as StatusType] ??
           0),
@@ -199,12 +206,12 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   const visibleTabs = updatedTabs.filter((t) => t.key === "all" || t.count > 0);
 
   const isLoading =
-    pagedQuery.isLoading ||
-    statusesQuery.isLoading ||
-    teamsQuery.isLoading ||
-    membersQuery.isLoading;
+    projectsData === undefined ||
+    statusesData === undefined ||
+    teamsData === undefined ||
+    membersData === undefined;
 
-  const total = pagedQuery.data?.total ?? projects.length;
+  const total = projects.length;
 
   if (isLoading) {
     return (
@@ -258,7 +265,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
             onTeamChange={handleTeamChange}
             onLeadChange={handleLeadChange}
             onDelete={handleDelete}
-            deletePending={deleteMutation.isPending}
+            deletePending={false} // TODO: Add proper mutation loading state
           />
         </div>
 

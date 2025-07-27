@@ -1,5 +1,12 @@
-import { auth } from "@/auth/auth";
-import { toNextJsHandler } from "better-auth/next-js";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "@/lib/convex";
 
-// Mount Better Auth HTTP handler at /api/auth/* (catch-all)
-export const { GET, POST } = toNextJsHandler(auth.handler);
+// Convex handles auth via HTTP routes in convex/http.ts
+// This file should be removed or redirected to Convex auth endpoints
+export function GET() {
+  return new Response("Auth handled by Convex", { status: 404 });
+}
+
+export function POST() {
+  return new Response("Auth handled by Convex", { status: 404 });
+}

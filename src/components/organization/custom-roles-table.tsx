@@ -4,12 +4,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Shield, Edit, Trash2, Users } from "lucide-react";
 import { formatDateHuman } from "@/lib/date";
+import type { Id } from "@/convex/_generated/dataModel";
 
 export interface CustomRoleRow {
-  id: string;
+  _id: Id<"orgRoles">;
   name: string;
-  description: string | null;
-  createdAt: string | Date;
+  description: string | undefined;
+  createdAt: number;
   system?: boolean;
 }
 
@@ -18,9 +19,9 @@ interface CustomRolesTableProps {
   canAssign: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  onAssign: (roleId: string) => void;
-  onEdit: (roleId: string) => void;
-  onDelete: (roleId: string) => void;
+  onAssign: (roleId: Id<"orgRoles">) => void;
+  onEdit: (roleId: Id<"orgRoles">) => void;
+  onDelete: (roleId: Id<"orgRoles">) => void;
 }
 
 export function CustomRolesTable({
@@ -47,7 +48,7 @@ export function CustomRolesTable({
       <AnimatePresence initial={false}>
         {roles.map((role) => (
           <motion.div
-            key={role.id}
+            key={role._id}
             layout
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -80,7 +81,7 @@ export function CustomRolesTable({
                   variant="ghost"
                   size="sm"
                   className="size-7 p-0"
-                  onClick={() => onAssign(role.id)}
+                  onClick={() => onAssign(role._id)}
                   title="Assign role"
                 >
                   <Users className="size-3" />
@@ -91,7 +92,7 @@ export function CustomRolesTable({
                   variant="ghost"
                   size="sm"
                   className="size-7 p-0"
-                  onClick={() => onEdit(role.id)}
+                  onClick={() => onEdit(role._id)}
                   title="Edit role"
                 >
                   <Edit className="size-3" />
@@ -102,7 +103,7 @@ export function CustomRolesTable({
                   variant="ghost"
                   size="sm"
                   className="size-7 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => onDelete(role.id)}
+                  onClick={() => onDelete(role._id)}
                   title="Delete role"
                 >
                   <Trash2 className="size-3" />

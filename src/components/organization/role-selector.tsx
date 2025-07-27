@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { OrgRoleBadge } from "@/components/organization/role-badge";
-import { trpc } from "@/lib/trpc";
+import { useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { cn } from "@/lib/utils";
 import {
   Popover,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/command";
 import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 const ROLE_OPTIONS = [
   { value: "member", label: "Member" },
@@ -43,24 +45,34 @@ export function RoleSelector({
   className,
 }: RoleSelectorProps) {
   const [open, setOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const mutation = trpc.organization.updateRole.useMutation({
-    onSuccess: () => {
+  const mutation = useMutation(api.organizations.updateRole);
+
+  const handleSelect = async (role: RoleValue) => {
+    if (role === currentRole) return;
+
+    try {
+      setIsLoading(true);
+      await mutation({
+        orgSlug,
+        userId: userId as Id<"users">,
+        role,
+      });
       router.refresh();
       setOpen(false);
-    },
-  });
-
-  const handleSelect = (role: RoleValue) => {
-    if (role === currentRole) return;
-    mutation.mutate({ orgSlug, userId, role });
+    } catch (error) {
+      console.error("Failed to update role:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          disabled={disabled || mutation.isPending}
+          disabled={disabled || isLoading}
           className={cn("cursor-pointer", className)}
         >
           <OrgRoleBadge role={currentRole} />

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +12,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import type { NonOwnerMemberRole } from "@/db/schema/users-and-auth";
+
+type NonOwnerMemberRole = "member" | "admin";
 
 export function InviteDialog({
   orgSlug,
@@ -22,18 +24,23 @@ export function InviteDialog({
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<NonOwnerMemberRole>("member");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const utils = trpc.useUtils();
+  const inviteMutation = useMutation(api.organizations.invite);
 
-  const inviteMutation = trpc.organization.invite.useMutation({
-    onSuccess: () => {
-      // Refresh members & invites lists
-      utils.organization.listMembers.invalidate({ orgSlug }).catch(() => {});
-      utils.organization.listInvites.invalidate({ orgSlug }).catch(() => {});
+  const handleInvite = async () => {
+    if (!email) return;
+
+    setIsLoading(true);
+    try {
+      await inviteMutation({ orgSlug, email, role });
       onClose();
-    },
-    onError: (e) => console.error(e.message),
-  });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <Dialog open onOpenChange={(isOpen: boolean) => !isOpen && onClose()}>
@@ -77,10 +84,10 @@ export function InviteDialog({
           </Button>
           <Button
             size="sm"
-            disabled={!email || inviteMutation.isPending}
-            onClick={() => inviteMutation.mutate({ orgSlug, email, role })}
+            disabled={!email || isLoading}
+            onClick={handleInvite}
           >
-            {inviteMutation.isPending ? "Sending…" : "Send Invite"}
+            {isLoading ? "Sending…" : "Send Invite"}
           </Button>
         </DialogFooter>
       </DialogContent>

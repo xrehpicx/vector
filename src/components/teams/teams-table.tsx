@@ -13,7 +13,8 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { formatDateHuman } from "@/lib/date";
-import { trpc } from "@/lib/trpc";
+import { useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 import { IconPicker } from "@/components/ui/icon-picker";
 
@@ -40,18 +41,18 @@ export function TeamsTable({
   onDelete,
   deletePending = false,
 }: TeamsTableProps) {
-  const utils = trpc.useUtils();
-  const updateIconMutation = trpc.team.update.useMutation({
-    onSuccess: () => {
-      Promise.all([
-        utils.organization.listTeams.invalidate({ orgSlug }),
-        utils.organization.listTeamsPaged.invalidate({ orgSlug }),
-      ]).catch(() => {});
-    },
-  });
+  const updateIconMutation = useMutation(api.teams.update);
 
   const handleIconChange = (teamId: string, iconName: string | null) => {
-    updateIconMutation.mutate({ id: teamId, data: { icon: iconName } });
+    // Find the team by id to get the teamKey
+    const team = teams.find((t) => t.id === teamId);
+    if (team) {
+      updateIconMutation({
+        orgSlug,
+        teamKey: team.key,
+        data: { icon: iconName || undefined },
+      });
+    }
   };
 
   if (teams.length === 0) {

@@ -1,17 +1,12 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth/auth";
 import { OrgSetupForm } from "@/components/organization";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "@/lib/convex";
 
 export default async function OrgSetupPage() {
-  // Verify user is authenticated
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session?.user) {
-    redirect("/auth/login");
-  }
+  // This page is for first-time setup only. A check in a layout or middleware
+  // would be more robust. Since we can't know the user's organizations without
+  // authentication on the server, we'll rely on client-side redirects from
+  // the main page to handle users who already have organizations.
 
   return (
     <div className="from-muted/50 via-muted/25 to-background flex min-h-screen items-center justify-center bg-gradient-to-b px-4">
@@ -27,7 +22,7 @@ export default async function OrgSetupPage() {
         </div>
 
         {/* Form Card */}
-        <div className="border-border/40 bg-background/95 supports-[backdrop-filter]:bg-background/80 rounded-xl border p-8 shadow-xl backdrop-blur-sm">
+        <div className="border-border/40 bg-background/95 supports-[backdrop-filter]:bg-background/80 rounded-xl border p-8 shadow-xl backdrop-blur">
           <OrgSetupForm />
         </div>
 

@@ -1,6 +1,7 @@
 import React from "react";
-import { trpc } from "@/lib/trpc";
-import type { Permission } from "@/auth/permission-constants";
+import { useQuery } from "convex/react";
+import { api } from "@/lib/convex";
+import type { Permission } from "@/lib/permissions";
 
 /**
  * React hook for checking user permissions in an organization.
@@ -11,17 +12,15 @@ import type { Permission } from "@/auth/permission-constants";
  * @returns Object with { hasPermission: boolean, isLoading: boolean }
  */
 export function usePermission(orgSlug: string, permission: Permission) {
-  const { data: hasPermission = false, isLoading } =
-    trpc.organization.hasPermission.useQuery(
-      { orgSlug, permission },
-      {
-        enabled: !!orgSlug && !!permission,
-        staleTime: 5 * 60 * 1000, // 5 minutes
-        refetchOnWindowFocus: false,
-      },
-    );
+  const hasPermission = useQuery(
+    api.organizations.hasPermission,
+    orgSlug && permission ? { orgSlug, permission } : "skip",
+  );
 
-  return { hasPermission, isLoading };
+  return {
+    hasPermission: hasPermission ?? false,
+    isLoading: hasPermission === undefined,
+  };
 }
 
 /**
@@ -32,17 +31,15 @@ export function usePermission(orgSlug: string, permission: Permission) {
  * batches all checks into a single request.
  */
 export function usePermissions(orgSlug: string, permissions: Permission[]) {
-  const { data: permissionMap = {}, isLoading } =
-    trpc.organization.hasPermissions.useQuery(
-      { orgSlug, permissions },
-      {
-        enabled: !!orgSlug && permissions.length > 0,
-        staleTime: 5 * 60 * 1000, // 5 minutes
-        refetchOnWindowFocus: false,
-      },
-    );
+  const permissionMap = useQuery(
+    api.organizations.hasPermissions,
+    orgSlug && permissions.length > 0 ? { orgSlug, permissions } : "skip",
+  );
 
-  return { permissions: permissionMap, isLoading };
+  return {
+    permissions: permissionMap ?? {},
+    isLoading: permissionMap === undefined,
+  };
 }
 
 /**

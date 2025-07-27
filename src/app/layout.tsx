@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Urbanist, Poppins } from "next/font/google";
 import "./globals.css";
-import { TRPCProvider } from "@/providers/trpc-provider";
 import { TopLoaderProvider } from "@/providers/top-loader-provider";
+import { ConvexAuthProvider } from "@/providers/convex-auth-provider";
+import { ConvexProviderWrapper } from "@/providers/convex-provider";
 
 const urbanist = Urbanist({
   variable: "--font-title",
@@ -29,7 +30,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${urbanist.variable} ${poppins.variable} antialiased`}>
         <TopLoaderProvider />
-        <TRPCProvider>{children}</TRPCProvider>
+        <ConvexProviderWrapper>
+          <ConvexAuthProvider>{children}</ConvexAuthProvider>
+        </ConvexProviderWrapper>
       </body>
     </html>
   );

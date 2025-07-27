@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
-import { authClient } from "@/lib/auth-client";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -41,46 +41,46 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { useConvexAuth } from "convex/react";
+import { FunctionReturnType } from "convex/server";
+import { Id } from "@/convex/_generated/dataModel";
 
 /**
  * Section component that renders the list of project members and allows adding/removing members.
- * Relies on project TRPC router procedures.
+ * Uses Convex queries and mutations.
  */
 export function ProjectMembersSection({
   orgSlug,
-  projectId,
+  projectKey,
   canEdit = true,
 }: {
   orgSlug: string;
-  projectId: string;
+  projectKey: string;
   canEdit?: boolean;
 }) {
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
-  const utils = trpc.useUtils();
 
   // Fetch members for this project
-  const { data: members = [], isLoading } = trpc.project.listMembers.useQuery(
-    { projectId },
-    { enabled: !!projectId },
-  );
+  const members =
+    useQuery(api.projects.listMembers, {
+      orgSlug,
+      projectKey,
+    }) ?? [];
 
   // Fetch organization members for filtering
-  const { data: orgMembers = [] } = trpc.organization.listMembers.useQuery({
-    orgSlug,
-  });
+  const orgMembers =
+    useQuery(api.organizations.listMembers, {
+      orgSlug,
+    }) ?? [];
 
-  const removeMemberMutation = trpc.project.removeMember.useMutation({
-    onSuccess: () => {
-      utils.project.listMembers.invalidate({ projectId }).catch(() => {});
-    },
-  });
+  const removeMemberMutation = useMutation(api.projects.removeMember);
 
-  const handleRemoveMember = (userId: string) => {
+  const handleRemoveMember = (membershipId: Id<"projectMembers">) => {
     if (!confirm("Remove this member from the project?")) return;
-    removeMemberMutation.mutate({ projectId, userId });
+    removeMemberMutation({ orgSlug, projectKey, membershipId });
   };
 
-  if (isLoading) {
+  if (members === undefined) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-muted-foreground text-sm">Loading members...</div>
@@ -133,7 +133,7 @@ export function ProjectMembersSection({
             members={members}
             canEdit={canEdit}
             onRemoveMember={handleRemoveMember}
-            removePending={removeMemberMutation.isPending}
+            removePending={false}
           />
         </div>
       ) : (
@@ -178,7 +178,7 @@ export function ProjectMembersSection({
       {showAddMemberDialog && (
         <AddMemberDialog
           orgSlug={orgSlug}
-          projectId={projectId}
+          projectKey={projectKey}
           onClose={() => setShowAddMemberDialog(false)}
         />
       )}
@@ -191,44 +191,49 @@ export function ProjectMembersSection({
 // ------------------------------
 function AddMemberDialog({
   orgSlug,
-  projectId,
+  projectKey,
   onClose,
 }: {
   orgSlug: string;
-  projectId: string;
+  projectKey: string;
   onClose: () => void;
 }) {
   const [selectedMember, setSelectedMember] = useState<string>("");
   const [memberComboboxOpen, setMemberComboboxOpen] = useState(false);
+  const [isAddingMember, setIsAddingMember] = useState(false);
 
-  const { data: orgMembers = [] } = trpc.organization.listMembers.useQuery({
-    orgSlug,
-  });
+  const orgMembers =
+    useQuery(api.organizations.listMembers, {
+      orgSlug,
+    }) ?? [];
 
   // Fetch current project members to filter them out
-  const { data: projectMembers = [] } = trpc.project.listMembers.useQuery(
-    { projectId },
-    { enabled: !!projectId },
-  );
+  const projectMembers =
+    useQuery(api.projects.listMembers, {
+      orgSlug,
+      projectKey,
+    }) ?? [];
 
-  const utils = trpc.useUtils();
+  const utils = useConvexAuth();
 
-  const addMemberMutation = trpc.project.addMember.useMutation({
-    onSuccess: () => {
-      utils.project.listMembers.invalidate({ projectId }).catch(() => {});
-      onClose();
-    },
-  });
+  const addMemberMutation = useMutation(api.projects.addMember);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMember) return;
 
-    addMemberMutation.mutate({
-      projectId,
-      userId: selectedMember,
-      role: "member",
-    });
+    setIsAddingMember(true);
+    try {
+      await addMemberMutation({
+        orgSlug,
+        projectKey,
+        userId: selectedMember as Id<"users">,
+        role: "member",
+      });
+      onClose();
+    } finally {
+      setIsAddingMember(false);
+    }
   };
 
   return (
@@ -255,7 +260,8 @@ function AddMemberDialog({
                   className="h-9 w-full justify-between"
                 >
                   {selectedMember
-                    ? orgMembers.find((m) => m.userId === selectedMember)?.name
+                    ? orgMembers.find((m) => m.userId === selectedMember)?.user
+                        ?.name
                     : "Select member..."}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -290,7 +296,7 @@ function AddMemberDialog({
                         .map((member) => (
                           <CommandItem
                             key={member.userId}
-                            value={member.name}
+                            value={member.user?.name}
                             onSelect={() => {
                               setSelectedMember(member.userId);
                               setMemberComboboxOpen(false);
@@ -304,7 +310,7 @@ function AddMemberDialog({
                                   : "opacity-0",
                               )}
                             />
-                            {member.name}
+                            {member.user?.name}
                           </CommandItem>
                         ))}
                     </CommandGroup>
@@ -323,7 +329,7 @@ function AddMemberDialog({
             size="sm"
             disabled={
               !selectedMember ||
-              addMemberMutation.isPending ||
+              isAddingMember ||
               orgMembers.filter(
                 (member) =>
                   !projectMembers.some(
@@ -343,7 +349,7 @@ function AddMemberDialog({
                 : ""
             }
           >
-            {addMemberMutation.isPending ? "Adding…" : "Add member"}
+            {isAddingMember ? "Adding…" : "Add member"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -354,25 +360,25 @@ function AddMemberDialog({
 // ------------------------------
 // Members List Component
 // ------------------------------
+type ProjectMember = FunctionReturnType<
+  typeof api.projects.listMembers
+>[number];
+
 function MembersList({
   members,
   onRemoveMember,
   removePending,
   canEdit,
 }: {
-  members: Array<{
-    userId: string;
-    name: string;
-    email: string;
-    role: string | null;
-    joinedAt: string;
-  }>;
-  onRemoveMember?: (userId: string) => void;
+  members: ProjectMember[];
+  onRemoveMember?: (membershipId: Id<"projectMembers">) => void;
   removePending?: boolean;
   canEdit: boolean;
 }) {
-  const { data: session } = authClient.useSession();
-  const currentUserId = session?.user?.id;
+  const authResult = useConvexAuth();
+  const { isAuthenticated } = authResult || { isAuthenticated: false };
+  const currentUser = useQuery(api.users.getCurrentUser);
+  const currentUserId = currentUser?._id;
 
   const getInitials = (name?: string, email?: string): string => {
     const displayName = name || email;
@@ -401,15 +407,17 @@ function MembersList({
             {/* Avatar */}
             <Avatar className="size-8">
               <AvatarFallback className="text-xs">
-                {getInitials(member.name, member.email)}
+                {getInitials(member.user?.name, member.user?.email)}
               </AvatarFallback>
             </Avatar>
 
             {/* Member info */}
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{member.name}</div>
+              <div className="text-sm font-medium">
+                {member.user?.name || "Unknown User"}
+              </div>
               <div className="text-muted-foreground text-xs">
-                {member.email}
+                {member.user?.email || ""}
               </div>
             </div>
 
@@ -459,7 +467,7 @@ function MembersList({
                       <DropdownMenuItem
                         variant="destructive"
                         disabled={removePending}
-                        onClick={() => onRemoveMember?.(member.userId)}
+                        onClick={() => onRemoveMember?.(member._id)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" /> Remove from project
                       </DropdownMenuItem>

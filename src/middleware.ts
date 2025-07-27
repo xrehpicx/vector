@@ -1,65 +1,65 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionCookie } from "better-auth/cookies";
+import {
+  convexAuthNextjsMiddleware,
+  createRouteMatcher,
+  nextjsMiddlewareRedirect,
+} from "@convex-dev/auth/nextjs/server";
+import { NextResponse } from "next/server";
 
-// --- Middleware entry (runs on every request) ---
-export default async function middleware(request: NextRequest) {
-  // Small debug helper during dev – remove or comment out in prod if noisy
-  // console.log("[middleware] ⇢", request.nextUrl.pathname);
+// Define route matchers
+const isAuthPage = createRouteMatcher(["/auth/login", "/auth/signup"]);
+const isSetupPage = createRouteMatcher(["/setup-admin", "/org-setup"]);
+const isProtectedRoute = createRouteMatcher([
+  "/[orgSlug]/(main)/dashboard(.*)",
+  "/[orgSlug]/(main)/teams(.*)",
+  "/[orgSlug]/(main)/projects(.*)",
+  "/[orgSlug]/(main)/issues(.*)",
+  "/[orgSlug]/(main)/settings(.*)",
+  "/settings/profile(.*)",
+]);
 
-  const sessionCookie = getSessionCookie(request);
+export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   const { pathname } = request.nextUrl;
 
-  // Auth pages - separate login/signup from org-setup
-  const setupPages = [/^\/setup-admin$/, /^\/org-setup$/];
-
-  // Organization-scoped routes pattern: /<orgId>/...
-  const orgScopedRoutes =
-    /^\/[a-zA-Z0-9_-]+\/(dashboard|teams|projects|issues|settings)/;
-
-  // Global user routes that don't require organization context
-  const globalUserRoutes = [/^\/settings\/profile$/];
-
-  const isSetupPage = setupPages.some((re) => re.test(pathname));
-  const isOrgScopedRoute = orgScopedRoutes.test(pathname);
-  const isGlobalUserRoute = globalUserRoutes.some((re) => re.test(pathname));
-
-  const requiresAuth = isOrgScopedRoute || isGlobalUserRoute || isSetupPage;
-
-  // ---------------------------------------------------------------------
-  // 0️⃣  First-run bootstrap: if there are no users in the system, any
-  // unauthenticated request (except to /setup-admin itself) should go to
-  // the admin bootstrap page instead of /auth/login.
-  // ---------------------------------------------------------------------
-
-  // Specific flag for the initial admin bootstrap page to avoid self-redirects
-  const isAdminBootstrapPage = /^\/setup-admin$/.test(pathname);
-
-  if (!sessionCookie && !isAdminBootstrapPage) {
-    // Cheap cache – we only call the API once per request but it's fast.
-    const res = await fetch(new URL("/api/system/has-admin", request.url), {
-      headers: { "x-internal": "true" },
-      next: { revalidate: 60 }, // cache for a minute at edge
-    });
-
-    if (res.ok) {
-      const data: { hasAdmin: boolean } = await res.json();
-      if (!data.hasAdmin) {
-        return NextResponse.redirect(new URL("/setup-admin", request.url));
-      }
-    }
+  // If user is authenticated and trying to access auth pages, redirect to dashboard
+  if (isAuthPage(request) && (await convexAuth.isAuthenticated())) {
+    return nextjsMiddlewareRedirect(request, "/dashboard");
   }
 
-  // Redirect unauthenticated users away from protected pages (normal flow)
-  if (!sessionCookie && requiresAuth && !isSetupPage) {
+  // If user is authenticated and trying to access setup pages, redirect to dashboard
+  if (isSetupPage(request) && (await convexAuth.isAuthenticated())) {
+    return nextjsMiddlewareRedirect(request, "/dashboard");
+  }
+
+  // If user is not authenticated and trying to access protected routes, redirect to login
+  if (isProtectedRoute(request) && !(await convexAuth.isAuthenticated())) {
     const loginUrl = new URL("/auth/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Let the client-side handle redirect when a valid session exists to avoid loops
+  // Special case for setup-admin: check if admin exists
+  if (pathname === "/setup-admin") {
+    try {
+      const res = await fetch(new URL("/api/system/has-admin", request.url), {
+        headers: { "x-internal": "true" },
+        next: { revalidate: 60 }, // cache for a minute at edge
+      });
+
+      if (res.ok) {
+        const data: { hasAdmin: boolean } = await res.json();
+        if (data.hasAdmin) {
+          // Admin exists, redirect to login
+          return nextjsMiddlewareRedirect(request, "/auth/login");
+        }
+      }
+    } catch (error) {
+      // If the API call fails, allow access to setup-admin
+      console.warn("Failed to check admin existence:", error);
+    }
+  }
 
   return NextResponse.next();
-}
+});
 
 // Exclude Next.js internals and static assets from running this middleware.
 export const config = {

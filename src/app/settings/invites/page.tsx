@@ -1,81 +1,40 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth/auth";
-import { db } from "@/db";
-import { invitation, organization } from "@/db/schema/users-and-auth";
-import { and, eq } from "drizzle-orm";
+"use client";
+
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Mail } from "lucide-react";
-import { OrganizationService } from "@/entities/organizations/organization.service";
+import { toast } from "sonner";
+import type { Id } from "@/convex/_generated/dataModel";
 
-// -----------------------------------------------------------------------------
-// Server Actions
-// -----------------------------------------------------------------------------
+export default function InvitesPage() {
+  const invites = useQuery(api.users.getPendingInvitations);
+  const acceptInvite = useMutation(api.organizations.acceptInvitation);
+  const declineInvite = useMutation(api.organizations.revokeInvite);
 
-export async function acceptInviteAction(formData: FormData) {
-  "use server";
-  const token = formData.get("token") as string | undefined;
-  if (!token) return;
+  const handleAccept = async (inviteId: Id<"invitations">) => {
+    try {
+      await acceptInvite({ inviteId });
+      toast.success("Invitation accepted");
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    redirect("/auth/login");
+  const handleDecline = async (inviteId: Id<"invitations">) => {
+    try {
+      await declineInvite({ inviteId });
+      toast.info("Invitation declined");
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
+
+  if (invites === undefined) {
+    return <div>Loading...</div>;
   }
-
-  try {
-    await OrganizationService.acceptInvitation(token, session.user.id);
-  } catch (err) {
-    console.error("Failed to accept invite", err);
-  }
-
-  redirect("/settings/invites");
-}
-
-export async function declineInviteAction(formData: FormData) {
-  "use server";
-  const token = formData.get("token") as string | undefined;
-  if (!token) return;
-
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    redirect("/auth/login");
-  }
-
-  try {
-    await OrganizationService.revokeInvitation(token);
-  } catch (err) {
-    console.error("Failed to decline invite", err);
-  }
-
-  redirect("/settings/invites");
-}
-
-// -----------------------------------------------------------------------------
-
-export default async function InvitesPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    redirect("/auth/login");
-  }
-
-  const invites = await db
-    .select({
-      token: invitation.id,
-      organizationName: organization.name,
-      role: invitation.role,
-      createdAt: invitation.createdAt,
-      expiresAt: invitation.expiresAt,
-    })
-    .from(invitation)
-    .innerJoin(organization, eq(invitation.organizationId, organization.id))
-    .where(
-      and(
-        eq(invitation.email, session.user.email),
-        eq(invitation.status, "pending"),
-      ),
-    );
 
   return (
     <div className="space-y-6 p-6">
@@ -135,9 +94,9 @@ export default async function InvitesPage() {
               </thead>
               <tbody className="divide-border divide-y">
                 {invites.map((inv) => (
-                  <tr key={inv.token} className="hover:bg-muted/50">
+                  <tr key={inv._id} className="hover:bg-muted/50">
                     <td className="px-4 py-3 text-sm font-medium">
-                      {inv.organizationName}
+                      {inv.organization?.name ?? "Unknown Organization"}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <Badge variant="outline" className="capitalize">
@@ -145,23 +104,23 @@ export default async function InvitesPage() {
                       </Badge>
                     </td>
                     <td className="text-muted-foreground px-4 py-3 text-sm">
-                      {format(new Date(inv.createdAt), "MMM d, yyyy")}
+                      {format(new Date(inv._creationTime), "MMM d, yyyy")}
                     </td>
                     <td className="text-muted-foreground px-4 py-3 text-sm">
                       {format(new Date(inv.expiresAt), "MMM d, yyyy")}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
-                        <form action={acceptInviteAction}>
-                          <input type="hidden" name="token" value={inv.token} />
-                          <Button size="sm">Accept</Button>
-                        </form>
-                        <form action={declineInviteAction}>
-                          <input type="hidden" name="token" value={inv.token} />
-                          <Button size="sm" variant="outline">
-                            Decline
-                          </Button>
-                        </form>
+                        <Button size="sm" onClick={() => handleAccept(inv._id)}>
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDecline(inv._id)}
+                        >
+                          Decline
+                        </Button>
                       </div>
                     </td>
                   </tr>

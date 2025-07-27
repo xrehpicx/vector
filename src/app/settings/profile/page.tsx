@@ -1,36 +1,45 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth/auth";
+"use client";
+
+import { useConvexAuth } from "convex/react";
 import { ProfileForm } from "@/components/profile-form";
-import { User } from "lucide-react";
+import { redirect } from "next/navigation";
+import { useEffect } from "react";
 
-export default async function ProfilePage() {
-  // Verify user is authenticated
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+export default function ProfilePage() {
+  const authResult = useConvexAuth();
+  const { isAuthenticated, isLoading } = authResult || {
+    isAuthenticated: false,
+    isLoading: true,
+  };
 
-  if (!session?.user) {
-    redirect("/auth/login");
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      redirect("/auth/login");
+    }
+  }, [isLoading, isAuthenticated]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-lg font-medium">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null; // Redirect will handle this
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="space-y-1">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <User className="size-5" />
-          Profile Information
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Update your profile information and how others see you across
-          organizations
-        </p>
-      </div>
-
-      {/* Profile Settings */}
+    <div className="flex-1 lg:max-w-2xl">
       <div className="space-y-6">
-        <ProfileForm user={session.user} />
+        <div>
+          <h3 className="text-lg font-medium">Profile</h3>
+          <p className="text-muted-foreground text-sm">
+            This is how others will see you on the site.
+          </p>
+        </div>
+        <ProfileForm />
       </div>
     </div>
   );

@@ -1,19 +1,15 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
-import { trpc } from "@/lib/trpc";
+import { useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { useState } from "react";
-
-interface CustomRole {
-  id: string;
-  name: string;
-  description: string | null;
-}
+import type { Id, Doc } from "@/convex/_generated/dataModel";
 
 interface CustomRolesDisplayProps {
   orgSlug: string;
-  userId: string;
-  roles: CustomRole[];
+  userId: Id<"users">;
+  roles: Doc<"orgRoles">[];
   isAdmin: boolean;
   onRoleRemoved?: () => void;
 }
@@ -25,18 +21,22 @@ export function CustomRolesDisplay({
   isAdmin,
   onRoleRemoved,
 }: CustomRolesDisplayProps) {
-  const [removingRoleId, setRemovingRoleId] = useState<string | null>(null);
+  const [removingRoleId, setRemovingRoleId] = useState<Id<"orgRoles"> | null>(
+    null,
+  );
 
-  const removeRoleMutation = trpc.role.removeAssignment.useMutation({
-    onSuccess: () => {
-      setRemovingRoleId(null);
-      onRoleRemoved?.();
-    },
-  });
+  const removeRoleMutation = useMutation(api.roles.removeAssignment);
 
-  const handleRemoveRole = (roleId: string) => {
+  const handleRemoveRole = async (roleId: Id<"orgRoles">) => {
     setRemovingRoleId(roleId);
-    removeRoleMutation.mutate({ orgSlug, roleId, userId });
+    try {
+      await removeRoleMutation({ orgSlug, roleId, userId });
+      onRoleRemoved?.();
+    } catch (error) {
+      console.error("Failed to remove role:", error);
+    } finally {
+      setRemovingRoleId(null);
+    }
   };
 
   if (roles.length === 0) {
@@ -51,7 +51,7 @@ export function CustomRolesDisplay({
     <div className="flex flex-wrap gap-1">
       {roles.map((role) => (
         <Badge
-          key={role.id}
+          key={role._id}
           variant="secondary"
           className="flex items-center gap-1 text-xs"
           title={role.description || undefined}
@@ -62,8 +62,8 @@ export function CustomRolesDisplay({
               variant="ghost"
               size="sm"
               className="hover:bg-destructive hover:text-destructive-foreground ml-1 h-3 w-3 p-0"
-              onClick={() => handleRemoveRole(role.id)}
-              disabled={removingRoleId === role.id}
+              onClick={() => handleRemoveRole(role._id)}
+              disabled={removingRoleId === role._id}
               aria-label={`Remove ${role.name} role`}
             >
               <X className="h-2 w-2" />

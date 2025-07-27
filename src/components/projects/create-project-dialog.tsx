@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { trpc } from "@/lib/trpc";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 // Simplified selector components for teams, leads, and status
 import { TeamSelector } from "@/components/issues/issue-selectors";
@@ -52,19 +54,27 @@ function CreateProjectDialogContent({
   const [selectedStatus, setSelectedStatus] = useState<string>(
     defaultStates?.statusId || "",
   );
-
-  const utils = trpc.useUtils();
+  const [isLoading, setIsLoading] = useState(false);
 
   // Get teams
-  const { data: teams = [] } = trpc.organization.listTeams.useQuery({
-    orgSlug,
-  });
+  const teamsData = useQuery(api.organizations.listTeams, { orgSlug }) ?? [];
+  const teams = teamsData.map((team) => ({
+    id: team._id,
+    name: team.name,
+    icon: team.icon,
+    color: team.color,
+  }));
 
   // Get project statuses from organization
-  const { data: statuses = [] } =
-    trpc.organization.listProjectStatuses.useQuery({
-      orgSlug,
-    });
+  const statusesData =
+    useQuery(api.organizations.listProjectStatuses, { orgSlug }) ?? [];
+  const statuses = statusesData.map((status) => ({
+    id: status._id,
+    name: status.name,
+    type: status.type,
+    icon: status.icon,
+    color: status.color,
+  }));
 
   // Auto-select default status (type "planned" or first)
   useEffect(() => {
@@ -75,36 +85,34 @@ function CreateProjectDialogContent({
     }
   }, [statuses, selectedStatus]);
 
-  const createMutation = trpc.project.create.useMutation({
-    onSuccess: (result) => {
-      // Refresh projects list (both full and paged) so the UI updates
-      Promise.all([
-        utils.organization.listProjects.invalidate({ orgSlug }),
-        utils.organization.listProjectsPaged.invalidate({ orgSlug }),
-        // If a lead was selected, invalidate their project members query
-        selectedLead
-          ? utils.project.listMembers.invalidate({ projectId: result.id })
-          : Promise.resolve(),
-      ]).catch(() => {});
-      onSuccess?.(result.id);
-      onClose();
-    },
-    onError: (e) => console.error(e.message),
-  });
+  const createMutation = useMutation(api.projects.create);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !key.trim()) return;
 
-    createMutation.mutate({
-      orgSlug,
-      name: name.trim(),
-      key: key.trim(),
-      description: description.trim() || undefined,
-      teamId: selectedTeam || undefined,
-      leadId: selectedLead || undefined,
-      statusId: selectedStatus || undefined,
-    });
+    setIsLoading(true);
+    try {
+      const result = await createMutation({
+        orgSlug,
+        data: {
+          name: name.trim(),
+          key: key.trim().toUpperCase(),
+          description: description.trim() || undefined,
+          leadId: selectedLead ? (selectedLead as Id<"users">) : undefined,
+          statusId: selectedStatus
+            ? (selectedStatus as Id<"projectStatuses">)
+            : undefined,
+        },
+      });
+
+      onSuccess?.(result.projectId);
+      onClose();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Auto-generate key from name
@@ -208,10 +216,10 @@ function CreateProjectDialogContent({
           </Button>
           <Button
             size="sm"
-            disabled={!name.trim() || !key.trim() || createMutation.isPending}
+            disabled={!name.trim() || !key.trim() || isLoading}
             onClick={handleSubmit}
           >
-            {createMutation.isPending ? "Creating…" : "Create project"}
+            {isLoading ? "Creating…" : "Create project"}
           </Button>
         </div>
       </DialogContent>

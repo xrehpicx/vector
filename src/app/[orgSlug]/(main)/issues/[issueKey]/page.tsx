@@ -1,0 +1,674 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowLeft, Circle, Save, X, Pencil } from "lucide-react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { formatDateHuman } from "@/lib/date";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import type { Id } from "@/convex/_generated/dataModel";
+
+// Re-use shared issue selectors
+import { IssueAssignments } from "@/components/issues/issue-assignments";
+import {
+  TeamSelector,
+  ProjectSelector,
+  StateSelector,
+  PrioritySelector,
+} from "@/components/issues/issue-selectors";
+import { getDynamicIcon } from "@/lib/dynamic-icons";
+
+interface IssueViewPageProps {
+  params: Promise<{ orgSlug: string; issueKey: string }>;
+}
+
+// Loading skeleton component that matches the actual layout
+function IssueLoadingSkeleton() {
+  return (
+    <div className="bg-background h-full overflow-y-auto">
+      <div className="h-full">
+        <div>
+          {/* Header Skeleton */}
+          <div className="bg-background/95 supports-[backdrop-filter]:bg-background/60 flex items-center justify-between border-b px-2 backdrop-blur">
+            <div className="flex h-8 flex-wrap items-center gap-2">
+              <div className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors">
+                <ArrowLeft className="size-3" />
+                Issues
+              </div>
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-6 w-16" />
+                <div className="bg-muted-foreground/20 h-4 w-px" />
+                <Skeleton className="h-6 w-20" />
+              </div>
+              <span className="text-muted-foreground text-sm">/</span>
+              <Skeleton className="h-4 w-12" />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-6 w-20" />
+              <div className="bg-muted-foreground/20 h-4 w-px" />
+              <Skeleton className="h-6 w-16" />
+              <div className="bg-muted-foreground/20 h-4 w-px" />
+              <Skeleton className="h-6 w-8 rounded-full" />
+            </div>
+          </div>
+
+          {/* Main Content Skeleton */}
+          <div className="mx-auto max-w-5xl px-4 py-4">
+            {/* Issue Header Skeleton */}
+            <div className="mb-2 max-w-4xl space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3 w-16" />
+                <span>•</span>
+                <Skeleton className="h-3 w-24" />
+              </div>
+
+              {/* Title Skeleton */}
+              <Skeleton className="h-9 w-3/4" />
+            </div>
+
+            {/* Description Skeleton */}
+            <div className="mb-8 space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+              <Skeleton className="h-4 w-4/5" />
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+
+            {/* Activity Section Skeleton */}
+            <div>
+              <Skeleton className="mb-2 h-5 w-16" />
+              <div className="rounded-lg border p-8">
+                <div className="flex flex-col items-center gap-2">
+                  <Skeleton className="h-4 w-48" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function IssueViewPage({ params }: IssueViewPageProps) {
+  const [resolvedParams, setResolvedParams] = useState<{
+    orgSlug: string;
+    issueKey: string;
+  } | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleValue, setTitleValue] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionValue, setDescriptionValue] = useState("");
+  const [editingEstimates, setEditingEstimates] = useState<
+    Record<string, boolean>
+  >({});
+  const [estimatesValue, setEstimatesValue] = useState<Record<string, number>>(
+    {},
+  );
+  const [currentStateId, setCurrentStateId] = useState<string>("");
+
+  useEffect(() => {
+    params.then(setResolvedParams);
+  }, [params]);
+
+  const authResult = useConvexAuth();
+  const { isAuthenticated } = authResult || { isAuthenticated: false };
+  const currentUser = useQuery(api.users.getCurrentUser);
+
+  const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
+  const [isUpdatingDescription, setIsUpdatingDescription] = useState(false);
+  const [isUpdatingEstimates, setIsUpdatingEstimates] = useState(false);
+
+  const issue = useQuery(
+    api.issues.getByKey,
+    resolvedParams
+      ? { orgSlug: resolvedParams.orgSlug, issueKey: resolvedParams.issueKey }
+      : "skip",
+  );
+
+  const states = useQuery(
+    api.organizations.listIssueStates,
+    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : "skip",
+  );
+  const members = useQuery(
+    api.organizations.listMembers,
+    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : "skip",
+  );
+  const teams = useQuery(
+    api.organizations.listTeams,
+    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : "skip",
+  );
+  const projects = useQuery(
+    api.organizations.listProjects,
+    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : "skip",
+  );
+  const priorities = useQuery(
+    api.organizations.listIssuePriorities,
+    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : "skip",
+  );
+
+  const updateTitleMutation = useMutation(api.issues.updateTitle);
+  const updateDescriptionMutation = useMutation(api.issues.updateDescription);
+  const updateEstimatesMutation = useMutation(api.issues.updateEstimatedTimes);
+  const changeTeamMutation = useMutation(api.issues.changeTeam);
+  const changeProjectMutation = useMutation(api.issues.changeProject);
+  const changePriorityMutation = useMutation(api.issues.changePriority);
+  const changeAssignmentStateMutation = useMutation(
+    api.issues.changeAssignmentState,
+  );
+
+  const assignments = useQuery(
+    api.issues.getAssignments,
+    issue ? { issueId: issue._id } : "skip",
+  );
+
+  const currentUserAssignment = assignments?.find(
+    (assignment) => assignment.assigneeId === currentUser?._id,
+  );
+
+  useEffect(() => {
+    if (assignments && assignments.length > 0) {
+      setCurrentStateId(assignments[0].stateId);
+    }
+  }, [assignments]);
+
+  useEffect(() => {
+    if (issue) {
+      setTitleValue(issue.title);
+      setDescriptionValue(issue.description || "");
+    }
+  }, [issue]);
+
+  useEffect(() => {
+    if (Object.keys(editingEstimates).length > 0 && issue?.estimatedTimes) {
+      setEstimatesValue(issue.estimatedTimes as Record<string, number>);
+    }
+  }, [editingEstimates, issue?.estimatedTimes]);
+
+  const estimateStates =
+    states?.filter((state) => ["done"].includes(state.type)) || [];
+
+  if (!resolvedParams || !issue || !states) {
+    return <IssueLoadingSkeleton />;
+  }
+
+  const handleTitleSave = async () => {
+    if (!isAuthenticated) return;
+    setIsUpdatingTitle(true);
+    try {
+      await updateTitleMutation({
+        issueId: issue._id,
+        title: titleValue.trim(),
+      });
+      setEditingTitle(false);
+    } finally {
+      setIsUpdatingTitle(false);
+    }
+  };
+
+  const handleDescriptionSave = async () => {
+    if (!isAuthenticated) return;
+    setIsUpdatingDescription(true);
+    try {
+      await updateDescriptionMutation({
+        issueId: issue._id,
+        description: descriptionValue.trim() || null,
+      });
+      setEditingDescription(false);
+    } finally {
+      setIsUpdatingDescription(false);
+    }
+  };
+
+  const handleEstimatesSave = async () => {
+    if (!issue || !isAuthenticated) return;
+    setIsUpdatingEstimates(true);
+    try {
+      await updateEstimatesMutation({
+        issueId: issue._id,
+        estimatedTimes:
+          Object.keys(estimatesValue).length > 0 ? estimatesValue : null,
+      });
+      setEditingEstimates({});
+    } finally {
+      setIsUpdatingEstimates(false);
+    }
+  };
+
+  const handleTeamChange = (teamId: string) => {
+    if (!issue || !isAuthenticated) return;
+    changeTeamMutation({
+      issueId: issue._id,
+      teamId: (teamId as Id<"teams">) || null,
+    });
+  };
+
+  const handleProjectChange = (projectId: string) => {
+    if (!issue || !isAuthenticated) return;
+    changeProjectMutation({
+      issueId: issue._id,
+      projectId: (projectId as Id<"projects">) || null,
+    });
+  };
+
+  const handlePriorityChange = (priorityId: string) => {
+    if (!issue || !isAuthenticated) return;
+    if (priorityId === "") return;
+    changePriorityMutation({
+      issueId: issue._id,
+      priorityId: priorityId as Id<"issuePriorities">,
+    });
+  };
+
+  const mappedTeams = teams?.map((t) => ({ ...t, id: t._id })) ?? [];
+  const mappedProjects = projects?.map((p) => ({ ...p, id: p._id })) ?? [];
+  const mappedStates = states?.map((s) => ({ ...s, id: s._id })) ?? [];
+  const mappedPriorities = priorities?.map((p) => ({ ...p, id: p._id })) ?? [];
+  const mappedMembers = members?.map((m) => ({ ...m, id: m.userId })) ?? [];
+
+  return (
+    <div className="bg-background h-full overflow-y-auto">
+      {/* Page Grid: main area + sidebar */}
+      <div className="flex h-full">
+        {/* LEFT COLUMN - Main Content */}
+        <div className="min-w-0 flex-1">
+          {/* Header */}
+          <div className="bg-background/95 supports-[backdrop-filter]:bg-background/60 flex items-center justify-between border-b px-2 backdrop-blur">
+            <div className="flex h-8 flex-wrap items-center gap-2">
+              <Link
+                href={`/${resolvedParams.orgSlug}/issues`}
+                className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors"
+              >
+                <ArrowLeft className="size-3" />
+                Issues
+              </Link>
+              <div className="flex items-center">
+                {/* Team & Project selectors */}
+                <TeamSelector
+                  teams={mappedTeams}
+                  selectedTeam={issue.teamId || ""}
+                  onTeamSelect={handleTeamChange}
+                  displayMode="iconWhenUnselected"
+                  className="border-none bg-transparent shadow-none"
+                />
+                <ProjectSelector
+                  projects={mappedProjects}
+                  selectedProject={issue.projectId || ""}
+                  onProjectSelect={handleProjectChange}
+                  displayMode="iconWhenUnselected"
+                  className="border-none bg-transparent shadow-none"
+                />
+              </div>
+              <span className="text-muted-foreground text-sm">/</span>
+              <span className="text-sm font-medium">{issue.key}</span>
+            </div>
+
+            <div className="flex items-center">
+              {/* Only show state selector if current user is assigned */}
+              {currentUserAssignment && (
+                <>
+                  <StateSelector
+                    states={mappedStates}
+                    selectedState={currentUserAssignment.stateId}
+                    onStateSelect={(stateId) => {
+                      if (!issue || !isAuthenticated) return;
+                      // Update the specific assignment state for this user
+                      changeAssignmentStateMutation({
+                        assignmentId: currentUserAssignment._id,
+                        stateId: stateId as Id<"issueStates">,
+                      });
+                    }}
+                    className="border-none bg-transparent shadow-none"
+                  />
+                  <div className="bg-muted-foreground/20 h-4 w-px" />
+                </>
+              )}
+
+              <PrioritySelector
+                priorities={mappedPriorities}
+                selectedPriority={issue.priorityId || ""}
+                onPrioritySelect={handlePriorityChange}
+                className="border-none bg-transparent shadow-none"
+              />
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="mx-auto max-w-5xl px-4 py-4">
+            {/* Issue Header */}
+            <div className="mb-2 max-w-4xl space-y-2">
+              <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                <span className="font-mono">{issue.key}</span>
+                <span>•</span>
+                <span>
+                  Updated {formatDateHuman(new Date(issue._creationTime))}
+                </span>
+              </div>
+
+              {/* Title */}
+              {editingTitle ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={titleValue}
+                    onChange={(e) => setTitleValue(e.target.value)}
+                    className="h-auto border-none p-0 !text-3xl !leading-tight font-semibold shadow-none focus-visible:ring-0"
+                    style={{ fontFamily: "var(--font-title)" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleTitleSave();
+                      if (e.key === "Escape") {
+                        setTitleValue(issue.title);
+                        setEditingTitle(false);
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      onClick={handleTitleSave}
+                      disabled={isUpdatingTitle || !titleValue.trim()}
+                    >
+                      <Save className="size-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setTitleValue(issue.title);
+                        setEditingTitle(false);
+                      }}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <h1
+                  className={cn(
+                    "hover:text-muted-foreground cursor-pointer text-3xl leading-tight font-semibold transition-colors",
+                  )}
+                  onClick={() => setEditingTitle(true)}
+                >
+                  {issue.title}
+                </h1>
+              )}
+            </div>
+
+            {/* Schedule Info */}
+            <div className="flex items-center gap-4">
+              {(issue.startDate || issue.dueDate) && (
+                <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                  <span>Schedule:</span>
+                  {issue.startDate && (
+                    <span>From {formatDateHuman(issue.startDate)}</span>
+                  )}
+                  {issue.startDate && issue.dueDate && <span>→</span>}
+                  {issue.dueDate && (
+                    <span
+                      className={cn(
+                        "font-medium",
+                        new Date(issue.dueDate) < new Date() &&
+                          states &&
+                          !["done"].includes(
+                            states.find((s) => s._id === currentStateId)
+                              ?.type || "",
+                          )
+                          ? "text-red-500 dark:text-red-400"
+                          : "",
+                      )}
+                    >
+                      Due {formatDateHuman(issue.dueDate)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="mb-8">
+              {editingDescription ? (
+                <div className="space-y-4">
+                  <Textarea
+                    value={descriptionValue}
+                    onChange={(e) => setDescriptionValue(e.target.value)}
+                    placeholder="Add a description..."
+                    className="min-h-[120px] resize-none text-base"
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setDescriptionValue(issue.description || "");
+                        setEditingDescription(false);
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={handleDescriptionSave}
+                      disabled={isUpdatingDescription}
+                    >
+                      <Save className="mr-2 size-4" />
+                      Save
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setDescriptionValue(issue.description || "");
+                        setEditingDescription(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {issue.description ? (
+                    <div
+                      className={cn(
+                        "prose prose-sm text-muted-foreground hover:text-foreground max-w-none cursor-pointer transition-colors",
+                      )}
+                      onClick={() => setEditingDescription(true)}
+                    >
+                      <p className="whitespace-pre-wrap">{issue.description}</p>
+                    </div>
+                  ) : (
+                    <button
+                      className="text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base"
+                      onClick={() => setEditingDescription(true)}
+                    >
+                      Add a description...
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Activity Feed */}
+            <div>
+              <h2 className="mb-2 text-sm font-semibold">Activity</h2>
+              <div className="text-muted-foreground rounded-lg border p-8 text-center">
+                Activity feed coming soon...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT SIDEBAR - Assignments */}
+        <div className="bg-background w-80 overflow-y-auto border-l">
+          <div className="flex h-full flex-col">
+            {/* Assignments Section with max height */}
+            <div className="max-h-96 overflow-y-auto">
+              {states && members && (
+                <IssueAssignments
+                  orgSlug={resolvedParams.orgSlug}
+                  issueId={issue._id}
+                  states={mappedStates}
+                  members={mappedMembers}
+                  defaultStateId={
+                    states?.find((s) => s.type === "todo")?._id ||
+                    states?.[0]?._id ||
+                    ("" as Id<"issueStates">)
+                  }
+                />
+              )}
+            </div>
+
+            {/* Time Estimates Section */}
+            {estimateStates.length > 0 && (
+              <div className="border-t">
+                <div className="flex items-center justify-between border-b px-1 py-1 pl-2">
+                  <h4 className="text-sm">Time Estimates</h4>
+                </div>
+
+                <div className="divide-y">
+                  {estimateStates.map((state) => {
+                    const StateIcon = getDynamicIcon(state.icon) || Circle;
+                    const hours = (
+                      issue?.estimatedTimes as Record<string, number>
+                    )?.[state._id];
+                    const isEditing = editingEstimates[state._id];
+
+                    return (
+                      <div key={state._id}>
+                        <div className="flex h-10 items-center justify-between px-2 py-2">
+                          {/* State icon and name - consistent across both states */}
+                          <div className="flex items-center gap-2">
+                            <StateIcon
+                              className="size-4"
+                              style={{
+                                color: state.color || "currentColor",
+                              }}
+                            />
+                            <span className="text-sm">{state.name}</span>
+                          </div>
+
+                          {/* Right side - changes based on edit state */}
+                          {isEditing ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                placeholder="Hours"
+                                className="h-7 w-20 text-sm"
+                                value={estimatesValue[state._id] || ""}
+                                onChange={(e) => {
+                                  const value = parseFloat(e.target.value);
+                                  setEstimatesValue((prev) => ({
+                                    ...prev,
+                                    [state._id]: isNaN(value) ? 0 : value,
+                                  }));
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    handleEstimatesSave();
+                                  }
+                                  if (e.key === "Escape") {
+                                    setEstimatesValue(
+                                      (issue?.estimatedTimes as Record<
+                                        string,
+                                        number
+                                      >) || {},
+                                    );
+                                    setEditingEstimates((prev) => ({
+                                      ...prev,
+                                      [state._id]: false,
+                                    }));
+                                  }
+                                }}
+                                autoFocus
+                              />
+                              <Button
+                                size="sm"
+                                className="h-7 w-7 cursor-pointer p-0"
+                                onClick={handleEstimatesSave}
+                                disabled={isUpdatingEstimates}
+                              >
+                                <Save className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 cursor-pointer p-0"
+                                onClick={() => {
+                                  setEstimatesValue(
+                                    (issue?.estimatedTimes as Record<
+                                      string,
+                                      number
+                                    >) || {},
+                                  );
+                                  setEditingEstimates((prev) => ({
+                                    ...prev,
+                                    [state._id]: false,
+                                  }));
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div
+                              className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded px-1 py-1 transition-colors"
+                              onClick={() => {
+                                setEstimatesValue(
+                                  (issue?.estimatedTimes as Record<
+                                    string,
+                                    number
+                                  >) || {},
+                                );
+                                setEditingEstimates((prev) => ({
+                                  ...prev,
+                                  [state._id]: true,
+                                }));
+                              }}
+                            >
+                              <span className="text-muted-foreground text-sm">
+                                {hours ? `${hours}h` : "—"}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-4 w-4 cursor-pointer p-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEstimatesValue(
+                                    (issue?.estimatedTimes as Record<
+                                      string,
+                                      number
+                                    >) || {},
+                                  );
+                                  setEditingEstimates((prev) => ({
+                                    ...prev,
+                                    [state._id]: true,
+                                  }));
+                                }}
+                              >
+                                <Pencil className="size-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {(!issue?.estimatedTimes ||
+                    Object.keys(issue.estimatedTimes).length === 0) && (
+                    <div className="text-muted-foreground py-4 text-center text-sm">
+                      No estimates yet
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

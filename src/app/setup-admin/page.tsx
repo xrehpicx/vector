@@ -26,7 +26,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { trpc } from "@/lib/trpc";
+import { useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 
 const setupAdminSchema = z
   .object({
@@ -46,6 +47,7 @@ type SetupAdminForm = z.infer<typeof setupAdminSchema>;
 export default function SetupAdminPage() {
   const router = useRouter();
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<SetupAdminForm>({
     resolver: zodResolver(setupAdminSchema),
@@ -58,25 +60,32 @@ export default function SetupAdminPage() {
     },
   });
 
-  const bootstrapMutation = trpc.user.bootstrapAdmin.useMutation({
-    onSuccess: () => {
-      router.push(
-        "/auth/login?message=Admin account created successfully. Please sign in.",
-      );
-    },
-    onError: (error) => {
-      setGlobalError(error.message);
-    },
-  });
+  const bootstrapMutation = useMutation(api.users.bootstrapAdmin);
 
   const onSubmit = async (values: SetupAdminForm) => {
     setGlobalError(null);
-    await bootstrapMutation.mutateAsync({
-      name: values.name,
-      email: values.email,
-      username: values.username,
-      password: values.password,
-    });
+    setIsLoading(true);
+
+    try {
+      await bootstrapMutation({
+        name: values.name,
+        email: values.email,
+        username: values.username,
+        password: values.password,
+      });
+
+      router.push(
+        "/auth/login?message=Admin account created successfully. Please sign in.",
+      );
+    } catch (error) {
+      setGlobalError(
+        error instanceof Error
+          ? error.message
+          : "Failed to create admin account",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -117,7 +126,7 @@ export default function SetupAdminPage() {
                         <Input
                           placeholder="Enter your full name"
                           className="h-11 text-base"
-                          disabled={bootstrapMutation.isPending}
+                          disabled={isLoading}
                           {...field}
                         />
                       </FormControl>
@@ -139,7 +148,7 @@ export default function SetupAdminPage() {
                           type="email"
                           placeholder="name@example.com"
                           className="h-11 text-base"
-                          disabled={bootstrapMutation.isPending}
+                          disabled={isLoading}
                           {...field}
                         />
                       </FormControl>
@@ -160,7 +169,7 @@ export default function SetupAdminPage() {
                         <Input
                           placeholder="Choose a unique username"
                           className="h-11 text-base"
-                          disabled={bootstrapMutation.isPending}
+                          disabled={isLoading}
                           {...field}
                         />
                       </FormControl>
@@ -185,7 +194,7 @@ export default function SetupAdminPage() {
                           type="password"
                           placeholder="Create a strong password"
                           className="h-11 text-base"
-                          disabled={bootstrapMutation.isPending}
+                          disabled={isLoading}
                           {...field}
                         />
                       </FormControl>
@@ -207,7 +216,7 @@ export default function SetupAdminPage() {
                           type="password"
                           placeholder="Confirm your password"
                           className="h-11 text-base"
-                          disabled={bootstrapMutation.isPending}
+                          disabled={isLoading}
                           {...field}
                         />
                       </FormControl>
@@ -219,9 +228,9 @@ export default function SetupAdminPage() {
                 <Button
                   type="submit"
                   className="h-11 w-full"
-                  disabled={bootstrapMutation.isPending}
+                  disabled={isLoading}
                 >
-                  {bootstrapMutation.isPending
+                  {isLoading
                     ? "Creating Admin Account..."
                     : "Create Admin Account"}
                 </Button>

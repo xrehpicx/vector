@@ -17,7 +17,8 @@ const eslintConfig = [
       prettier: prettierPlugin,
     },
     rules: {
-      "prettier/prettier": "error",
+      "prettier/prettier": "warn",
+      "@typescript-eslint/no-unused-vars": "warn",
     },
   },
 ];

@@ -1,11 +1,12 @@
 "use client";
 
-import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { CreateTeamButton, TeamsTable } from "@/components/teams";
 import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { PageSkeleton } from "@/components/ui/table-skeleton";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/lib/convex";
 
 interface TeamsPageContentProps {
   orgSlug: string;
@@ -23,16 +24,22 @@ export function TeamsPageContent({
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
 
-  const pagedQuery = trpc.organization.listTeamsPaged.useQuery({
-    orgSlug,
-    page,
-    pageSize: PAGE_SIZE,
-  });
+  const teamsData = useQuery(api.teams.list, { orgSlug });
+  const total = teamsData?.length ?? 0;
 
-  const teams = [...(pagedQuery.data?.teams ?? [])];
-  const total = pagedQuery.data?.total ?? 0;
+  const isLoading = teamsData === undefined;
 
-  const isLoading = pagedQuery.isLoading;
+  // Transform teams data to match expected interface
+  const teams =
+    teamsData?.map((team) => ({
+      id: team._id,
+      name: team.name,
+      description: team.description,
+      key: team.key,
+      icon: team.icon,
+      color: team.color,
+      createdAt: new Date(team._creationTime),
+    })) ?? [];
 
   // Ensure page stays within bounds when total changes
   useEffect(() => {
@@ -44,21 +51,16 @@ export function TeamsPageContent({
   // --------------------------------------------------
   // Team operations
   // --------------------------------------------------
-  const utils = trpc.useUtils();
-  const { data: session } = authClient.useSession();
+  const { signOut } = useAuthActions();
 
-  const deleteMutation = trpc.team.delete.useMutation({
-    onSuccess: () => {
-      Promise.all([
-        utils.organization.listTeams.invalidate({ orgSlug }),
-        utils.organization.listTeamsPaged.invalidate({ orgSlug }),
-      ]).catch(() => {});
-    },
-  });
+  const deleteMutation = useMutation(api.teams.deleteTeam);
 
   const handleDelete = (teamId: string) => {
-    if (!session?.user?.id) return;
-    deleteMutation.mutate({ teamId });
+    // Find the team by id to get the teamKey
+    const team = teams.find((t) => t.id === teamId);
+    if (team) {
+      deleteMutation({ orgSlug, teamKey: team.key });
+    }
   };
 
   // --------------------------------------------------
@@ -98,40 +100,13 @@ export function TeamsPageContent({
         </div>
       </div>
 
-      {/* Teams list */}
-      <div className="flex-1">
-        <TeamsTable
-          orgSlug={orgSlug}
-          teams={teams}
-          onDelete={isAdminOrOwner ? handleDelete : undefined}
-          deletePending={deleteMutation.isPending}
-        />
-      </div>
-
-      {/* Pagination controls */}
-      <div className="text-muted-foreground flex justify-between border-t p-2 text-xs">
-        <span>
-          Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}
-        </span>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page === 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Prev
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page * PAGE_SIZE >= total}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      {/* Teams table */}
+      <TeamsTable
+        orgSlug={orgSlug}
+        teams={teams}
+        onDelete={handleDelete}
+        deletePending={false}
+      />
     </div>
   );
 }

@@ -35,7 +35,9 @@ import {
 // Utils & helpers
 import { cn } from "@/lib/utils";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
-import { trpc } from "@/lib/trpc";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { FunctionReturnType } from "convex/server";
 
 // Icons
 import { FolderOpen, User, Check, Circle, Calendar, Clock } from "lucide-react";
@@ -44,20 +46,26 @@ import { FolderOpen, User, Check, Circle, Calendar, Clock } from "lucide-react";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
 // ---------------------------------------------------------------------------
-// 🧩 Type inference – derive types directly from tRPC router outputs
+// 🧩 Type inference – derive types directly from Convex query outputs
 // ---------------------------------------------------------------------------
-import type { inferRouterOutputs } from "@trpc/server";
-import type { AppRouter } from "@/trpc/routers/_app";
 import { Input } from "../ui/input";
 
-type RouterOutputs = inferRouterOutputs<AppRouter>;
-
-export type Team = RouterOutputs["organization"]["listTeams"][number];
-export type Project = RouterOutputs["organization"]["listProjects"][number];
-export type State = RouterOutputs["organization"]["listIssueStates"][number];
-export type Member = RouterOutputs["organization"]["listMembers"][number];
-export type Priority =
-  RouterOutputs["organization"]["listIssuePriorities"][number];
+// Infer types from Convex query outputs
+export type Team = FunctionReturnType<
+  typeof api.organizations.listTeams
+>[number];
+export type Project = FunctionReturnType<
+  typeof api.organizations.listProjects
+>[number];
+export type State = FunctionReturnType<
+  typeof api.organizations.listIssueStates
+>[number];
+export type Member = FunctionReturnType<
+  typeof api.organizations.listMembers
+>[number];
+export type Priority = FunctionReturnType<
+  typeof api.organizations.listIssuePriorities
+>[number];
 
 // ---------------------------------------------------------------------------
 // Display variant for how the button shows icon/label
@@ -121,7 +129,7 @@ export function ProjectSelector({
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
 
   // Get selected project data
-  const selectedProjectObj = projects.find((p) => p.id === selectedProject);
+  const selectedProjectObj = projects.find((p) => p._id === selectedProject);
   const currentColor = selectedProjectObj?.color || "#94a3b8"; // Default grey
   const currentName = selectedProjectObj?.name || "Project";
   const currentIconName = selectedProjectObj?.icon;
@@ -182,17 +190,17 @@ export function ProjectSelector({
                   : FolderOpen;
                 return (
                   <CommandItem
-                    key={project.id}
+                    key={project._id}
                     value={project.name}
                     onSelect={() => {
-                      onProjectSelect(project.id);
+                      onProjectSelect(project._id);
                       setOpen(false);
                     }}
                   >
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        selectedProject === project.id
+                        selectedProject === project._id
                           ? "opacity-100"
                           : "opacity-0",
                       )}
@@ -238,7 +246,7 @@ export function StateSelector({
 
   // Transform states from API into combobox-friendly structure
   const stateOptions = states.map((s) => ({
-    value: s.id,
+    value: s._id,
     label: s.name,
     color: s.color || "#94a3b8", // fallback to default gray
   }));
@@ -253,7 +261,7 @@ export function StateSelector({
         icon: defaultState?.icon,
       };
     }
-    const state = states.find((s) => s.id === selectedState);
+    const state = states.find((s) => s._id === selectedState);
     return {
       color: state?.color || "#94a3b8",
       name: state?.name || "Select state...",
@@ -301,7 +309,7 @@ export function StateSelector({
             <CommandEmpty>No state found.</CommandEmpty>
             <CommandGroup>
               {stateOptions.map((state) => {
-                const stateData = states.find((s) => s.id === state.value);
+                const stateData = states.find((s) => s._id === state.value);
                 const StateIcon = stateData?.icon
                   ? getDynamicIcon(stateData.icon)
                   : null;
@@ -374,7 +382,7 @@ export function PrioritySelector({
   const hasSelection = selectedPriority !== "";
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
 
-  const current = priorities.find((p) => p.id === selectedPriority);
+  const current = priorities.find((p) => p._id === selectedPriority);
   const currentColor = current?.color || "#94a3b8";
   const currentName = current?.name || "Priority";
   const currentIconName = current?.icon;
@@ -414,17 +422,17 @@ export function PrioritySelector({
                   : null;
                 return (
                   <CommandItem
-                    key={priority.id}
+                    key={priority._id}
                     value={priority.name}
                     onSelect={() => {
-                      onPrioritySelect(priority.id);
+                      onPrioritySelect(priority._id);
                       setOpen(false);
                     }}
                   >
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        selectedPriority === priority.id
+                        selectedPriority === priority._id
                           ? "opacity-100"
                           : "opacity-0",
                       )}
@@ -512,13 +520,14 @@ export function AssigneeSelector({
       if (selectedAssignees.length === 0) return "Assignees";
       if (selectedAssignees.length === 1) {
         const member = members.find((m) => m.userId === selectedAssignees[0]);
-        return member?.name || "1 assignee";
+        return member?.user?.name || "1 assignee";
       }
       return `${selectedAssignees.length} assignees`;
     } else {
       if (!selectedAssignee) return "Assignee";
       return (
-        members.find((m) => m.userId === selectedAssignee)?.name || "Assignee"
+        members.find((m) => m.userId === selectedAssignee)?.user?.name ||
+        "Assignee"
       );
     }
   };
@@ -571,7 +580,7 @@ export function AssigneeSelector({
               {members.map((member) => (
                 <CommandItem
                   key={member.userId}
-                  value={member.name || member.email}
+                  value={member.user?.name || member.user?.email}
                   onSelect={() => {
                     handleSelect(member.userId);
                   }}
@@ -589,9 +598,9 @@ export function AssigneeSelector({
                     )}
                   />
                   <div className="flex flex-col">
-                    <span className="text-sm">{member.name}</span>
+                    <span className="text-sm">{member.user?.name}</span>
                     <span className="text-muted-foreground text-xs">
-                      {member.email}
+                      {member.user?.email}
                     </span>
                   </div>
                 </CommandItem>
@@ -759,7 +768,7 @@ export function TimeEstimatesSelector({
 
     // Get states that have estimates
     const statesWithEstimates = doneStates.filter(
-      (state) => estimatedTimes[state.id] && estimatedTimes[state.id] > 0,
+      (state) => estimatedTimes[state._id] && estimatedTimes[state._id] > 0,
     );
 
     if (statesWithEstimates.length === 0) {
@@ -770,7 +779,7 @@ export function TimeEstimatesSelector({
     if (statesWithEstimates.length === 1) {
       const state = statesWithEstimates[0];
       const StateIcon = state.icon ? getDynamicIcon(state.icon) : null;
-      const hours = estimatedTimes[state.id];
+      const hours = estimatedTimes[state._id];
 
       return (
         <div className="flex items-center gap-1">
@@ -815,7 +824,7 @@ export function TimeEstimatesSelector({
             {doneStates.map((state) => {
               const StateIcon = state.icon ? getDynamicIcon(state.icon) : null;
               return (
-                <div key={state.id} className="my-1 flex items-center gap-3">
+                <div key={state._id} className="my-1 flex items-center gap-3">
                   <div className="flex min-w-0 flex-1 items-center gap-2">
                     {StateIcon ? (
                       <StateIcon
@@ -836,12 +845,12 @@ export function TimeEstimatesSelector({
                     step="0.5"
                     placeholder="0"
                     className="border-input bg-background ring-offset-background focus-visible:ring-ring h-8 w-20 rounded-md border px-2 py-1 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                    value={estimatedTimes[state.id] || ""}
+                    value={estimatedTimes[state._id] || ""}
                     onChange={(e) => {
                       const value = parseFloat(e.target.value);
                       onEstimatedTimesChange({
                         ...estimatedTimes,
-                        [state.id]: isNaN(value) ? 0 : value,
+                        [state._id]: isNaN(value) ? 0 : value,
                       });
                     }}
                   />
@@ -903,26 +912,16 @@ export function MultiAssigneeSelector({
   const [searchQuery, setSearchQuery] = useState("");
 
   // Search members with debouncing
-  const { data: searchResults = [] } = trpc.organization.searchMembers.useQuery(
-    {
-      orgSlug,
-      query: searchQuery,
-      limit: 10,
-    },
-    {
-      enabled: open, // Only fetch when dropdown is open
-      staleTime: 5 * 60 * 1000, // 5 minutes
-    },
-  );
+  const searchResults = useQuery(api.organizations.searchMembers, {
+    orgSlug,
+    query: searchQuery,
+    limit: 10,
+  });
 
   // Get organization members for display purposes (when we have selections but they're not in search)
-  const { data: allMembers = [] } = trpc.organization.listMembers.useQuery(
-    { orgSlug },
-    {
-      enabled: selectedAssigneeIds.length > 0,
-      staleTime: 5 * 60 * 1000,
-    },
-  );
+  const allMembers = useQuery(api.organizations.listMembers, {
+    orgSlug,
+  });
 
   const handleToggleAssignee = (userId: string) => {
     if (isLoading) return;
@@ -969,7 +968,7 @@ export function MultiAssigneeSelector({
     }
 
     if (selectedAssigneeIds.length === 1) {
-      const assignee = allMembers.find(
+      const assignee = allMembers?.find(
         (m) => m.userId === selectedAssigneeIds[0],
       );
       return (
@@ -987,7 +986,7 @@ export function MultiAssigneeSelector({
             </div>
           )}
           <AvatarFallback className="text-xs">
-            {getAssigneeInitials(assignee?.name, assignee?.email)}
+            {getAssigneeInitials(assignee?.user?.name, assignee?.user?.email)}
           </AvatarFallback>
         </Avatar>
       );
@@ -1002,7 +1001,7 @@ export function MultiAssigneeSelector({
         )}
       >
         {selectedAssigneeIds.slice(0, 3).map((assigneeId, idx) => {
-          const assignee = allMembers.find((m) => m.userId === assigneeId);
+          const assignee = allMembers?.find((m) => m.userId === assigneeId);
           return (
             <Avatar
               key={assigneeId}
@@ -1019,7 +1018,10 @@ export function MultiAssigneeSelector({
                 </div>
               )}
               <AvatarFallback className="text-xs">
-                {getAssigneeInitials(assignee?.name, assignee?.email)}
+                {getAssigneeInitials(
+                  assignee?.user?.name,
+                  assignee?.user?.email,
+                )}
               </AvatarFallback>
             </Avatar>
           );
@@ -1107,7 +1109,7 @@ export function MultiAssigneeSelector({
             )}
 
             {/* Members List */}
-            {searchResults.map((member) => {
+            {searchResults?.map((member) => {
               const isSelected = selectedAssigneeIds.includes(member.userId);
               const assignment = assignments.find(
                 (a) => a.assigneeId === member.userId,
@@ -1118,7 +1120,7 @@ export function MultiAssigneeSelector({
               return (
                 <CommandItem
                   key={member.userId}
-                  value={member.name || member.email}
+                  value={member.user?.name || member.user?.email}
                   onSelect={() => handleToggleAssignee(member.userId)}
                   disabled={isLoading}
                   className={cn(
@@ -1144,13 +1146,16 @@ export function MultiAssigneeSelector({
                       )}
                     >
                       <AvatarFallback className="text-xs">
-                        {getAssigneeInitials(member.name, member.email)}
+                        {getAssigneeInitials(
+                          member.user?.name,
+                          member.user?.email,
+                        )}
                       </AvatarFallback>
                     </Avatar>
                     <div className={cn("flex-1", isLoading && "opacity-50")}>
-                      <div className="font-medium">{member.name}</div>
+                      <div className="font-medium">{member.user?.name}</div>
                       <div className="text-muted-foreground text-xs">
-                        {member.email}
+                        {member.user?.email}
                       </div>
                     </div>
                     {assignment && (
@@ -1374,18 +1379,19 @@ export function MultiAssignmentStateSelector({
             {currentUserAssignment && (
               <CommandGroup heading="Your status">
                 {states.map((state) => {
-                  const isSelected = state.id === currentUserAssignment.stateId;
+                  const isSelected =
+                    state._id === currentUserAssignment.stateId;
                   const StateIcon = state.icon
                     ? getDynamicIcon(state.icon) || Circle
                     : Circle;
 
                   return (
                     <CommandItem
-                      key={state.id}
+                      key={state._id}
                       onSelect={() =>
                         handleStateSelect(
                           currentUserAssignment.assignmentId,
-                          state.id,
+                          state._id,
                         )
                       }
                       disabled={isLoading}
@@ -1482,19 +1488,19 @@ export function MultiAssignmentStateSelector({
                             >
                               {states.map((state) => {
                                 const isSelected =
-                                  state.id === assignment.stateId;
+                                  state._id === assignment.stateId;
                                 const StateIconDM = state.icon
                                   ? getDynamicIcon(state.icon) || Circle
                                   : Circle;
 
                                 return (
                                   <DropdownMenuItem
-                                    key={state.id}
+                                    key={state._id}
                                     disabled={isLoading}
                                     onSelect={() =>
                                       handleStateSelect(
                                         assignment.assignmentId,
-                                        state.id,
+                                        state._id,
                                       )
                                     }
                                   >
