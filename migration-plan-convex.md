@@ -4,7 +4,14 @@
 >
 > Each task has a checkbox so progress can be tracked directly in-file (✅ / ❌). Update check-boxes only **after** the corresponding PR is merged.
 >
-> **Legend**: `🗂 file` – reference to an existing project file, `📦 pkg` – npm dependency, `📓 note` – important caveat.
+> **Legend**: `🗂 file` – reference to an existing project file, `📦 pkg` – pnpm dependency, `📓 note` – important caveat.
+>
+> **Key Requirements:**
+>
+> - **Local Development Only:** Use local Convex instance, no cloud account creation
+> - **TypeScript Best Practices:** Avoid `any` types, `!` assertions, and type workarounds
+> - **Schema-Driven Types:** Infer types from database schema, avoid duplicate type declarations
+> - **Research First:** Google and verify Convex implementation patterns before starting any changes
 
 ---
 
@@ -25,12 +32,14 @@
 
 | #   | Task                                                                                                                                                                                                                                                         | Status |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| 0.1 | **Read Convex Docs** & bookmark sections on Auth, Storage, Actions, Indexing.                                                                                                                                                                                | ❌     |
+| 0.1 | **Research Convex Patterns** – Google current best practices for auth, storage, actions, indexing. Bookmark official docs and community examples.                                                                                                            | ❌     |
 | 0.2 | **Spike Project** – create a throw-away repo with Convex Auth + Storage to verify mental model.                                                                                                                                                              | ❌     |
 | 0.3 | **Inventory Current Code** – already partially complete. Finalise a spreadsheet listing every occurrence of: <br/>• `betterAuth`, `src/auth/*`, <br/>• `src/db/`, `drizzle/`, <br/>• `src/trpc/**`, `src/entities/**`, <br/>• `src/lib/s3.ts`, `/api/files`. | ❌     |
 | 0.4 | **Stakeholder Sign-off** confirming: _“no UI/UX changes”_ and the scope of data to migrate.                                                                                                                                                                  | ❌     |
 
 📓 note: The inventory spreadsheet will drive the TODO numbers below, keep it up-to-date.
+
+📓 **Important:** Convex is rapidly evolving. Always research current patterns before implementing each phase.
 
 ---
 
@@ -40,10 +49,13 @@
 | --- | ------------------------------------------------------------------------------------------- | ------ |
 | 1.1 | `pnpm dlx convex@latest init` – generates `/convex`, `convex.json`, `.env.local` template.  | ❌     |
 | 1.2 | Add `@/convex/*` path alias in `tsconfig.json` & ESLint include.                            | ❌     |
-| 1.3 | Commit baseline with `"convex:dev": "convex dev"` and update `README.md` local-dev section. | ❌     |
+| 1.3 | Configure local Convex development (no cloud account needed).                               | ❌     |
+| 1.4 | Commit baseline with `"convex:dev": "convex dev"` and update `README.md` local-dev section. | ❌     |
 
 Best Practice ✓  
 Keep all Convex code under `/convex/` – feature-foldered to mirror `/src/` (e.g. `/convex/issues/*`).
+
+📓 note: Local Convex development allows full functionality without cloud account creation.
 
 ---
 
@@ -65,7 +77,7 @@ Current impl (🗂 `src/auth/auth.ts`) uses Better-Auth + Drizzle adapter with *
 
 | #     | Task                                                                                                                                    | Status |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 2.2.1 | Install 📦 `convex/react`, `next-auth` peer deps per Convex guide.                                                                      | ❌     |
+| 2.2.1 | Install 📦 `convex/react`, `next-auth` peer deps per Convex guide using `pnpm add`.                                                     | ❌     |
 | 2.2.2 | Create `pages/api/auth/[...convex].ts` → `handleAuth` w/ Google provider.                                                               | ❌     |
 | 2.2.3 | Implement custom email magic-link provider (Convex example) to match current Better-Auth flow.                                          | ❌     |
 | 2.2.4 | Map Better-Auth tables (`user`, `session`, `account`) to Convex collections `users`, `sessions`, `accounts` for historical data import. | ❌     |
@@ -93,6 +105,8 @@ Create `convex/schema.ts` describing collections corresponding to current Postgr
 | `states`                  | `states`            | orgId, key, name, category                                                      |
 | `priorities`              | `priorities`        | orgId, key, name, sortOrder                                                     |
 | plus any auxiliary tables | …                   | …                                                                               |
+
+📓 note: Use `Doc` types from schema for perfect type inference. Avoid creating separate TypeScript interfaces.
 
 ### 3.2 Write Import Script
 
@@ -139,6 +153,7 @@ For each router:
 | 4.2.1 | Break domain logic currently in `src/entities/**` into reusable helpers inside `/convex/_shared/`.                                                                                                                                                  | ❌     |
 | 4.2.2 | Replace legacy `class Service {}` patterns with simple function modules for tree-shakability.                                                                                                                                                       | ❌     |
 | 4.2.3 | Remove tRPC client hooks in React components (e.g., 🗂 `src/components/issues/*`). Swap to `useQuery`, `useMutation` from `convex/react`. Provide shim wrappers to keep call-sites minimal diff: <br/>`import { useIssues } from '@/convex/shims'`. | ❌     |
+| 4.2.4 | Ensure all function parameters and return types are properly typed using schema `Doc` types, avoid `any` or `!` assertions.                                                                                                                         | ❌     |
 
 📓 note: Convex supports optimistic updates – replicate existing optimistic UX of issues table.
 
@@ -169,12 +184,12 @@ For each router:
 
 ## Phase 7: Decommission Legacy Resources
 
-| #   | Task                                                                                    | Status |
-| --- | --------------------------------------------------------------------------------------- | ------ |
-| 7.1 | Remove `better-auth`, `@trpc/*`, `@drizzle/*`, `aws-sdk` from `package.json`.           | ❌     |
-| 7.2 | Delete `src/trpc`, `src/db`, `src/lib/s3.ts`, `src/auth/*` (except new Convex helpers). | ❌     |
-| 7.3 | Clean up environment variables: `.env*` files no longer need PG, S3, JWT secrets.       | ❌     |
-| 7.4 | Archive old S3 bucket (30-day retention) & shutdown Postgres instance.                  | ❌     |
+| #   | Task                                                                                              | Status |
+| --- | ------------------------------------------------------------------------------------------------- | ------ |
+| 7.1 | Remove `better-auth`, `@trpc/*`, `@drizzle/*`, `aws-sdk` from `package.json` using `pnpm remove`. | ❌     |
+| 7.2 | Delete `src/trpc`, `src/db`, `src/lib/s3.ts`, `src/auth/*` (except new Convex helpers).           | ❌     |
+| 7.3 | Clean up environment variables: `.env*` files no longer need PG, S3, JWT secrets.                 | ❌     |
+| 7.4 | Archive old S3 bucket (30-day retention) & shutdown Postgres instance.                            | ❌     |
 
 ---
 
@@ -187,5 +202,9 @@ For each router:
 5. **Auth-Protected Functions** – every query/mutation verifies `ctx.auth.getUserIdentity()`; no anonymous writes.
 6. **Index Early** – declare indexes up-front for `orgId`, `projectId`, `userId` queries.
 7. **Mirrored Folder Structure** – `/convex/{domain}` mirrors `/src/{domain}` for developer ergonomics.
+8. **Schema-Driven Types** – use `Doc<"tableName">` types from schema, avoid duplicate TypeScript interfaces.
+9. **Local Development** – leverage local Convex instance for full development without cloud dependencies.
+10. **Type Safety First** – avoid `any` types, `!` assertions, and type workarounds throughout the codebase.
+11. **Research-Driven Development** – verify Convex patterns before implementation, as the platform evolves rapidly.
 
 _All check-boxes ✅ → production runs fully on Convex._
