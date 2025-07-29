@@ -2,10 +2,11 @@
 
 import { Users } from "lucide-react";
 import { MembersList } from "@/components/organization";
+import { useParams } from "next/navigation";
+import { useRequirePermission } from "@/hooks/use-permission-boundary";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex";
-import { useParams } from "next/navigation";
-import { notFound } from "next/navigation";
 
 interface MembersSettingsPageProps {
   params: Promise<{ orgSlug: string }>;
@@ -17,17 +18,21 @@ export default function MembersSettingsPage({
   const paramsObj = useParams();
   const orgSlug = paramsObj.orgSlug as string;
 
-  const user = useQuery(api.users.currentUser);
+  // Require permission to manage members - will redirect to 403 if denied
+  const { isLoading: permissionLoading } = useRequirePermission(
+    orgSlug,
+    PERMISSIONS.ORG_MANAGE_MEMBERS,
+  );
+
   const members = useQuery(api.organizations.listMembersWithRoles, { orgSlug });
 
-  const userRole =
-    members?.find((m) => m.userId === user?._id)?.role || "member";
-  const isOwner = userRole === "owner";
-  const isAdmin = userRole === "admin" || isOwner;
-
-  // Only admins can access member management
-  if (user !== undefined && members !== undefined && !isAdmin) {
-    notFound();
+  // Show loading state while checking permissions
+  if (permissionLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="text-2xl font-semibold">Loading...</div>
+      </div>
+    );
   }
 
   return (

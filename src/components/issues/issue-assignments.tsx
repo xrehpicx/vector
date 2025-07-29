@@ -14,8 +14,9 @@ import {
 import { Plus, X, User } from "lucide-react";
 import { StateSelector, AssigneeSelector } from "./issue-selectors";
 import type { Member, State } from "./issue-selectors";
-import { PERMISSIONS } from "@/lib/permissions";
-import { usePermission } from "@/hooks/use-permissions";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
+import { useScopedPermission } from "@/hooks/use-permissions";
+import { PermissionAware } from "@/components/ui/permission-aware";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 // Helper to derive initials from a name/email
@@ -63,9 +64,9 @@ export function IssueAssignments({
   const currentUserId = currentUser?._id || "";
 
   // Permission check (manage assignments)
-  const { hasPermission: canManage } = usePermission(
-    orgSlug,
-    PERMISSIONS.ASSIGNMENT_MANAGE,
+  const { hasPermission: canManage } = useScopedPermission(
+    { orgSlug },
+    PERMISSIONS.ISSUE_ASSIGN,
   );
 
   // Fetch assignments for this issue
@@ -163,7 +164,9 @@ export function IssueAssignments({
       {/* Assignments list - matching issues table design */}
       <div className="divide-y">
         {assignments.map((assignment) => {
-          // (Icon not used directly in this component)
+          // Check if current user can modify this assignment
+          const isOwnAssignment = assignment.assigneeId === currentUserId;
+          const canModifyAssignment = canManage || isOwnAssignment;
 
           return (
             <div
@@ -180,7 +183,7 @@ export function IssueAssignments({
                   )}
                   selectedAssignee={assignment.assigneeId?.toString() || ""}
                   onAssigneeSelect={
-                    canManage || assignment.assigneeId === currentUserId
+                    canModifyAssignment
                       ? (userId) => handleUpdateAssignee(assignment._id, userId)
                       : undefined
                   }
@@ -218,26 +221,45 @@ export function IssueAssignments({
               </div>
 
               {/* State badge - clickable like issues table */}
-              <StateSelector
-                states={states}
-                selectedState={assignment.stateId?.toString() || ""}
-                onStateSelect={
-                  canManage || assignment.assigneeId === currentUserId
-                    ? (stateId) => handleStateChange(assignment._id, stateId)
-                    : () => {}
-                }
-                align="end"
-                className="border-none bg-transparent p-0 shadow-none"
-              />
+              {isOwnAssignment ? (
+                // User can always change their own assignment status
+                <StateSelector
+                  states={states}
+                  selectedState={assignment.stateId?.toString() || ""}
+                  onStateSelect={(stateId) =>
+                    handleStateChange(assignment._id, stateId)
+                  }
+                  align="end"
+                  className="border-none bg-transparent p-0 shadow-none"
+                />
+              ) : (
+                // For other users' assignments, check if user has permission to manage assignments
+                <PermissionAware
+                  orgSlug={orgSlug}
+                  permission={PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE}
+                  fallbackMessage="You don't have permission to change assignment status"
+                >
+                  <StateSelector
+                    states={states}
+                    selectedState={assignment.stateId?.toString() || ""}
+                    onStateSelect={
+                      canManage
+                        ? (stateId) =>
+                            handleStateChange(assignment._id, stateId)
+                        : () => {}
+                    }
+                    align="end"
+                    className="border-none bg-transparent p-0 shadow-none"
+                  />
+                </PermissionAware>
+              )}
 
               {/* Remove button */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => handleRemoveAssignment(assignment._id)}
-                disabled={
-                  !(canManage || assignment.assigneeId === currentUserId)
-                }
+                disabled={!canModifyAssignment}
                 className="text-muted-foreground hover:text-destructive h-6 w-6 flex-shrink-0 p-0"
               >
                 <X className="h-3 w-3" />
@@ -249,61 +271,44 @@ export function IssueAssignments({
 
       {/* Empty state */}
       {assignments.length === 0 && (
-        <div className="text-muted-foreground py-6 text-center">
-          <User className="mx-auto mb-2 h-8 w-8 opacity-50" />
-          <p className="text-sm">No assignees yet</p>
-          <p className="text-xs">
-            Click &quot;Add&quot; to assign someone to this issue
-          </p>
+        <div className="flex items-center justify-center py-8">
+          <div className="text-center">
+            <div className="mb-2 flex justify-center">
+              <User className="text-muted-foreground/50 h-8 w-8" />
+            </div>
+            <p className="text-muted-foreground text-sm">No assignees</p>
+            <p className="text-muted-foreground/70 text-xs">
+              Add assignees to track who is working on this issue
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Add assignee dialog - matching create-issue-dialog style */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="gap-2 p-2 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-base">Add Assignee</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            {availableMembers.length === 0 ? (
-              <div className="text-muted-foreground py-6 text-center">
-                <User className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                <p className="text-sm">All members already assigned</p>
-                <p className="text-xs">
-                  Everyone in your team is already working on this issue
-                </p>
+      {/* Add assignee dialog */}
+      <PermissionAware
+        orgSlug={orgSlug}
+        permission={PERMISSIONS.ISSUE_ASSIGN}
+        fallbackMessage="You don't have permission to add assignees"
+      >
+        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Assignee</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Select assignee</label>
+                <AssigneeSelector
+                  members={availableMembers}
+                  selectedAssignee=""
+                  onAssigneeSelect={handleAddAssignee}
+                  displayMode="labelOnly"
+                />
               </div>
-            ) : (
-              <AssigneeSelector
-                members={availableMembers}
-                selectedAssignee=""
-                onAssigneeSelect={handleAddAssignee}
-                displayMode="default"
-                trigger={
-                  <Button
-                    variant="outline"
-                    className="h-9 w-full justify-start"
-                  >
-                    <User className="mr-2 h-4 w-4" />
-                    Select assignee
-                  </Button>
-                }
-              />
-            )}
-          </div>
-
-          <div className="flex items-center justify-between pt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAddDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </PermissionAware>
     </div>
   );
 }

@@ -1,25 +1,28 @@
-// Permission constants for the application
-export const PERMISSIONS = {
-  ORG_VIEW: "org:view",
-  ORG_MANAGE: "org:manage",
-  ORG_INVITE: "org:invite",
-  ROLE_CREATE: "role:create",
-  ROLE_UPDATE: "role:update",
-  ROLE_DELETE: "role:delete",
-  ROLE_ASSIGN: "role:assign",
-  PROJECT_VIEW: "project:view",
-  PROJECT_CREATE: "project:create",
-  PROJECT_UPDATE: "project:update",
-  PROJECT_DELETE: "project:delete",
-  TEAM_VIEW: "team:view",
-  TEAM_CREATE: "team:create",
-  TEAM_UPDATE: "team:update",
-  TEAM_DELETE: "team:delete",
-  ISSUE_VIEW: "issue:view",
-  ISSUE_CREATE: "issue:create",
-  ISSUE_UPDATE: "issue:update",
-  ISSUE_DELETE: "issue:delete",
-  ASSIGNMENT_MANAGE: "assignment:manage",
-} as const;
+export * from "@/convex/_shared/permissions";
 
-export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+/**
+ * Utility function to check if a user permission matches a required permission
+ * Supports exact matches and wildcard patterns
+ */
+export function permissionMatches(
+  userPermission: string,
+  requiredPermission: string,
+): boolean {
+  // Exact match
+  if (userPermission === requiredPermission) {
+    return true;
+  }
+
+  // Full wildcard permission
+  if (userPermission === "*") {
+    return true;
+  }
+
+  // Scoped wildcard permissions (e.g., "issue:*" matches "issue:create")
+  if (userPermission.endsWith(":*")) {
+    const prefix = userPermission.slice(0, -1); // Remove the "*"
+    return requiredPermission.startsWith(prefix);
+  }
+
+  return false;
+}

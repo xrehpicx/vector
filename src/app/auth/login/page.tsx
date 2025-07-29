@@ -16,8 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, LogIn, Bot, Shield, Zap, Users } from "lucide-react";
 import Link from "next/link";
-
-export const dynamic = "force-dynamic";
+import { extractAuthErrorMessage } from "@/lib/auth-error-handler";
 
 function LoginForm() {
   const router = useRouter();
@@ -53,10 +52,8 @@ function LoginForm() {
       router.refresh();
       router.push(redirectTo);
     } catch (error) {
-      console.error("Sign in error:", error);
-      setError(
-        error instanceof Error ? error.message : "Authentication failed",
-      );
+      console.log("Sign in error: ", error, extractAuthErrorMessage(error));
+      setError(extractAuthErrorMessage(error));
     } finally {
       setLoading(false);
     }

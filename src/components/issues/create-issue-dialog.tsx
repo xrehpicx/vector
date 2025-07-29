@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/lib/convex";
+import { PermissionAwareButton } from "@/components/ui/permission-aware";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -43,6 +46,10 @@ import {
   type State,
   type Priority,
 } from "./issue-selectors";
+import {
+  VisibilitySelector,
+  type VisibilityState,
+} from "@/components/ui/visibility-selector";
 
 // Types with id field added by withIds transformation
 type TeamWithId = Team & { id: string };
@@ -197,6 +204,8 @@ function CreateIssueDialogContent({
   const [selectedPriority, setSelectedPriority] = useState<string>(
     defaultStates?.priorityId || "",
   );
+  const [selectedVisibility, setSelectedVisibility] =
+    useState<VisibilityState>("organization");
   const [manualFormatOverride, setManualFormatOverride] = useState<
     "team" | "project" | "org" | null
   >(null);
@@ -301,6 +310,7 @@ function CreateIssueDialogContent({
           ? (selectedPriority as Id<"issuePriorities">)
           : undefined,
         assigneeIds: selectedAssignee ? [selectedAssignee as Id<"users">] : [],
+        visibility: selectedVisibility,
       },
     })
       .then((result) => {
@@ -316,6 +326,7 @@ function CreateIssueDialogContent({
         setSelectedState("");
         setSelectedPriority("");
         setSelectedAssignee("");
+        setSelectedVisibility("organization");
         setManualFormatOverride(null);
       })
       .catch((error) => {
@@ -399,6 +410,12 @@ function CreateIssueDialogContent({
                   priorities={priorities}
                   selectedPriority={selectedPriority}
                   onPrioritySelect={setSelectedPriority}
+                />
+
+                <VisibilitySelector
+                  value={selectedVisibility}
+                  onValueChange={setSelectedVisibility}
+                  displayMode="iconOnly"
                 />
               </div>
               <div className="ml-auto">
@@ -493,25 +510,31 @@ export function CreateIssueDialog({
 
   const trigger =
     variant === "floating" ? (
-      <Button
+      <PermissionAwareButton
+        orgSlug={orgSlug}
+        permission={PERMISSIONS.ISSUE_CREATE}
         onClick={() => setIsDialogOpen(true)}
         className={cn(
           "h-12 w-12 rounded-full bg-blue-600 text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl",
           className,
         )}
         size="icon"
+        fallbackMessage="You don't have permission to create issues"
       >
         <Plus className="h-5 w-5" />
-      </Button>
+      </PermissionAwareButton>
     ) : (
-      <Button
+      <PermissionAwareButton
+        orgSlug={orgSlug}
+        permission={PERMISSIONS.ISSUE_CREATE}
         size="sm"
         onClick={() => setIsDialogOpen(true)}
-        className={cn("gap-1 text-sm", className)}
+        className={cn("gap-1 text-xs", className)}
         variant="outline"
+        fallbackMessage="You don't have permission to create issues"
       >
-        <Plus className="size-4" />
-      </Button>
+        <Plus className="size-3" />
+      </PermissionAwareButton>
     );
 
   return (

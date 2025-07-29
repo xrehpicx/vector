@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -26,6 +26,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, User, Circle, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
+import { useAccess } from "@/components/ui/permission-aware";
 
 // Type definitions matching issue selectors
 export type Status = {
@@ -107,14 +111,14 @@ export function StatusSelector({
   align = "start",
 }: StatusSelectorProps) {
   const [open, setOpen] = useState(false);
-
-  if (statuses.length === 0) return null;
+  const { viewOnly } = useAccess();
 
   const hasSelection = selectedStatus !== "";
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
 
+  // Get selected status data
   const selectedStatusObj = statuses.find((s) => s.id === selectedStatus);
-  const currentColor = selectedStatusObj?.color || "#94a3b8";
+  const currentColor = selectedStatusObj?.color || "#94a3b8"; // Default grey
   const currentName = selectedStatusObj?.name || "Status";
   const currentIconName = selectedStatusObj?.icon;
   const CurrentIcon = currentIconName
@@ -128,13 +132,17 @@ export function StatusSelector({
       className={cn("bg-muted/30 hover:bg-muted/50 h-8 gap-2", className)}
     >
       {showIcon &&
-        (CurrentIcon ? (
-          <CurrentIcon className="h-3 w-3" style={{ color: currentColor }} />
+        (selectedStatus ? (
+          CurrentIcon ? (
+            <CurrentIcon className="h-3 w-3" style={{ color: currentColor }} />
+          ) : (
+            <div
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: currentColor }}
+            />
+          )
         ) : (
-          <div
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: currentColor }}
-          />
+          <Circle className="h-3 w-3" />
         ))}
       {showLabel && currentName}
     </Button>
@@ -158,9 +166,12 @@ export function StatusSelector({
                     key={status.id}
                     value={status.name}
                     onSelect={() => {
-                      onStatusSelect(status.id);
-                      setOpen(false);
+                      if (!viewOnly) {
+                        onStatusSelect(status.id);
+                        setOpen(false);
+                      }
                     }}
+                    disabled={viewOnly}
                   >
                     <Check
                       className={cn(
@@ -170,11 +181,17 @@ export function StatusSelector({
                           : "opacity-0",
                       )}
                     />
+
                     <Icon
                       className="mr-2 h-3 w-3"
                       style={{ color: status.color || "#94a3b8" }}
                     />
                     {status.name}
+                    {viewOnly && (
+                      <span className="text-muted-foreground ml-auto text-xs">
+                        (view only)
+                      </span>
+                    )}
                   </CommandItem>
                 );
               })}

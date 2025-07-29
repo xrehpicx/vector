@@ -11,11 +11,12 @@ interface TeamsPageProps {
 }
 
 function TeamsPageInner({ orgSlug }: { orgSlug: string }) {
-  const isAdminOrOwner = useQuery(api.organizations.isOrgAdminOrOwner, {
+  const canCreateTeams = useQuery(api.permissions.has, {
     orgSlug,
+    permission: "team:create",
   });
 
-  if (isAdminOrOwner === undefined) {
+  if (canCreateTeams === undefined) {
     return (
       <PageSkeleton
         showTabs={true}
@@ -27,7 +28,7 @@ function TeamsPageInner({ orgSlug }: { orgSlug: string }) {
     );
   }
 
-  return <TeamsPageContent orgSlug={orgSlug} isAdminOrOwner={isAdminOrOwner} />;
+  return <TeamsPageContent orgSlug={orgSlug} canCreateTeams={canCreateTeams} />;
 }
 
 export default function TeamsPage({ params }: TeamsPageProps) {

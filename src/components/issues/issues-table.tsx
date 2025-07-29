@@ -34,6 +34,10 @@ import { api } from "@/convex/_generated/api";
 import { Prettify } from "@/lib/utils";
 import { FunctionReturnType } from "convex/server";
 
+// Permission system
+import { PermissionAware } from "@/components/ui/permission-aware";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
+
 // Infer issue row type directly from tRPC router output to stay in sync with DB.
 export type IssueRowData = Prettify<
   FunctionReturnType<typeof api.issues.listIssues>["issues"][number]
@@ -281,21 +285,27 @@ export function IssuesTable({
                 }`}
               >
                 {/* Priority Selector */}
-                <PrioritySelector
-                  priorities={priorities}
-                  selectedPriority={issue.priorityId || ""}
-                  onPrioritySelect={(pid) => onPriorityChange(issue.id, pid)}
-                  displayMode="labelOnly"
-                  trigger={
-                    <div className="flex-shrink-0 cursor-pointer">
-                      <PriorityIcon
-                        className="size-4"
-                        style={{ color: priorityColor }}
-                      />
-                    </div>
-                  }
-                  className="border-none bg-transparent p-0 shadow-none"
-                />
+                <PermissionAware
+                  orgSlug={orgSlug}
+                  permission={PERMISSIONS.ISSUE_PRIORITY_UPDATE}
+                  fallbackMessage="You don't have permission to change issue priority"
+                >
+                  <PrioritySelector
+                    priorities={priorities as Priority[]}
+                    selectedPriority={issue.priorityId || ""}
+                    onPrioritySelect={(pid) => onPriorityChange(issue.id, pid)}
+                    displayMode="labelOnly"
+                    trigger={
+                      <div className="flex-shrink-0 cursor-pointer">
+                        <PriorityIcon
+                          className="size-4"
+                          style={{ color: priorityColor }}
+                        />
+                      </div>
+                    }
+                    className="border-none bg-transparent p-0 shadow-none"
+                  />
+                </PermissionAware>
 
                 {/* Issue Key */}
                 <span className="text-muted-foreground flex-shrink-0 font-mono text-xs">
@@ -325,30 +335,36 @@ export function IssuesTable({
 
                 {/* Team / Project selectors */}
                 {issue.teamKey && (
-                  <TeamSelector
-                    teams={teams.map((team) => ({
-                      ...team,
-                      id: team._id,
-                    }))}
-                    selectedTeam={
-                      teams.find((t) => t.key === issue.teamKey)?._id || ""
-                    }
-                    onTeamSelect={(tid) => onTeamChange(issue.id, tid)}
-                  />
+                  <PermissionAware
+                    orgSlug={orgSlug}
+                    permission={PERMISSIONS.ISSUE_EDIT}
+                    fallbackMessage="You don't have permission to change issue team"
+                  >
+                    <TeamSelector
+                      teams={teams as any}
+                      selectedTeam={
+                        teams.find((t) => t.key === issue.teamKey)?._id || ""
+                      }
+                      onTeamSelect={(tid) => onTeamChange(issue.id, tid)}
+                    />
+                  </PermissionAware>
                 )}
 
                 {issue.projectKey && (
-                  <ProjectSelector
-                    projects={projects.map((project) => ({
-                      ...project,
-                      id: project._id,
-                    }))}
-                    selectedProject={
-                      projects.find((p) => p.key === issue.projectKey)?._id ||
-                      ""
-                    }
-                    onProjectSelect={(pid) => onProjectChange(issue.id, pid)}
-                  />
+                  <PermissionAware
+                    orgSlug={orgSlug}
+                    permission={PERMISSIONS.ISSUE_EDIT}
+                    fallbackMessage="You don't have permission to change issue project"
+                  >
+                    <ProjectSelector
+                      projects={projects as any}
+                      selectedProject={
+                        projects.find((p) => p.key === issue.projectKey)?._id ||
+                        ""
+                      }
+                      onProjectSelect={(pid) => onProjectChange(issue.id, pid)}
+                    />
+                  </PermissionAware>
                 )}
 
                 {/* Last Updated */}

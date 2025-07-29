@@ -14,7 +14,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useMutation } from "convex/react";
 import { api } from "@/lib/convex";
-import { PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
+import { ALL_PERMISSIONS_WITH_GROUP } from "@/lib/permission-groups";
 
 interface CreateRoleDialogProps {
   orgSlug: string;
@@ -22,113 +23,15 @@ interface CreateRoleDialogProps {
   onSuccess: () => void;
 }
 
-const PERMISSION_CATEGORIES = [
-  {
-    name: "Organization",
-    description: "Manage organization settings and members",
-    permissions: [
-      {
-        id: PERMISSIONS.ORG_MANAGE,
-        label: "Manage Organization",
-        description: "Edit org settings and branding",
-      },
-      {
-        id: PERMISSIONS.ORG_INVITE,
-        label: "Invite Members",
-        description: "Send organization invitations",
-      },
-    ],
-  },
-  {
-    name: "Roles & Permissions",
-    description: "Manage user roles and permissions",
-    permissions: [
-      {
-        id: PERMISSIONS.ROLE_CREATE,
-        label: "Create Roles",
-        description: "Create new custom roles",
-      },
-      {
-        id: PERMISSIONS.ROLE_UPDATE,
-        label: "Update Roles",
-        description: "Edit existing roles",
-      },
-      {
-        id: PERMISSIONS.ROLE_DELETE,
-        label: "Delete Roles",
-        description: "Remove custom roles",
-      },
-      {
-        id: PERMISSIONS.ROLE_ASSIGN,
-        label: "Assign Roles",
-        description: "Assign roles to users",
-      },
-    ],
-  },
-  {
-    name: "Projects",
-    description: "Manage project creation and settings",
-    permissions: [
-      {
-        id: PERMISSIONS.PROJECT_CREATE,
-        label: "Create Projects",
-        description: "Create new projects",
-      },
-      {
-        id: PERMISSIONS.PROJECT_UPDATE,
-        label: "Update Projects",
-        description: "Edit project details",
-      },
-      {
-        id: PERMISSIONS.PROJECT_DELETE,
-        label: "Delete Projects",
-        description: "Remove projects",
-      },
-    ],
-  },
-  {
-    name: "Teams",
-    description: "Manage team creation and settings",
-    permissions: [
-      {
-        id: PERMISSIONS.TEAM_CREATE,
-        label: "Create Teams",
-        description: "Create new teams",
-      },
-      {
-        id: PERMISSIONS.TEAM_UPDATE,
-        label: "Update Teams",
-        description: "Edit team details",
-      },
-      {
-        id: PERMISSIONS.TEAM_DELETE,
-        label: "Delete Teams",
-        description: "Remove teams",
-      },
-    ],
-  },
-  {
-    name: "Issues",
-    description: "Manage issue creation and updates",
-    permissions: [
-      {
-        id: PERMISSIONS.ISSUE_CREATE,
-        label: "Create Issues",
-        description: "Create new issues",
-      },
-      {
-        id: PERMISSIONS.ISSUE_UPDATE,
-        label: "Update Issues",
-        description: "Edit issue details",
-      },
-      {
-        id: PERMISSIONS.ISSUE_DELETE,
-        label: "Delete Issues",
-        description: "Remove issues",
-      },
-    ],
-  },
-];
+const PERMISSION_CATEGORIES = ALL_PERMISSIONS_WITH_GROUP.map((group) => ({
+  name: group.group,
+  description: group.permissions.map((p) => p.label).join(", "),
+  permissions: group.permissions.map((p) => ({
+    id: p.id,
+    label: p.label,
+    description: ``, // You can add descriptions here if needed
+  })),
+}));
 
 export function CreateRoleDialog({
   orgSlug,

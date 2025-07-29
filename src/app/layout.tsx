@@ -5,6 +5,8 @@ import "./globals.css";
 import { TopLoaderProvider } from "@/providers/top-loader-provider";
 import { ConvexAuthProvider } from "@/providers/convex-auth-provider";
 import { ConvexProviderWrapper } from "@/providers/convex-provider";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { Toaster } from "@/components/ui/sonner";
 
 const urbanist = Urbanist({
   variable: "--font-title",
@@ -34,7 +36,12 @@ export default function RootLayout({
           className={`${urbanist.variable} ${poppins.variable} antialiased`}
         >
           <TopLoaderProvider />
-          <ConvexAuthProvider>{children}</ConvexAuthProvider>
+          <ErrorBoundary>
+            <ConvexAuthProvider>
+              {children}
+              <Toaster />
+            </ConvexAuthProvider>
+          </ErrorBoundary>
         </body>
       </html>
     </ConvexAuthNextjsServerProvider>

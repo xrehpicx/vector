@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/command";
 import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
+
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const ROLE_OPTIONS = [
@@ -47,7 +48,7 @@ export function RoleSelector({
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const mutation = useMutation(api.organizations.updateRole);
+  const mutation = useMutation(api.organizations.updateMemberRole);
 
   const handleSelect = async (role: RoleValue) => {
     if (role === currentRole) return;

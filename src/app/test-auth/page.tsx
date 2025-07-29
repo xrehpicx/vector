@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { extractAuthErrorMessage } from "@/lib/auth-error-handler";
 
 export default function TestAuthPage() {
   return (
@@ -27,17 +29,29 @@ export default function TestAuthPage() {
 
 function SignInForm() {
   const { signIn } = useAuthActions();
+  const [error, setError] = useState<string | null>(null);
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    setError(null);
 
-    await signIn("password", formData);
+    try {
+      const formData = new FormData(e.currentTarget);
+      await signIn("password", formData);
+    } catch (error) {
+      console.error("Sign in error:", error);
+      setError(extractAuthErrorMessage(error));
+    }
   };
 
   return (
     <div className="max-w-md">
       <h2 className="mb-4 text-xl font-semibold">Sign In</h2>
+      {error && (
+        <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
       <form onSubmit={handleSignIn} className="space-y-4">
         <div>
           <label htmlFor="email" className="block text-sm font-medium">
@@ -110,7 +124,8 @@ function UserProfile() {
           <strong>Username:</strong> {user.username || "Not set"}
         </p>
         <p>
-          <strong>Email Verified:</strong> {user.emailVerified ? "Yes" : "No"}
+          <strong>Email Verified:</strong>{" "}
+          {user.emailVerificationTime ? "Yes" : "No"}
         </p>
       </div>
 

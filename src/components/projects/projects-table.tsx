@@ -18,6 +18,10 @@ import { ProjectLeadSelector } from "./project-lead-selector";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 import { TeamSelector } from "@/components/teams/team-selector";
 
+// Permission system
+import { PermissionAware } from "@/components/ui/permission-aware";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
+
 // Type for project data with all the rich details
 export interface ProjectRowData {
   id: string;
@@ -145,27 +149,7 @@ export function ProjectsTable({
                 )}
               </Link>
 
-              {/* Status Selector */}
-              <StatusSelector
-                statuses={statuses}
-                selectedStatus={project.statusId || ""}
-                onStatusSelect={(sid) => onStatusChange(project.id, sid)}
-                displayMode="iconWhenUnselected"
-                className="border-none bg-transparent p-0 shadow-none"
-              />
-
-              {/* Team Selector */}
-              <div className="flex-shrink-0">
-                <TeamSelector
-                  teams={teams}
-                  selectedTeam={project.teamId || ""}
-                  onTeamSelect={(tid) => onTeamChange(project.id, tid)}
-                  displayMode="iconWhenUnselected"
-                  className="border-none bg-transparent p-0 shadow-none"
-                />
-              </div>
-
-              {/* Date Info */}
+              {/* Date Info - Moved to be first on the right section */}
               <div className="text-muted-foreground flex flex-col text-xs">
                 {project.startDate && (
                   <span>
@@ -180,17 +164,55 @@ export function ProjectsTable({
                 )}
               </div>
 
-              {/* Lead Selector */}
-              <ProjectLeadSelector
+              {/* Status Selector */}
+              <PermissionAware
                 orgSlug={orgSlug}
-                projectKey={project.key}
-                selectedLead={project.leadId || ""}
-                onLeadSelect={(leadId: string) =>
-                  onLeadChange(project.id, leadId)
-                }
-                displayMode="iconWhenUnselected"
-                className="border-none bg-transparent p-0 shadow-none"
-              />
+                permission={PERMISSIONS.PROJECT_EDIT}
+                fallbackMessage="You don't have permission to change project status"
+              >
+                <StatusSelector
+                  statuses={statuses}
+                  selectedStatus={project.statusId || ""}
+                  onStatusSelect={(sid) => onStatusChange(project.id, sid)}
+                  displayMode="iconWhenUnselected"
+                  className="border-none bg-transparent p-0 shadow-none"
+                />
+              </PermissionAware>
+
+              {/* Team Selector */}
+              <PermissionAware
+                orgSlug={orgSlug}
+                permission={PERMISSIONS.PROJECT_EDIT}
+                fallbackMessage="You don't have permission to change project team"
+              >
+                <div className="flex-shrink-0">
+                  <TeamSelector
+                    teams={teams as any}
+                    selectedTeam={project.teamId || ""}
+                    onTeamSelect={(tid) => onTeamChange(project.id, tid)}
+                    displayMode="iconWhenUnselected"
+                    className="border-none bg-transparent p-0 shadow-none"
+                  />
+                </div>
+              </PermissionAware>
+
+              {/* Lead Selector */}
+              <PermissionAware
+                orgSlug={orgSlug}
+                permission={PERMISSIONS.PROJECT_LEAD_UPDATE}
+                fallbackMessage="You don't have permission to change project lead"
+              >
+                <ProjectLeadSelector
+                  orgSlug={orgSlug}
+                  projectKey={project.key}
+                  selectedLead={project.leadId || ""}
+                  onLeadSelect={(leadId: string) =>
+                    onLeadChange(project.id, leadId)
+                  }
+                  displayMode="iconOnly"
+                  className="border-none bg-transparent p-0 shadow-none"
+                />
+              </PermissionAware>
 
               {/* Actions */}
               <div className="flex-shrink-0">

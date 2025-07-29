@@ -15,12 +15,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFormSubmission } from "@/hooks/use-error-handling";
 
 const profileFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
-  displayUsername: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -38,7 +36,6 @@ export function ProfileForm() {
     resolver: zodResolver(profileFormSchema),
     values: {
       name: user?.name ?? "",
-      displayUsername: user?.username ?? "",
     },
     mode: "onChange",
   });
@@ -52,50 +49,41 @@ export function ProfileForm() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Profile</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Full Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Your full name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+    <div className="space-y-6">
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">
+                      Full Name
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder="Your full name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-muted-foreground text-xs">
+                      This is how your name will appear to other users
+                    </p>
+                  </FormItem>
+                )}
+              />
+              {error && (
+                <div className="text-destructive text-sm">
+                  {error.userMessage}
+                </div>
               )}
-            />
-            <FormField
-              control={form.control}
-              name="displayUsername"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Display Username</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Your display username" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            {error && (
-              <div className="text-destructive text-sm">
-                {error.userMessage}
-              </div>
-            )}
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Updating..." : "Update Profile"}
-            </Button>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Updating..." : "Update Profile"}
+              </Button>
+            </form>
+          </Form>
+        </div>
+      </div>
+    </div>
   );
 }

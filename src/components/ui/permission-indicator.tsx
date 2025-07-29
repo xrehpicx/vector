@@ -1,11 +1,12 @@
 "use client";
 
 import { Badge } from "./badge";
-import { usePermission } from "@/hooks/use-permissions";
-import type { Permission } from "@/lib/permissions";
+import { useScopedPermission } from "@/hooks/use-permissions";
+import type { PermissionScope } from "@/hooks/use-permissions";
+import type { Permission } from "@/convex/_shared/permissions";
 
 interface PermissionIndicatorProps {
-  orgSlug: string;
+  scope: PermissionScope;
   permission: Permission;
   label?: string;
 }
@@ -15,11 +16,11 @@ interface PermissionIndicatorProps {
  * Useful for debugging or admin interfaces.
  */
 export function PermissionIndicator({
-  orgSlug,
+  scope,
   permission,
   label,
 }: PermissionIndicatorProps) {
-  const { hasPermission, isLoading } = usePermission(orgSlug, permission);
+  const { hasPermission, isLoading } = useScopedPermission(scope, permission);
 
   if (isLoading) {
     return (

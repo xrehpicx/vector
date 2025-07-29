@@ -1,7 +1,16 @@
 import { query, mutation } from "./_generated/server";
-import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import { v, ConvexError } from "convex/values";
+import type { Id, Doc } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requirePermission, PERMISSIONS } from "./permissions";
+import {
+  canViewIssue,
+  canEditIssue,
+  canDeleteIssue,
+  canAssignIssue,
+  canUpdateAssignmentState,
+  canUpdateIssueRelations,
+} from "./access";
 
 /**
  * Get issue by organization slug and issue key
@@ -12,11 +21,6 @@ export const getByKey = query({
     issueKey: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
     // Find organization
     const org = await ctx.db
       .query("organizations")
@@ -24,19 +28,7 @@ export const getByKey = query({
       .first();
 
     if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+      throw new ConvexError("ORGANIZATION_NOT_FOUND");
     }
 
     // Find issue by key within the organization
@@ -47,7 +39,12 @@ export const getByKey = query({
       .first();
 
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
+    }
+
+    // Check if user can view this issue based on visibility
+    if (!(await canViewIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Get related data
@@ -94,12 +91,19 @@ export const create = mutation({
       stateId: v.optional(v.id("issueStates")),
       priorityId: v.optional(v.id("issuePriorities")),
       assigneeIds: v.optional(v.array(v.id("users"))),
+      visibility: v.optional(
+        v.union(
+          v.literal("private"),
+          v.literal("organization"),
+          v.literal("public"),
+        ),
+      ),
     }),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new Error("Not authenticated");
+      throw new ConvexError("UNAUTHORIZED");
     }
 
     // Find organization
@@ -109,20 +113,11 @@ export const create = mutation({
       .first();
 
     if (!org) {
-      throw new Error("Organization not found");
+      throw new ConvexError("ORGANIZATION_NOT_FOUND");
     }
 
-    // Verify user is a member
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
-    }
+    // Check if user has permission to create issues
+    await requirePermission(ctx, org._id, PERMISSIONS.ISSUE_CREATE);
 
     // Handle project if provided
     let project = null;
@@ -133,7 +128,7 @@ export const create = mutation({
       // Verify project exists and belongs to org
       project = await ctx.db.get(args.data.projectId);
       if (!project || project.organizationId !== org._id) {
-        throw new Error("Project not found or not in this organization");
+        throw new ConvexError("PROJECT_NOT_FOUND");
       }
 
       // Generate issue key - get next number for the project
@@ -149,15 +144,14 @@ export const create = mutation({
       const existingIssues = await ctx.db
         .query("issues")
         .withIndex("by_organization", (q) => q.eq("organizationId", org._id))
-        .filter((q) => q.eq(q.field("projectId"), undefined))
         .collect();
 
       nextNumber = existingIssues.length + 1;
       issueKey = `${org.slug.toUpperCase()}-${nextNumber}`;
     }
 
-    // Verify assignees are members of the organization if provided
-    if (args.data.assigneeIds) {
+    // Validate assignees if provided
+    if (args.data.assigneeIds && args.data.assigneeIds.length > 0) {
       for (const assigneeId of args.data.assigneeIds) {
         const assigneeMembership = await ctx.db
           .query("members")
@@ -167,20 +161,20 @@ export const create = mutation({
           .first();
 
         if (!assigneeMembership) {
-          throw new Error("All assignees must be members of the organization");
+          throw new ConvexError("INVALID_ASSIGNEE");
         }
       }
     }
 
     // Validate input
     if (!args.data.title.trim()) {
-      throw new Error("Issue title is required");
+      throw new ConvexError("INVALID_INPUT");
     }
     if (args.data.title.length > 200) {
-      throw new Error("Issue title must be 200 characters or less");
+      throw new ConvexError("INVALID_INPUT");
     }
     if (args.data.description && args.data.description.length > 5000) {
-      throw new Error("Issue description must be 5000 characters or less");
+      throw new ConvexError("INVALID_INPUT");
     }
 
     // Create issue
@@ -194,6 +188,8 @@ export const create = mutation({
       priorityId: args.data.priorityId,
       reporterId: userId,
       teamId: project?.teamId, // Use project's team if available
+      visibility: args.data.visibility || "organization", // Default to organization visibility
+      createdBy: userId,
     });
 
     // Create assignee relationships if provided
@@ -224,8 +220,7 @@ export const create = mutation({
  */
 export const update = mutation({
   args: {
-    orgSlug: v.string(),
-    issueKey: v.string(),
+    issueId: v.id("issues"),
     data: v.object({
       title: v.optional(v.string()),
       description: v.optional(v.string()),
@@ -233,63 +228,17 @@ export const update = mutation({
     }),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Find organization and issue
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const issue = await ctx.db
-      .query("issues")
-      .withIndex("by_key", (q) => q.eq("key", args.issueKey))
-      .filter((q) => q.eq(q.field("organizationId"), org._id))
-      .first();
-
+    const issue = await ctx.db.get(args.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    // Verify user has permission
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+    if (!(await canEditIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Update issue - only update provided fields
-    const updateData: Partial<{
-      title: string;
-      description: string;
-      priorityId: Id<"issuePriorities">;
-    }> = {};
-
-    if (args.data.title !== undefined) {
-      updateData.title = args.data.title;
-    }
-    if (args.data.description !== undefined) {
-      updateData.description = args.data.description;
-    }
-    if (args.data.priorityId !== undefined) {
-      updateData.priorityId = args.data.priorityId;
-    }
-
-    if (Object.keys(updateData).length > 0) {
-      await ctx.db.patch(issue._id, updateData);
-    }
+    await ctx.db.patch(issue._id, { ...args.data });
 
     return { success: true };
   },
@@ -309,7 +258,7 @@ export const list = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new Error("Not authenticated");
+      throw new ConvexError("UNAUTHORIZED");
     }
 
     // Find organization
@@ -319,7 +268,7 @@ export const list = query({
       .first();
 
     if (!org) {
-      throw new Error("Organization not found");
+      throw new ConvexError("ORGANIZATION_NOT_FOUND");
     }
 
     // Verify user is a member
@@ -331,7 +280,7 @@ export const list = query({
       .first();
 
     if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+      throw new ConvexError("ACCESS_DENIED");
     }
 
     let issues;
@@ -347,7 +296,7 @@ export const list = query({
         .first();
 
       if (!project) {
-        throw new Error("Project not found");
+        throw new ConvexError("PROJECT_NOT_FOUND");
       }
 
       // Get issues for specific project
@@ -386,14 +335,23 @@ export const list = query({
       issues = issues.slice(0, args.limit);
     }
 
+    // Filter issues based on visibility permissions
+    const issuePromises = issues.map(async (issue) => {
+      const canView = await canViewIssue(ctx, issue);
+      return canView ? issue : null;
+    });
+    const visibleIssues = (await Promise.all(issuePromises)).filter(
+      (issue): issue is Doc<"issues"> => issue !== null,
+    );
+
     // Batch database calls for better performance
-    const projectIds = issues
+    const projectIds = visibleIssues
       .map((i) => i.projectId)
       .filter(Boolean) as Id<"projects">[];
-    const priorityIds = issues
+    const priorityIds = visibleIssues
       .map((i) => i.priorityId)
       .filter(Boolean) as Id<"issuePriorities">[];
-    const reporterIds = issues
+    const reporterIds = visibleIssues
       .map((i) => i.reporterId)
       .filter(Boolean) as Id<"users">[];
 
@@ -422,7 +380,7 @@ export const list = query({
 
     // Get all assignees for all issues - need to query individually since index doesn't support inArray
     const allAssignments = await Promise.all(
-      issues.map((issue) =>
+      visibleIssues.map((issue) =>
         ctx.db
           .query("issueAssignees")
           .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
@@ -451,7 +409,7 @@ export const list = query({
     }
 
     // Combine results
-    const issuesWithDetails = issues.map((issue) => {
+    const issuesWithDetails = visibleIssues.map((issue) => {
       const project = issue.projectId ? projectMap.get(issue.projectId) : null;
       const priority = issue.priorityId
         ? priorityMap.get(issue.priorityId)
@@ -484,172 +442,27 @@ export const list = query({
 });
 
 /**
- * Assign users to issue
- */
-export const assign = mutation({
-  args: {
-    orgSlug: v.string(),
-    issueKey: v.string(),
-    assigneeIds: v.array(v.id("users")),
-    replace: v.optional(v.boolean()), // if true, replace existing assignees; if false, add to existing
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Find organization and issue
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const issue = await ctx.db
-      .query("issues")
-      .withIndex("by_key", (q) => q.eq("key", args.issueKey))
-      .filter((q) => q.eq(q.field("organizationId"), org._id))
-      .first();
-
-    if (!issue) {
-      throw new Error("Issue not found");
-    }
-
-    // Verify user has permission
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
-    }
-
-    // Verify all assignees are members of the organization
-    for (const assigneeId of args.assigneeIds) {
-      const assigneeMembership = await ctx.db
-        .query("members")
-        .withIndex("by_org_user", (q) =>
-          q.eq("organizationId", org._id).eq("userId", assigneeId),
-        )
-        .first();
-
-      if (!assigneeMembership) {
-        throw new Error("All assignees must be members of the organization");
-      }
-    }
-
-    // If replace mode, remove existing assignees first
-    if (args.replace) {
-      const existingAssignees = await ctx.db
-        .query("issueAssignees")
-        .withIndex("by_issue", (q) => q.eq("issueId", issue._id))
-        .collect();
-
-      for (const assignee of existingAssignees) {
-        await ctx.db.delete(assignee._id);
-      }
-    }
-
-    // Add new assignees (skip duplicates if not in replace mode)
-    for (const assigneeId of args.assigneeIds) {
-      if (!args.replace) {
-        // Check if already assigned
-        const existingAssignment = await ctx.db
-          .query("issueAssignees")
-          .withIndex("by_issue_assignee", (q) =>
-            q.eq("issueId", issue._id).eq("assigneeId", assigneeId),
-          )
-          .first();
-
-        if (existingAssignment) {
-          continue; // Skip if already assigned
-        }
-      }
-
-      const assignments = await ctx.db
-        .query("issueAssignees")
-        .withIndex("by_assignee", (q) => q.eq("assigneeId", assigneeId))
-        .collect();
-
-      // Get default state for the organization if no existing assignment state
-      let defaultStateId = assignments[0]?.stateId;
-      if (!defaultStateId) {
-        const defaultState = await ctx.db
-          .query("issueStates")
-          .withIndex("by_organization", (q) => q.eq("organizationId", org._id))
-          .order("asc")
-          .first();
-
-        if (!defaultState) {
-          throw new Error("No issue states found for organization");
-        }
-
-        defaultStateId = defaultState._id;
-      }
-
-      await ctx.db.insert("issueAssignees", {
-        issueId: issue._id,
-        assigneeId,
-        stateId: defaultStateId,
-      });
-    }
-
-    return { success: true };
-  },
-});
-
-/**
  * Add comment to issue
  */
 export const addComment = mutation({
   args: {
-    orgSlug: v.string(),
-    issueKey: v.string(),
+    issueId: v.id("issues"),
     body: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new Error("Not authenticated");
+      throw new ConvexError("UNAUTHORIZED");
     }
 
-    // Find organization and issue
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const issue = await ctx.db
-      .query("issues")
-      .withIndex("by_key", (q) => q.eq("key", args.issueKey))
-      .filter((q) => q.eq(q.field("organizationId"), org._id))
-      .first();
-
+    const issue = await ctx.db.get(args.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    // Verify user has permission
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+    // Verify user can view issue to comment
+    if (!(await canViewIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Create comment
@@ -669,45 +482,17 @@ export const addComment = mutation({
  */
 export const listComments = query({
   args: {
-    orgSlug: v.string(),
-    issueKey: v.string(),
+    issueId: v.id("issues"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Find organization and issue
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const issue = await ctx.db
-      .query("issues")
-      .withIndex("by_key", (q) => q.eq("key", args.issueKey))
-      .filter((q) => q.eq(q.field("organizationId"), org._id))
-      .first();
-
+    const issue = await ctx.db.get(args.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    // Verify user has permission
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+    // Check if user can view this issue
+    if (!(await canViewIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Get comments
@@ -739,37 +524,14 @@ export const deleteIssue = mutation({
     issueId: v.id("issues"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
     const issue = await ctx.db.get(args.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    const org = await ctx.db.get(issue.organizationId);
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    // Verify user has permission (admin/owner or issue creator)
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    const canDelete =
-      membership &&
-      (membership.role === "owner" ||
-        membership.role === "admin" ||
-        issue.reporterId === userId);
-
-    if (!canDelete) {
-      throw new Error("Insufficient permissions to delete issue");
+    // Check if user can delete this issue
+    if (!(await canDeleteIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Delete related data first
@@ -808,32 +570,15 @@ export const getAssignments = query({
     issueId: v.id("issues"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Get the issue to verify access
+    // Get the issue to check permissions
     const issue = await ctx.db.get(args.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    // Verify user has access to the organization
-    const organization = await ctx.db.get(issue.organizationId);
-    if (!organization) {
-      throw new Error("Organization not found");
-    }
-
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", organization._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied");
+    // Check if user can view this issue
+    if (!(await canViewIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Get all assignments for this issue
@@ -878,32 +623,15 @@ export const addAssignee = mutation({
     stateId: v.optional(v.id("issueStates")),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Get the issue to verify access
+    // Get the issue to check permissions
     const issue = await ctx.db.get(args.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    // Verify user has access to the organization
-    const organization = await ctx.db.get(issue.organizationId);
-    if (!organization) {
-      throw new Error("Organization not found");
-    }
-
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", organization._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied");
+    // Check if user can assign users to this issue
+    if (!(await canAssignIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Check if already assigned
@@ -915,7 +643,7 @@ export const addAssignee = mutation({
       .first();
 
     if (existingAssignment) {
-      throw new Error("User is already assigned to this issue");
+      throw new ConvexError("USER_ALREADY_ASSIGNED");
     }
 
     // Get default state if not provided
@@ -924,13 +652,13 @@ export const addAssignee = mutation({
       const defaultState = await ctx.db
         .query("issueStates")
         .withIndex("by_organization", (q) =>
-          q.eq("organizationId", organization._id),
+          q.eq("organizationId", issue.organizationId),
         )
         .order("asc")
         .first();
 
       if (!defaultState) {
-        throw new Error("No issue states found for organization");
+        throw new ConvexError("NO_ISSUE_STATES_FOUND");
       }
 
       stateId = defaultState._id;
@@ -956,38 +684,21 @@ export const changeAssignmentState = mutation({
     stateId: v.id("issueStates"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
     // Get the assignment
     const assignment = await ctx.db.get(args.assignmentId);
-    if (!assignment) {
-      throw new Error("Assignment not found");
+    if (!assignment || !assignment.assigneeId) {
+      throw new ConvexError("ASSIGNMENT_NOT_FOUND");
     }
 
-    // Get the issue to verify access
+    // Get the issue to check permissions
     const issue = await ctx.db.get(assignment.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    // Verify user has access to the organization
-    const organization = await ctx.db.get(issue.organizationId);
-    if (!organization) {
-      throw new Error("Organization not found");
-    }
-
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", organization._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied");
+    // Check if user can update this assignment state
+    if (!(await canUpdateAssignmentState(ctx, issue, assignment.assigneeId))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Update assignment state
@@ -1008,38 +719,21 @@ export const updateAssignmentAssignee = mutation({
     assigneeId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
     // Get the assignment
     const assignment = await ctx.db.get(args.assignmentId);
     if (!assignment) {
-      throw new Error("Assignment not found");
+      throw new ConvexError("ASSIGNMENT_NOT_FOUND");
     }
 
-    // Get the issue to verify access
+    // Get the issue to check permissions
     const issue = await ctx.db.get(assignment.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    // Verify user has access to the organization
-    const organization = await ctx.db.get(issue.organizationId);
-    if (!organization) {
-      throw new Error("Organization not found");
-    }
-
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", organization._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied");
+    // Check if user can assign users to this issue
+    if (!(await canAssignIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Check if the new assignee is already assigned to this issue
@@ -1051,7 +745,7 @@ export const updateAssignmentAssignee = mutation({
       .first();
 
     if (existingAssignment && existingAssignment._id !== args.assignmentId) {
-      throw new Error("User is already assigned to this issue");
+      throw new ConvexError("USER_ALREADY_ASSIGNED");
     }
 
     // Update assignment assignee
@@ -1071,38 +765,20 @@ export const deleteAssignment = mutation({
     assignmentId: v.id("issueAssignees"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Get the assignment
     const assignment = await ctx.db.get(args.assignmentId);
     if (!assignment) {
-      throw new Error("Assignment not found");
+      throw new ConvexError("ASSIGNMENT_NOT_FOUND");
     }
 
-    // Get the issue to verify access
+    // Get the issue to check permissions
     const issue = await ctx.db.get(assignment.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
     }
 
-    // Verify user has access to the organization
-    const organization = await ctx.db.get(issue.organizationId);
-    if (!organization) {
-      throw new Error("Organization not found");
-    }
-
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", organization._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied");
+    // Check if user can assign users to this issue
+    if (!(await canAssignIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Delete assignment
@@ -1119,7 +795,18 @@ export const changePriority = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    if (userId === null) {
+      throw new ConvexError("UNAUTHORIZED");
+    }
+
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) {
+      throw new ConvexError("ISSUE_NOT_FOUND");
+    }
+
+    if (!(await canEditIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
+    }
 
     await ctx.db.patch(args.issueId, { priorityId: args.priorityId });
 
@@ -1138,13 +825,13 @@ export const updateAssignees = mutation({
     assigneeIds: v.array(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
-
-    // Get the issue to find the organization
     const issue = await ctx.db.get(args.issueId);
     if (!issue) {
-      throw new Error("Issue not found");
+      throw new ConvexError("ISSUE_NOT_FOUND");
+    }
+
+    if (!(await canAssignIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Get existing assignments
@@ -1170,7 +857,7 @@ export const updateAssignees = mutation({
         .first();
 
       if (!defaultState) {
-        throw new Error("No issue states found for organization");
+        throw new ConvexError("NO_ISSUE_STATES_FOUND");
       }
 
       stateId = defaultState._id;
@@ -1198,6 +885,15 @@ export const changeTeam = mutation({
     teamId: v.union(v.id("teams"), v.null()),
   },
   handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) {
+      throw new ConvexError("ISSUE_NOT_FOUND");
+    }
+
+    if (!(await canUpdateIssueRelations(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
+    }
+
     await ctx.db.patch(args.issueId, { teamId: args.teamId ?? undefined });
   },
 });
@@ -1208,6 +904,15 @@ export const changeProject = mutation({
     projectId: v.union(v.id("projects"), v.null()),
   },
   handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) {
+      throw new ConvexError("ISSUE_NOT_FOUND");
+    }
+
+    if (!(await canUpdateIssueRelations(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
+    }
+
     await ctx.db.patch(args.issueId, {
       projectId: args.projectId ?? undefined,
     });
@@ -1221,7 +926,18 @@ export const updateTitle = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    if (userId === null) {
+      throw new ConvexError("UNAUTHORIZED");
+    }
+
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) {
+      throw new ConvexError("ISSUE_NOT_FOUND");
+    }
+
+    if (!(await canEditIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
+    }
 
     await ctx.db.patch(args.issueId, { title: args.title });
 
@@ -1241,7 +957,18 @@ export const updateDescription = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    if (userId === null) {
+      throw new ConvexError("UNAUTHORIZED");
+    }
+
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) {
+      throw new ConvexError("ISSUE_NOT_FOUND");
+    }
+
+    if (!(await canEditIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
+    }
 
     await ctx.db.patch(args.issueId, {
       description: args.description ?? undefined,
@@ -1262,7 +989,18 @@ export const updateEstimatedTimes = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    if (userId === null) {
+      throw new ConvexError("UNAUTHORIZED");
+    }
+
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) {
+      throw new ConvexError("ISSUE_NOT_FOUND");
+    }
+
+    if (!(await canEditIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
+    }
 
     await ctx.db.patch(args.issueId, {
       estimatedTimes: args.estimatedTimes ?? undefined,
@@ -1285,8 +1023,8 @@ export const listIssues = query({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
+    if (userId === null) {
+      throw new ConvexError("UNAUTHORIZED");
     }
 
     const org = await ctx.db
@@ -1295,18 +1033,7 @@ export const listIssues = query({
       .first();
 
     if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied");
+      throw new ConvexError("ORGANIZATION_NOT_FOUND");
     }
 
     let issuesQuery = ctx.db
@@ -1341,10 +1068,19 @@ export const listIssues = query({
       }
     }
 
-    const issues = await issuesQuery.order("desc").collect();
+    const allIssues = await issuesQuery.order("desc").collect();
+
+    // Filter issues based on visibility permissions
+    const visibleIssues = [];
+    for (const issue of allIssues) {
+      const canView = await canViewIssue(ctx, issue);
+      if (canView) {
+        visibleIssues.push(issue);
+      }
+    }
 
     const issuesWithDetails = await Promise.all(
-      issues.map(async (issue) => {
+      visibleIssues.map(async (issue) => {
         const priority = issue.priorityId
           ? await ctx.db.get(issue.priorityId)
           : null;
@@ -1452,5 +1188,30 @@ export const listIssues = query({
       total,
       counts,
     };
+  },
+});
+
+export const changeVisibility = mutation({
+  args: {
+    issueId: v.id("issues"),
+    visibility: v.union(
+      v.literal("private"),
+      v.literal("organization"),
+      v.literal("public"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue) throw new ConvexError("ISSUE_NOT_FOUND");
+
+    if (!(await canEditIssue(ctx, issue))) {
+      throw new ConvexError("FORBIDDEN");
+    }
+
+    await ctx.db.patch(args.issueId, {
+      visibility: args.visibility,
+    });
+
+    return { success: true };
   },
 });

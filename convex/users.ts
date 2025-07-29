@@ -1,5 +1,5 @@
 import { query, mutation, action } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { createAccount, getAuthUserId } from "@convex-dev/auth/server";
 import { auth } from "./auth";
 import { api } from "./_generated/api";
@@ -30,7 +30,7 @@ export const updateProfile = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new Error("Not authenticated");
+      throw new ConvexError("UNAUTHORIZED");
     }
 
     await ctx.db.patch(userId, {
@@ -83,7 +83,7 @@ export const bootstrapAdmin = action({
     const existingAdmin = await ctx.runQuery(api.users.adminExists);
 
     if (existingAdmin) {
-      throw new Error("An admin account already exists");
+      throw new ConvexError("ADMIN_ALREADY_EXISTS");
     }
 
     // Create the admin user using Convex Auth's createAccount
@@ -115,7 +115,7 @@ export const getUserActiveOrganization = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new Error("Not authenticated");
+      throw new ConvexError("UNAUTHORIZED");
     }
 
     // Try session active org first
@@ -161,7 +161,7 @@ export const searchUsers = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new Error("Not authenticated");
+      throw new ConvexError("UNAUTHORIZED");
     }
 
     const limit = args.limit ?? 10;

@@ -23,6 +23,14 @@ export function UserMenu() {
     return null;
   }
 
+  const handleProfileClick = () => {
+    window.location.href = "/settings/profile";
+  };
+
+  const handleSettingsClick = () => {
+    window.location.href = "/settings";
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -41,11 +49,11 @@ export function UserMenu() {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={handleProfileClick}>
           <User className="mr-2 size-4" />
           <span>Profile</span>
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={handleSettingsClick}>
           <Settings className="mr-2 size-4" />
           <span>Settings</span>
         </DropdownMenuItem>

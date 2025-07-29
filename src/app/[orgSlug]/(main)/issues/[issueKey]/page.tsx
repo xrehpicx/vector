@@ -22,6 +22,16 @@ import {
   PrioritySelector,
 } from "@/components/issues/issue-selectors";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
+import {
+  VisibilitySelector,
+  type VisibilityState,
+} from "@/components/ui/visibility-selector";
+import {
+  usePermissionCheck,
+  PermissionAwareWrapper,
+  PermissionAwareSelector,
+} from "@/components/ui/permission-aware";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
 
 interface IssueViewPageProps {
   params: Promise<{ orgSlug: string; issueKey: string }>;
@@ -160,6 +170,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const changeAssignmentStateMutation = useMutation(
     api.issues.changeAssignmentState,
   );
+  const changeVisibilityMutation = useMutation(api.issues.changeVisibility);
 
   const assignments = useQuery(
     api.issues.getAssignments,
@@ -168,6 +179,38 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
 
   const currentUserAssignment = assignments?.find(
     (assignment) => assignment.assigneeId === user?._id,
+  );
+
+  // Permission check for state updates
+  const { isAllowed: canUpdateState } = usePermissionCheck(
+    resolvedParams?.orgSlug || "",
+    PERMISSIONS.ISSUE_STATE_UPDATE,
+  );
+
+  // Permission checks for issue editing
+  const { isAllowed: canEditIssue } = usePermissionCheck(
+    resolvedParams?.orgSlug || "",
+    PERMISSIONS.ISSUE_EDIT,
+  );
+
+  const { isAllowed: canEditPriority } = usePermissionCheck(
+    resolvedParams?.orgSlug || "",
+    PERMISSIONS.ISSUE_PRIORITY_UPDATE,
+  );
+
+  const { isAllowed: canEditVisibility } = usePermissionCheck(
+    resolvedParams?.orgSlug || "",
+    PERMISSIONS.ISSUE_EDIT,
+  );
+
+  const { isAllowed: canChangeTeam } = usePermissionCheck(
+    resolvedParams?.orgSlug || "",
+    PERMISSIONS.ISSUE_RELATION_UPDATE,
+  );
+
+  const { isAllowed: canChangeProject } = usePermissionCheck(
+    resolvedParams?.orgSlug || "",
+    PERMISSIONS.ISSUE_RELATION_UPDATE,
   );
 
   useEffect(() => {
@@ -231,7 +274,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
       await updateEstimatesMutation({
         issueId: issue._id,
         estimatedTimes:
-          Object.keys(estimatesValue).length > 0 ? estimatesValue : null,
+          Object.keys(estimatesValue).length > 0 ? estimatesValue : undefined,
       });
       setEditingEstimates({});
     } finally {
@@ -264,6 +307,14 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     });
   };
 
+  const handleVisibilityChange = async (visibility: VisibilityState) => {
+    if (!issue) return;
+    await changeVisibilityMutation({
+      issueId: issue._id,
+      visibility,
+    });
+  };
+
   const mappedTeams = teams?.map((t) => ({ ...t, id: t._id })) ?? [];
   const mappedProjects = projects?.map((p) => ({ ...p, id: p._id })) ?? [];
   const mappedStates = states?.map((s) => ({ ...s, id: s._id })) ?? [];
@@ -288,27 +339,41 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
               </Link>
               <div className="flex items-center">
                 {/* Team & Project selectors */}
-                <TeamSelector
-                  teams={mappedTeams}
-                  selectedTeam={issue.teamId || ""}
-                  onTeamSelect={handleTeamChange}
-                  displayMode="iconWhenUnselected"
-                  className="border-none bg-transparent shadow-none"
-                />
-                <ProjectSelector
-                  projects={mappedProjects}
-                  selectedProject={issue.projectId || ""}
-                  onProjectSelect={handleProjectChange}
-                  displayMode="iconWhenUnselected"
-                  className="border-none bg-transparent shadow-none"
-                />
+                <PermissionAwareSelector
+                  orgSlug={resolvedParams.orgSlug}
+                  permission={PERMISSIONS.ISSUE_RELATION_UPDATE}
+                  fallbackMessage="You don't have permission to change issue team"
+                >
+                  <TeamSelector
+                    teams={mappedTeams}
+                    selectedTeam={issue.teamId || ""}
+                    onTeamSelect={canChangeTeam ? handleTeamChange : () => {}}
+                    displayMode="iconWhenUnselected"
+                    className="border-none bg-transparent shadow-none"
+                  />
+                </PermissionAwareSelector>
+                <PermissionAwareSelector
+                  orgSlug={resolvedParams.orgSlug}
+                  permission={PERMISSIONS.ISSUE_RELATION_UPDATE}
+                  fallbackMessage="You don't have permission to change issue project"
+                >
+                  <ProjectSelector
+                    projects={mappedProjects}
+                    selectedProject={issue.projectId || ""}
+                    onProjectSelect={
+                      canChangeProject ? handleProjectChange : () => {}
+                    }
+                    displayMode="iconWhenUnselected"
+                    className="border-none bg-transparent shadow-none"
+                  />
+                </PermissionAwareSelector>
               </div>
               <span className="text-muted-foreground text-sm">/</span>
               <span className="text-sm font-medium">{issue.key}</span>
             </div>
 
             <div className="flex items-center">
-              {/* Only show state selector if current user is assigned */}
+              {/* Only show state selector if current user is assigned - they can change their own assignment status */}
               {currentUserAssignment && (
                 <>
                   <StateSelector
@@ -328,12 +393,35 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                 </>
               )}
 
-              <PrioritySelector
-                priorities={mappedPriorities}
-                selectedPriority={issue.priorityId || ""}
-                onPrioritySelect={handlePriorityChange}
-                className="border-none bg-transparent shadow-none"
-              />
+              <PermissionAwareSelector
+                orgSlug={resolvedParams.orgSlug}
+                permission={PERMISSIONS.ISSUE_PRIORITY_UPDATE}
+                fallbackMessage="You don't have permission to change issue priority"
+              >
+                <PrioritySelector
+                  priorities={mappedPriorities}
+                  selectedPriority={issue.priorityId || ""}
+                  onPrioritySelect={
+                    canEditPriority ? handlePriorityChange : () => {}
+                  }
+                  className="border-none bg-transparent shadow-none"
+                />
+              </PermissionAwareSelector>
+              <div className="bg-muted-foreground/20 h-4 w-px" />
+              <PermissionAwareSelector
+                orgSlug={resolvedParams.orgSlug}
+                permission={PERMISSIONS.ISSUE_EDIT}
+                fallbackMessage="You don't have permission to change issue visibility"
+              >
+                <VisibilitySelector
+                  value={issue.visibility as VisibilityState}
+                  onValueChange={
+                    canEditVisibility ? handleVisibilityChange : () => {}
+                  }
+                  displayMode="iconWhenUnselected"
+                  className="border-none bg-transparent shadow-none"
+                />
+              </PermissionAwareSelector>
             </div>
           </div>
 
@@ -387,14 +475,24 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                   </div>
                 </div>
               ) : (
-                <h1
-                  className={cn(
-                    "hover:text-muted-foreground cursor-pointer text-3xl leading-tight font-semibold transition-colors",
-                  )}
-                  onClick={() => setEditingTitle(true)}
+                <PermissionAwareWrapper
+                  orgSlug={resolvedParams.orgSlug}
+                  permission={PERMISSIONS.ISSUE_EDIT}
+                  fallbackMessage="You don't have permission to edit issue title"
                 >
-                  {issue.title}
-                </h1>
+                  <h1
+                    className={cn(
+                      canEditIssue
+                        ? "hover:text-muted-foreground cursor-pointer text-3xl leading-tight font-semibold transition-colors"
+                        : "text-3xl leading-tight font-semibold",
+                    )}
+                    onClick={
+                      canEditIssue ? () => setEditingTitle(true) : undefined
+                    }
+                  >
+                    {issue.title}
+                  </h1>
+                </PermissionAwareWrapper>
               )}
             </div>
 
@@ -465,25 +563,49 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                   </div>
                 </div>
               ) : (
-                <div>
-                  {issue.description ? (
-                    <div
-                      className={cn(
-                        "prose prose-sm text-muted-foreground hover:text-foreground max-w-none cursor-pointer transition-colors",
-                      )}
-                      onClick={() => setEditingDescription(true)}
-                    >
-                      <p className="whitespace-pre-wrap">{issue.description}</p>
-                    </div>
-                  ) : (
-                    <button
-                      className="text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base"
-                      onClick={() => setEditingDescription(true)}
-                    >
-                      Add a description...
-                    </button>
-                  )}
-                </div>
+                <PermissionAwareWrapper
+                  orgSlug={resolvedParams.orgSlug}
+                  permission={PERMISSIONS.ISSUE_EDIT}
+                  fallbackMessage="You don't have permission to edit issue description"
+                >
+                  <div>
+                    {issue.description ? (
+                      <div
+                        className={cn(
+                          canEditIssue
+                            ? "prose prose-sm text-muted-foreground hover:text-foreground max-w-none cursor-pointer transition-colors"
+                            : "prose prose-sm text-muted-foreground max-w-none",
+                        )}
+                        onClick={
+                          canEditIssue
+                            ? () => setEditingDescription(true)
+                            : undefined
+                        }
+                      >
+                        <p className="whitespace-pre-wrap">
+                          {issue.description}
+                        </p>
+                      </div>
+                    ) : (
+                      <button
+                        className={cn(
+                          "w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base",
+                          canEditIssue
+                            ? "text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 cursor-pointer"
+                            : "text-muted-foreground border-muted-foreground/20 cursor-not-allowed opacity-50",
+                        )}
+                        onClick={
+                          canEditIssue
+                            ? () => setEditingDescription(true)
+                            : undefined
+                        }
+                        disabled={!canEditIssue}
+                      >
+                        Add a description...
+                      </button>
+                    )}
+                  </div>
+                </PermissionAwareWrapper>
               )}
             </div>
 
@@ -611,45 +733,62 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                               </Button>
                             </div>
                           ) : (
-                            <div
-                              className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded px-1 py-1 transition-colors"
-                              onClick={() => {
-                                setEstimatesValue(
-                                  (issue?.estimatedTimes as Record<
-                                    string,
-                                    number
-                                  >) || {},
-                                );
-                                setEditingEstimates((prev) => ({
-                                  ...prev,
-                                  [state._id]: true,
-                                }));
-                              }}
+                            <PermissionAwareWrapper
+                              orgSlug={resolvedParams.orgSlug}
+                              permission={PERMISSIONS.ISSUE_EDIT}
+                              fallbackMessage="You don't have permission to edit time estimates"
                             >
-                              <span className="text-muted-foreground text-sm">
-                                {hours ? `${hours}h` : "—"}
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-4 w-4 cursor-pointer p-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEstimatesValue(
-                                    (issue?.estimatedTimes as Record<
-                                      string,
-                                      number
-                                    >) || {},
-                                  );
-                                  setEditingEstimates((prev) => ({
-                                    ...prev,
-                                    [state._id]: true,
-                                  }));
-                                }}
+                              <div
+                                className={cn(
+                                  "flex cursor-pointer items-center gap-2 rounded px-1 py-1 transition-colors",
+                                  canEditIssue
+                                    ? "hover:bg-muted/50"
+                                    : "cursor-not-allowed opacity-50",
+                                )}
+                                onClick={
+                                  canEditIssue
+                                    ? () => {
+                                        setEstimatesValue(
+                                          (issue?.estimatedTimes as Record<
+                                            string,
+                                            number
+                                          >) || {},
+                                        );
+                                        setEditingEstimates((prev) => ({
+                                          ...prev,
+                                          [state._id]: true,
+                                        }));
+                                      }
+                                    : undefined
+                                }
                               >
-                                <Pencil className="size-3" />
-                              </Button>
-                            </div>
+                                <span className="text-muted-foreground text-sm">
+                                  {hours ? `${hours}h` : "—"}
+                                </span>
+                                {canEditIssue && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-4 w-4 cursor-pointer p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEstimatesValue(
+                                        (issue?.estimatedTimes as Record<
+                                          string,
+                                          number
+                                        >) || {},
+                                      );
+                                      setEditingEstimates((prev) => ({
+                                        ...prev,
+                                        [state._id]: true,
+                                      }));
+                                    }}
+                                  >
+                                    <Pencil className="size-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </PermissionAwareWrapper>
                           )}
                         </div>
                       </div>

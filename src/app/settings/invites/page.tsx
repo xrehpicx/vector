@@ -33,7 +33,17 @@ export default function InvitesPage() {
   };
 
   if (invites === undefined) {
-    return <div>Loading...</div>;
+    return (
+      <div className="space-y-6 p-6">
+        <div className="space-y-1">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <Mail className="size-5" />
+            Pending Invitations
+          </h1>
+          <p className="text-muted-foreground text-sm">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

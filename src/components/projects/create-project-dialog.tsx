@@ -20,6 +20,10 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { TeamSelector } from "@/components/issues/issue-selectors";
 import { StatusSelector } from "@/components/projects/project-selectors";
 import { ProjectLeadSelector } from "./project-lead-selector";
+import {
+  VisibilitySelector,
+  type VisibilityState,
+} from "@/components/ui/visibility-selector";
 
 // ---------------------------------------------------------------------------
 // 🧩 Internal content component (dialog body)
@@ -54,6 +58,8 @@ function CreateProjectDialogContent({
   const [selectedStatus, setSelectedStatus] = useState<string>(
     defaultStates?.statusId || "",
   );
+  const [selectedVisibility, setSelectedVisibility] =
+    useState<VisibilityState>("organization");
   const [isLoading, setIsLoading] = useState(false);
 
   // Get teams
@@ -104,6 +110,7 @@ function CreateProjectDialogContent({
           statusId: selectedStatus
             ? (selectedStatus as Id<"projectStatuses">)
             : undefined,
+          visibility: selectedVisibility,
         },
       });
 
@@ -177,6 +184,13 @@ function CreateProjectDialogContent({
               onStatusSelect={setSelectedStatus}
               displayMode="iconWhenUnselected"
               align="end"
+              className="h-9"
+            />
+
+            <VisibilitySelector
+              value={selectedVisibility}
+              onValueChange={setSelectedVisibility}
+              displayMode="iconWhenUnselected"
               className="h-9"
             />
           </div>

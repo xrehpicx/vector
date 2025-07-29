@@ -45,6 +45,9 @@ import { FolderOpen, User, Check, Circle, Calendar, Clock } from "lucide-react";
 // Calendar component
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
+// Permission hooks
+import { useAccess } from "@/components/ui/permission-aware";
+
 // ---------------------------------------------------------------------------
 // 🧩 Type inference – derive types directly from Convex query outputs
 // ---------------------------------------------------------------------------
@@ -122,6 +125,7 @@ export function ProjectSelector({
   align = "start",
 }: ProjectSelectorProps & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
+  const { viewOnly } = useAccess();
 
   // Always render selector even when no projects to make the control discoverable.
 
@@ -172,9 +176,12 @@ export function ProjectSelector({
               <CommandItem
                 value=""
                 onSelect={() => {
-                  onProjectSelect("");
-                  setOpen(false);
+                  if (!viewOnly) {
+                    onProjectSelect("");
+                    setOpen(false);
+                  }
                 }}
+                disabled={viewOnly}
               >
                 <Check
                   className={cn(
@@ -183,6 +190,11 @@ export function ProjectSelector({
                   )}
                 />
                 None
+                {viewOnly && (
+                  <span className="text-muted-foreground ml-auto text-xs">
+                    (view only)
+                  </span>
+                )}
               </CommandItem>
               {projects.map((project) => {
                 const Icon = project.icon
@@ -193,9 +205,12 @@ export function ProjectSelector({
                     key={project._id}
                     value={project.name}
                     onSelect={() => {
-                      onProjectSelect(project._id);
-                      setOpen(false);
+                      if (!viewOnly) {
+                        onProjectSelect(project._id);
+                        setOpen(false);
+                      }
                     }}
+                    disabled={viewOnly}
                   >
                     <Check
                       className={cn(
@@ -210,6 +225,11 @@ export function ProjectSelector({
                       style={{ color: project.color || "#94a3b8" }}
                     />
                     {project.name}
+                    {viewOnly && (
+                      <span className="text-muted-foreground ml-auto text-xs">
+                        (view only)
+                      </span>
+                    )}
                   </CommandItem>
                 );
               })}
@@ -243,6 +263,7 @@ export function StateSelector({
   align = "start",
 }: StateSelectorProps & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
+  const { viewOnly } = useAccess();
 
   // Transform states from API into combobox-friendly structure
   const stateOptions = states.map((s) => ({
@@ -319,9 +340,12 @@ export function StateSelector({
                     key={state.value}
                     value={state.label}
                     onSelect={() => {
-                      onStateSelect(state.value);
-                      setOpen(false);
+                      if (!viewOnly) {
+                        onStateSelect(state.value);
+                        setOpen(false);
+                      }
                     }}
+                    disabled={viewOnly}
                   >
                     <Check
                       className={cn(
@@ -343,6 +367,11 @@ export function StateSelector({
                       />
                     )}
                     {state.label}
+                    {viewOnly && (
+                      <span className="text-muted-foreground ml-auto text-xs">
+                        (view only)
+                      </span>
+                    )}
                   </CommandItem>
                 );
               })}
@@ -356,7 +385,7 @@ export function StateSelector({
 
 // Priority Selector ----------------------------------------------------------
 interface PrioritySelectorProps {
-  priorities: readonly Priority[] | Priority[];
+  priorities: Priority[];
   selectedPriority: string;
   onPrioritySelect: (priorityId: string) => void;
   displayMode?: SelectorDisplayMode;
@@ -376,6 +405,7 @@ export function PrioritySelector({
   align = "start",
 }: PrioritySelectorProps & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
+  const { viewOnly } = useAccess();
 
   if (priorities.length === 0) return null;
 
@@ -417,17 +447,21 @@ export function PrioritySelector({
             <CommandEmpty>No priority found.</CommandEmpty>
             <CommandGroup>
               {priorities.map((priority) => {
-                const Icon = priority.icon
+                const PriorityIcon = priority.icon
                   ? getDynamicIcon(priority.icon)
                   : null;
+
                 return (
                   <CommandItem
                     key={priority._id}
                     value={priority.name}
                     onSelect={() => {
-                      onPrioritySelect(priority._id);
-                      setOpen(false);
+                      if (!viewOnly) {
+                        onPrioritySelect(priority._id);
+                        setOpen(false);
+                      }
                     }}
+                    disabled={viewOnly}
                   >
                     <Check
                       className={cn(
@@ -437,8 +471,8 @@ export function PrioritySelector({
                           : "opacity-0",
                       )}
                     />
-                    {Icon ? (
-                      <Icon
+                    {PriorityIcon ? (
+                      <PriorityIcon
                         className="mr-2 h-3 w-3"
                         style={{ color: priority.color || "#94a3b8" }}
                       />
@@ -449,6 +483,11 @@ export function PrioritySelector({
                       />
                     )}
                     {priority.name}
+                    {viewOnly && (
+                      <span className="text-muted-foreground ml-auto text-xs">
+                        (view only)
+                      </span>
+                    )}
                   </CommandItem>
                 );
               })}

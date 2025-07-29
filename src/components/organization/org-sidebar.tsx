@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 import { CreateIssueDialog } from "@/components/issues/create-issue-dialog";
 import { CreateTeamButton } from "@/components/teams/create-team-button";
 import { CreateProjectButton } from "@/components/projects/create-project-button";
-import { PermissionGate } from "@/hooks/use-permissions";
-import { PERMISSIONS } from "@/lib/permissions";
+import { ScopedPermissionGate } from "@/hooks/use-permissions";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex";
 import { withIds } from "@/lib/convex-helpers";
@@ -52,13 +52,16 @@ export function OrgSidebar({ orgSlug }: OrgSidebarProps) {
       href: `/${orgSlug}/issues`,
       icon: CheckSquare,
       createElement: (
-        <PermissionGate orgSlug={orgSlug} permission={PERMISSIONS.ISSUE_CREATE}>
+        <ScopedPermissionGate
+          scope={{ orgSlug }}
+          permission={PERMISSIONS.ISSUE_CREATE}
+        >
           <CreateIssueDialog
             orgSlug={orgSlug}
             variant="default"
             className="h-6 w-6 p-0"
           />
-        </PermissionGate>
+        </ScopedPermissionGate>
       ),
     },
   ];

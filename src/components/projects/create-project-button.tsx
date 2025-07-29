@@ -2,8 +2,8 @@
 
 import type React from "react";
 import { CreateProjectDialog } from "./create-project-dialog";
-import { PermissionGate } from "@/hooks/use-permissions";
-import { PERMISSIONS } from "@/lib/permissions";
+import { ScopedPermissionGate } from "@/hooks/use-permissions";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
 
 /**
  * Thin wrapper kept for backwards-compatibility. Accepts the previous props
@@ -29,12 +29,15 @@ export function CreateProjectButton({
 }) {
   // `_size` is ignored – sizing is handled internally.
   return (
-    <PermissionGate orgSlug={orgSlug} permission={PERMISSIONS.PROJECT_CREATE}>
+    <ScopedPermissionGate
+      scope={{ orgSlug }}
+      permission={PERMISSIONS.PROJECT_CREATE}
+    >
       <CreateProjectDialog
         orgSlug={orgSlug}
         defaultStates={defaultStates}
         {...rest}
       />
-    </PermissionGate>
+    </ScopedPermissionGate>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@/lib/convex";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -58,11 +58,21 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 import { usePermission } from "@/hooks/use-permissions";
-import { PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
+import {
+  usePermissionCheck,
+  PermissionAwareWrapper,
+  PermissionAwareButton,
+  PermissionAware,
+} from "@/components/ui/permission-aware";
 import { toast } from "sonner";
 import { CreateIssueDialog } from "@/components/issues/create-issue-dialog";
 import { CreateProjectDialog } from "@/components/projects/create-project-dialog";
 import { useParams } from "next/navigation";
+import {
+  VisibilitySelector,
+  type VisibilityState,
+} from "@/components/ui/visibility-selector";
 
 import { Id } from "@/convex/_generated/dataModel";
 import { FunctionReturnType } from "convex/server";
@@ -114,12 +124,12 @@ function TeamLoadingSkeleton({}: {
 // Add Member Dialog
 function AddMemberDialog({
   orgSlug,
-  teamKey,
+  teamId,
   onClose,
   onSuccess,
 }: {
   orgSlug: string;
-  teamKey: string;
+  teamId: Id<"teams">;
   onClose: () => void;
   onSuccess?: () => void;
 }) {
@@ -138,10 +148,9 @@ function AddMemberDialog({
     setIsAddingMember(true);
     try {
       await addMemberMutation({
-        teamKey,
+        teamId,
         userId: selectedMember as Id<"users">,
         role: "member",
-        orgSlug,
       });
       onSuccess?.();
       onClose();
@@ -387,7 +396,7 @@ export default function TeamViewPage() {
   const user = userQuery.data;
   const { hasPermission: canUpdateTeam } = usePermission(
     orgSlug,
-    PERMISSIONS.TEAM_UPDATE,
+    PERMISSIONS.TEAM_EDIT,
   );
 
   // Fetch team data
@@ -399,8 +408,7 @@ export default function TeamViewPage() {
 
   // Fetch team members
   const teamMembersQuery = useQuery(api.teams.listMembers, {
-    orgSlug,
-    teamKey,
+    teamId: team?._id,
   });
   const teamMembers = teamMembersQuery.data ?? [];
 
@@ -438,6 +446,18 @@ export default function TeamViewPage() {
   });
   const statuses = statusesQuery.data ?? [];
 
+  // Determine if user can edit team (team lead or has permission)
+  // Moved ABOVE any conditional early returns to keep hook order consistent
+  const permissionScope = useMemo(() => {
+    return team?._id ? { orgSlug, teamId: team._id } : { orgSlug };
+  }, [orgSlug, team?._id]);
+
+  const { isAllowed: canEditTeam } = usePermissionCheck(
+    orgSlug,
+    PERMISSIONS.TEAM_EDIT,
+    permissionScope,
+  );
+
   const membersQuery = useQuery(api.organizations.listMembers, { orgSlug });
   const members = membersQuery.data ?? [];
 
@@ -456,6 +476,7 @@ export default function TeamViewPage() {
   const changeLeadMutation = useMutation(api.projects.changeLead);
   const deleteProjectMutation = useMutation(api.projects.deleteProject);
   const removeMemberMutation = useMutation(api.teams.removeMember);
+  const changeVisibilityMutation = useMutation(api.teams.changeVisibility);
 
   // Check if any queries are still loading
   const isLoading =
@@ -500,12 +521,7 @@ export default function TeamViewPage() {
     notFound();
   }
 
-  // Determine if user can edit team (team lead or has permission)
-  const canEdit = !!(
-    user &&
-    team &&
-    (team.leadId === user._id || canUpdateTeam)
-  );
+  const canEdit = !!(user && team && (team.leadId === user._id || canEditTeam));
 
   // Initialize editing values when team loads
   if (team) {
@@ -523,8 +539,7 @@ export default function TeamViewPage() {
     if (!nameValue.trim() || !team) return;
     setIsUpdating(true);
     await updateTeamMutation({
-      orgSlug,
-      teamKey: team.key,
+      teamId: team._id,
       data: { name: nameValue.trim() },
     });
     setIsUpdating(false);
@@ -535,8 +550,7 @@ export default function TeamViewPage() {
     if (!team) return;
     setIsUpdating(true);
     await updateTeamMutation({
-      orgSlug,
-      teamKey: team.key,
+      teamId: team._id,
       data: { description: descriptionValue.trim() || undefined },
     });
     setIsUpdating(false);
@@ -547,8 +561,7 @@ export default function TeamViewPage() {
     if (!keyValue.trim() || !team) return;
     setIsUpdating(true);
     await updateTeamMutation({
-      orgSlug,
-      teamKey: team.key,
+      teamId: team._id,
       data: { name: keyValue.trim().toUpperCase() },
     });
     setIsUpdating(false);
@@ -560,8 +573,7 @@ export default function TeamViewPage() {
     setIconValue(iconName);
     setIsUpdating(true);
     await updateTeamMutation({
-      orgSlug,
-      teamKey: team.key,
+      teamId: team._id,
       data: { icon: iconName ?? undefined },
     });
     setIsUpdating(false);
@@ -572,8 +584,7 @@ export default function TeamViewPage() {
     setColorValue(color);
     setIsUpdating(true);
     await updateTeamMutation({
-      orgSlug,
-      teamKey: team.key,
+      teamId: team._id,
       data: { color },
     });
     setIsUpdating(false);
@@ -583,9 +594,17 @@ export default function TeamViewPage() {
     if (!team) return;
     setIsUpdating(true);
     await removeMemberMutation({
-      orgSlug,
-      teamKey: team.key,
       membershipId,
+    });
+    setIsUpdating(false);
+  };
+
+  const handleVisibilityChange = async (visibility: VisibilityState) => {
+    if (!team) return;
+    setIsUpdating(true);
+    await changeVisibilityMutation({
+      teamId: team._id,
+      visibility,
     });
     setIsUpdating(false);
   };
@@ -692,8 +711,7 @@ export default function TeamViewPage() {
     if (!confirm("Delete this project? This cannot be undone.")) return;
     setIsUpdatingProjects(true);
     await deleteProjectMutation({
-      projectKey,
-      orgSlug,
+      projectId: projectKey as Id<"projects">,
     });
     setIsUpdatingProjects(false);
   };
@@ -717,6 +735,19 @@ export default function TeamViewPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <PermissionAware
+                orgSlug={orgSlug}
+                permission={PERMISSIONS.TEAM_EDIT}
+                fallbackMessage="You don't have permission to change team visibility"
+              >
+                <VisibilitySelector
+                  value={team?.visibility as VisibilityState}
+                  onValueChange={handleVisibilityChange}
+                  displayMode="iconWhenUnselected"
+                  className="border-none bg-transparent shadow-none"
+                />
+              </PermissionAware>
+              <div className="bg-muted-foreground/20 h-4 w-px" />
               {editingKey ? (
                 <div className="flex items-center gap-1">
                   <Input
@@ -1197,7 +1228,7 @@ export default function TeamViewPage() {
       {showAddMemberDialog && (
         <AddMemberDialog
           orgSlug={orgSlug}
-          teamKey={team?.key || ""}
+          teamId={team?._id}
           onClose={() => setShowAddMemberDialog(false)}
           onSuccess={() => {
             // No need to refetch here, useQuery will handle re-renders

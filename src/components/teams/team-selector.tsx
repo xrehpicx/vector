@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 // UI primitives
 import { Button } from "@/components/ui/button";
 import {
@@ -23,21 +23,46 @@ import { getDynamicIcon } from "@/lib/dynamic-icons";
 
 // Icons
 import { Check, Circle, Users } from "lucide-react";
+import { useAccess } from "@/components/ui/permission-aware";
 
-// ---------------------------------------------------------------------------
-// Shared display mode type (duplicated to avoid cross-file coupling)
-// ---------------------------------------------------------------------------
+// Types
+interface TeamData {
+  _id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+  key?: string;
+  // Optional fields that may or may not be present
+  lead?: any;
+  memberCount?: number;
+  leadId?: string;
+  [key: string]: any; // Allow additional properties
+}
+
+interface TeamSelectorProps {
+  teams: TeamData[];
+  selectedTeam: string;
+  onTeamSelect: (teamId: string) => void;
+  displayMode?: SelectorDisplayMode;
+  trigger?: React.ReactElement;
+  className?: string;
+  /** Position of the popover relative to its trigger. */
+  align?: "start" | "center" | "end";
+}
+
+// Display modes for controlling visibility of icon and label - matching issue selectors
 export type SelectorDisplayMode =
-  | "default"
-  | "labelOnly"
-  | "iconOnly"
-  | "iconWhenUnselected";
+  | "default" // icon + label
+  | "labelOnly" // label only (no icon)
+  | "iconOnly" // icon only (no label, always)
+  | "iconWhenUnselected"; // icon when unselected, icon+label once a value selected
 
+// Helper function to resolve what to show based on display mode and selection state
 function resolveVisibility(
-  mode: SelectorDisplayMode | undefined,
+  displayMode: SelectorDisplayMode | undefined,
   hasSelection: boolean,
-): { showIcon: boolean; showLabel: boolean } {
-  switch (mode) {
+) {
+  switch (displayMode) {
     case "labelOnly":
       return { showIcon: false, showLabel: true };
     case "iconOnly":
@@ -50,27 +75,6 @@ function resolveVisibility(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Public props – kept generic so any consumer can provide its own Team shape
-// ---------------------------------------------------------------------------
-export interface TeamSelectorProps<
-  T extends {
-    id: string;
-    name: string;
-    icon?: string | null;
-    color?: string | null;
-  },
-> {
-  teams: readonly T[] | T[];
-  selectedTeam: string;
-  onTeamSelect: (teamId: string) => void;
-  displayMode?: SelectorDisplayMode;
-  trigger?: React.ReactElement;
-  className?: string;
-  /** Position of the popover relative to its trigger. */
-  align?: "start" | "center" | "end";
-}
-
 /**
  * Shared TeamSelector used across Issues & Projects.
  * Accepts a list of teams and shows a searchable combobox drop-down.
@@ -80,14 +84,7 @@ export interface TeamSelectorProps<
  * - Falls back to Circle icon and grey color (#94a3b8) when none are set
  * - Uses the same pattern as status selectors for consistency
  */
-export function TeamSelector<
-  T extends {
-    id: string;
-    name: string;
-    icon?: string | null;
-    color?: string | null;
-  },
->({
+export function TeamSelector({
   teams,
   selectedTeam,
   onTeamSelect,
@@ -95,20 +92,21 @@ export function TeamSelector<
   trigger,
   className,
   align = "start",
-}: TeamSelectorProps<T> & { align?: "start" | "center" | "end" }) {
+}: TeamSelectorProps & { align?: "start" | "center" | "end" }) {
   const [open, setOpen] = useState(false);
+  const { viewOnly } = useAccess();
 
   const hasSelection = selectedTeam !== "";
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
 
   // Get selected team data
-  const selectedTeamObj = teams.find((t) => t.id === selectedTeam);
+  const selectedTeamObj = teams.find((t) => t._id === selectedTeam);
   const currentColor = selectedTeamObj?.color || "#94a3b8"; // Default grey
   const currentName = selectedTeamObj?.name || "Team";
   const currentIconName = selectedTeamObj?.icon;
   const CurrentIcon = currentIconName
-    ? getDynamicIcon(currentIconName) || Circle
-    : Circle;
+    ? getDynamicIcon(currentIconName) || Users
+    : Users;
 
   const DefaultBtn = (
     <Button
@@ -138,16 +136,19 @@ export function TeamSelector<
       <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
       <PopoverContent align={align} className="w-64 p-0">
         <Command>
-          <CommandInput placeholder="Search team..." className="h-9" />
+          <CommandInput placeholder="Search teams..." className="h-9" />
           <CommandList>
             <CommandEmpty>No team found.</CommandEmpty>
             <CommandGroup>
               <CommandItem
                 value=""
                 onSelect={() => {
-                  onTeamSelect("");
-                  setOpen(false);
+                  if (!viewOnly) {
+                    onTeamSelect("");
+                    setOpen(false);
+                  }
                 }}
+                disabled={viewOnly}
               >
                 <Check
                   className={cn(
@@ -156,6 +157,11 @@ export function TeamSelector<
                   )}
                 />
                 None
+                {viewOnly && (
+                  <span className="text-muted-foreground ml-auto text-xs">
+                    (view only)
+                  </span>
+                )}
               </CommandItem>
               {teams.map((team) => {
                 const Icon = team.icon
@@ -163,17 +169,20 @@ export function TeamSelector<
                   : Circle;
                 return (
                   <CommandItem
-                    key={team.id}
+                    key={team._id}
                     value={team.name}
                     onSelect={() => {
-                      onTeamSelect(team.id);
-                      setOpen(false);
+                      if (!viewOnly) {
+                        onTeamSelect(team._id);
+                        setOpen(false);
+                      }
                     }}
+                    disabled={viewOnly}
                   >
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        selectedTeam === team.id ? "opacity-100" : "opacity-0",
+                        selectedTeam === team._id ? "opacity-100" : "opacity-0",
                       )}
                     />
                     <Icon
@@ -181,6 +190,11 @@ export function TeamSelector<
                       style={{ color: team.color || "#94a3b8" }}
                     />
                     {team.name}
+                    {viewOnly && (
+                      <span className="text-muted-foreground ml-auto text-xs">
+                        (view only)
+                      </span>
+                    )}
                   </CommandItem>
                 );
               })}

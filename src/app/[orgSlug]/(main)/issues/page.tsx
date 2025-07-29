@@ -15,6 +15,8 @@ import {
 } from "@/components/issues/issue-selectors";
 import { ISSUE_STATE_DEFAULTS } from "@/lib/defaults";
 import type { Id } from "@/convex/_generated/dataModel";
+import { PermissionAware } from "@/components/ui/permission-aware";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
 
 type StateType = (typeof ISSUE_STATE_DEFAULTS)[number]["type"];
 type FilterType = "all" | StateType;
@@ -169,9 +171,8 @@ export default function IssuesPage() {
     );
   }
 
-  const mappedTeams = teams?.map((t) => ({ ...t, id: t._id.toString() })) ?? [];
-  const mappedProjects =
-    projects?.map((p) => ({ ...p, id: p._id.toString() })) ?? [];
+  const mappedTeams = (teams as any) ?? [];
+  const mappedProjects = (projects as any) ?? [];
 
   return (
     <div className="bg-background h-full">
@@ -201,22 +202,36 @@ export default function IssuesPage() {
           {/* Global filters and create button */}
           <div className="flex items-center gap-1">
             {/* Team filter */}
-            <TeamSelector
-              teams={mappedTeams}
-              selectedTeam={selectedTeam}
-              onTeamSelect={setSelectedTeam}
-              displayMode="iconWhenUnselected"
-              className="h-6 text-xs"
-            />
+            <PermissionAware
+              orgSlug={orgSlug}
+              permission={PERMISSIONS.TEAM_VIEW}
+              fallbackMessage="You don't have permission to view teams"
+              showTooltip={true}
+            >
+              <TeamSelector
+                teams={mappedTeams}
+                selectedTeam={selectedTeam}
+                onTeamSelect={setSelectedTeam}
+                displayMode="iconWhenUnselected"
+                className="h-6 text-xs"
+              />
+            </PermissionAware>
 
             {/* Project filter */}
-            <ProjectSelector
-              projects={mappedProjects}
-              selectedProject={selectedProject}
-              onProjectSelect={setSelectedProject}
-              displayMode="iconWhenUnselected"
-              className="h-6 text-xs"
-            />
+            <PermissionAware
+              orgSlug={orgSlug}
+              permission={PERMISSIONS.PROJECT_VIEW}
+              fallbackMessage="You don't have permission to view projects"
+              showTooltip={true}
+            >
+              <ProjectSelector
+                projects={mappedProjects}
+                selectedProject={selectedProject}
+                onProjectSelect={setSelectedProject}
+                displayMode="iconWhenUnselected"
+                className="h-6 text-xs"
+              />
+            </PermissionAware>
 
             <CreateIssueDialog className="h-6" orgSlug={orgSlug} />
           </div>

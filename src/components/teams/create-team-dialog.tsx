@@ -19,6 +19,10 @@ import { cn } from "@/lib/utils";
 // Import the LeadSelector to maintain consistency
 import { LeadSelector } from "@/components/projects/project-selectors";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import {
+  VisibilitySelector,
+  type VisibilityState,
+} from "@/components/ui/visibility-selector";
 
 // ---------------------------------------------------------------------------
 // 🧩 Internal content component (dialog body)
@@ -45,6 +49,8 @@ function CreateTeamDialogContent({
   const [selectedLead, setSelectedLead] = useState<string>(
     defaultStates?.leadId || "",
   );
+  const [selectedVisibility, setSelectedVisibility] =
+    useState<VisibilityState>("organization");
   const [isLoading, setIsLoading] = useState(false);
 
   // Get organization members for lead selection
@@ -72,6 +78,7 @@ function CreateTeamDialogContent({
         key: key.trim().toUpperCase(),
         description: description.trim() || undefined,
         leadId: selectedLead ? (selectedLead as Id<"users">) : undefined,
+        visibility: selectedVisibility,
       },
     })
       .then((result) => {
@@ -133,6 +140,21 @@ function CreateTeamDialogContent({
               </TooltipTrigger>
               <TooltipContent side="top" align="center">
                 <span>Select a team lead</span>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <div>
+                  <VisibilitySelector
+                    value={selectedVisibility}
+                    onValueChange={setSelectedVisibility}
+                    displayMode="iconWhenUnselected"
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" align="center">
+                <span>Set team visibility</span>
               </TooltipContent>
             </Tooltip>
           </div>

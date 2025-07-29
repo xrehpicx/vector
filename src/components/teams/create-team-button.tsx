@@ -3,7 +3,7 @@
 import type React from "react";
 import { CreateTeamDialog } from "./create-team-dialog";
 import { PermissionGate } from "@/hooks/use-permissions";
-import { PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
 
 /**
  * Thin wrapper kept for backwards-compatibility. Accepts the previous props

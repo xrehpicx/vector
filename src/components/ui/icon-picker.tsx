@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
+import { useAccess } from "@/components/ui/permission-aware";
 
 // Curated list of Lucide icons suitable for priorities and states
 export const AVAILABLE_ICONS = [
@@ -111,6 +112,7 @@ export function IconPicker({
 }: IconPickerProps) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const { viewOnly } = useAccess();
 
   const selectedIcon = AVAILABLE_ICONS.find((icon) => icon.name === value);
   const SelectedIconComponent = selectedIcon
@@ -176,20 +178,30 @@ export function IconPicker({
         <div className="border-b p-3">
           <div className="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
             Clear Selection
+            {viewOnly && (
+              <span className="text-muted-foreground ml-2 text-xs">
+                (view only)
+              </span>
+            )}
           </div>
           <button
             type="button"
             onClick={() => {
-              onValueChange(null);
-              setOpen(false);
+              if (!viewOnly) {
+                onValueChange(null);
+                setOpen(false);
+              }
             }}
+            disabled={viewOnly}
             className={cn(
-              "hover:bg-muted/50 flex items-center gap-2 rounded-md border-2 border-dashed p-2 text-sm transition-all",
-              !value ? "border-primary bg-primary/10" : "border-border",
+              "hover:bg-muted/50 flex w-full items-center justify-start rounded-md border border-dashed p-2 text-left transition-all",
+              value === null
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border",
+              viewOnly && "cursor-not-allowed opacity-50",
             )}
           >
-            <div className="size-4 rounded border border-dashed border-gray-400" />
-            <span>No icon</span>
+            <span className="text-sm">No icon</span>
           </button>
         </div>
 
@@ -198,6 +210,11 @@ export function IconPicker({
           <div key={category} className="border-b p-3 last:border-b-0">
             <div className="text-muted-foreground mb-3 text-xs font-medium tracking-wider uppercase">
               {category}
+              {viewOnly && (
+                <span className="text-muted-foreground ml-2 text-xs">
+                  (view only)
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-8 gap-1">
               {icons.map((icon) => {
@@ -209,16 +226,20 @@ export function IconPicker({
                     key={icon.name}
                     type="button"
                     onClick={() => {
-                      onValueChange(icon.name);
-                      setOpen(false);
+                      if (!viewOnly) {
+                        onValueChange(icon.name);
+                        setOpen(false);
+                      }
                     }}
+                    disabled={viewOnly}
                     className={cn(
                       "hover:bg-muted/50 flex size-8 items-center justify-center rounded-md border transition-all",
                       isSelected
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border",
+                      viewOnly && "cursor-not-allowed opacity-50",
                     )}
-                    title={icon.label}
+                    title={`${icon.label}${viewOnly ? " (view only)" : ""}`}
                   >
                     {IconComponent && <IconComponent className="size-4" />}
                   </button>

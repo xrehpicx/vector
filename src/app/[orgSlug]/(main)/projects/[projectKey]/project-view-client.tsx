@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ArrowLeft, Save, X, Plus, FolderOpen } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
@@ -12,10 +12,12 @@ import { formatDateHuman } from "@/lib/date";
 import { StatusSelector } from "@/components/projects/project-selectors";
 import { ProjectLeadSelector } from "@/components/projects/project-lead-selector";
 import { TeamSelector } from "@/components/teams/team-selector";
-import { toast } from "sonner";
 import { ProjectMembersSection } from "@/components/projects/project-members";
-import { usePermission } from "@/hooks/use-permissions";
-import { PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
+import {
+  usePermissionCheck,
+  PermissionAware,
+} from "@/components/ui/permission-aware";
 import { cn } from "@/lib/utils";
 import { IconPicker } from "@/components/ui/icon-picker";
 import {
@@ -26,6 +28,10 @@ import {
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 import { UsersIcon, CalendarIcon, ClockIcon } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
+import {
+  VisibilitySelector,
+  type VisibilityState,
+} from "@/components/ui/visibility-selector";
 
 interface ProjectViewClientProps {
   params: { orgSlug: string; projectKey: string };
@@ -53,15 +59,29 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const user = useQuery(api.users.currentUser);
 
-  const { hasPermission: canUpdateProject } = usePermission(
-    params.orgSlug,
-    PERMISSIONS.PROJECT_UPDATE,
-  );
-
   const project = useQuery(api.projects.getByKey, {
     orgSlug: params.orgSlug,
     projectKey: params.projectKey,
   });
+
+  // Use useMemo to stabilize the scope object and prevent hook rerenders
+  const permissionScope = useMemo(() => {
+    return project?._id
+      ? { orgSlug: params.orgSlug, projectId: project._id }
+      : { orgSlug: params.orgSlug };
+  }, [params.orgSlug, project?._id]);
+
+  const { isAllowed: canEditProject } = usePermissionCheck(
+    params.orgSlug,
+    PERMISSIONS.PROJECT_EDIT,
+    permissionScope,
+  );
+
+  const canEdit = !!(
+    user &&
+    project &&
+    (project.leadId === user._id || canEditProject)
+  );
 
   const statuses = useQuery(api.organizations.listProjectStatuses, {
     orgSlug: params.orgSlug,
@@ -75,6 +95,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const changeStatusMutation = useMutation(api.projects.changeStatus);
   const changeTeamMutation = useMutation(api.projects.changeTeam);
   const changeLeadMutation = useMutation(api.projects.changeLead);
+  const changeVisibilityMutation = useMutation(api.projects.changeVisibility);
 
   const handleTitleSave = () => {
     if (!project) return;
@@ -140,11 +161,14 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
     });
   };
 
-  const canEdit = !!(
-    user &&
-    project &&
-    (project.leadId === user._id || canUpdateProject)
-  );
+  const handleVisibilityChange = async (visibility: VisibilityState) => {
+    if (!project) return;
+    await changeVisibilityMutation({
+      orgSlug: params.orgSlug,
+      projectKey: params.projectKey,
+      visibility,
+    });
+  };
 
   useEffect(() => {
     if (project) {
@@ -193,7 +217,8 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const mappedTeams =
     teams?.map((team) => ({
-      id: team._id,
+      _id: team._id,
+      id: team._id, // keep for existing lookups
       name: team.name,
       icon: team.icon,
       color: team.color,
@@ -214,36 +239,71 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
             </Link>
             <div className="flex items-center">
               {/* Team & Status selectors */}
-              <TeamSelector
-                teams={mappedTeams}
-                selectedTeam={project.teamId || ""}
-                onTeamSelect={handleTeamChange}
-                displayMode="iconWhenUnselected"
-                className="border-none bg-transparent shadow-none"
-              />
+              <PermissionAware
+                orgSlug={params.orgSlug}
+                permission={PERMISSIONS.PROJECT_EDIT}
+                scope={permissionScope}
+                fallbackMessage="You don't have permission to change project team"
+              >
+                <TeamSelector
+                  teams={mappedTeams}
+                  selectedTeam={project.teamId || ""}
+                  onTeamSelect={handleTeamChange}
+                  displayMode="iconWhenUnselected"
+                  className="border-none bg-transparent shadow-none"
+                />
+              </PermissionAware>
             </div>
             <span className="text-muted-foreground text-sm">/</span>
             <span className="text-sm font-medium">{params.projectKey}</span>
           </div>
 
           <div className="flex items-center">
-            <StatusSelector
-              statuses={mappedStatuses}
-              selectedStatus={project.statusId || ""}
-              onStatusSelect={handleStatusChange}
-              className="border-none bg-transparent shadow-none"
-            />
+            <PermissionAware
+              orgSlug={params.orgSlug}
+              permission={PERMISSIONS.PROJECT_EDIT}
+              scope={permissionScope}
+              fallbackMessage="You don't have permission to change project visibility"
+            >
+              <VisibilitySelector
+                value={project.visibility as VisibilityState}
+                onValueChange={handleVisibilityChange}
+                displayMode="iconWhenUnselected"
+                className="border-none bg-transparent shadow-none"
+              />
+            </PermissionAware>
+            <div className="bg-muted-foreground/20 h-4 w-px" />
+            <PermissionAware
+              orgSlug={params.orgSlug}
+              permission={PERMISSIONS.PROJECT_EDIT}
+              scope={permissionScope}
+              fallbackMessage="You don't have permission to change project status"
+            >
+              <StatusSelector
+                statuses={mappedStatuses}
+                selectedStatus={project.statusId || ""}
+                onStatusSelect={handleStatusChange}
+                className="border-none bg-transparent shadow-none"
+              />
+            </PermissionAware>
 
             <div className="bg-muted-foreground/20 h-4 w-px" />
 
             {/* Lead */}
-            <ProjectLeadSelector
+            <PermissionAware
               orgSlug={params.orgSlug}
-              projectKey={params.projectKey}
-              selectedLead={project.leadId || ""}
-              onLeadSelect={handleLeadChange}
-              className="border-none bg-transparent shadow-none"
-            />
+              permission={PERMISSIONS.PROJECT_EDIT}
+              scope={permissionScope}
+              fallbackMessage="You don't have permission to change project lead"
+            >
+              <ProjectLeadSelector
+                orgSlug={params.orgSlug}
+                projectKey={params.projectKey}
+                selectedLead={project.leadId || ""}
+                onLeadSelect={handleLeadChange}
+                className="border-none bg-transparent shadow-none"
+              />
+            </PermissionAware>
           </div>
         </div>
 
@@ -523,13 +583,20 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
             {/* Status */}
             <div className="flex min-w-[120px] items-center gap-1">
               <span className="text-muted-foreground">
-                <StatusSelector
-                  statuses={mappedStatuses}
-                  selectedStatus={project.statusId || ""}
-                  onStatusSelect={handleStatusChange}
-                  className="h-5 w-5 border-none bg-transparent p-0 shadow-none"
-                  displayMode="iconOnly"
-                />
+                <PermissionAware
+                  orgSlug={params.orgSlug}
+                  permission={PERMISSIONS.PROJECT_EDIT}
+                  scope={permissionScope}
+                  fallbackMessage="You don't have permission to change status"
+                >
+                  <StatusSelector
+                    statuses={mappedStatuses}
+                    selectedStatus={project.statusId || ""}
+                    onStatusSelect={handleStatusChange}
+                    className="h-5 w-5 border-none bg-transparent p-0 shadow-none"
+                    displayMode="iconOnly"
+                  />
+                </PermissionAware>
               </span>
               <span className="text-muted-foreground text-xs">Status</span>
               <span className="ml-1 font-medium">
@@ -540,14 +607,21 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
             {/* Lead */}
             <div className="flex min-w-[120px] items-center gap-1">
               <span className="text-muted-foreground">
-                <ProjectLeadSelector
+                <PermissionAware
                   orgSlug={params.orgSlug}
-                  projectKey={params.projectKey}
-                  selectedLead={project.leadId || ""}
-                  onLeadSelect={handleLeadChange}
-                  className="h-5 w-5 border-none bg-transparent p-0 shadow-none"
-                  displayMode="iconOnly"
-                />
+                  permission={PERMISSIONS.PROJECT_EDIT}
+                  scope={permissionScope}
+                  fallbackMessage="You don't have permission to change lead"
+                >
+                  <ProjectLeadSelector
+                    orgSlug={params.orgSlug}
+                    projectKey={params.projectKey}
+                    selectedLead={project.leadId || ""}
+                    onLeadSelect={handleLeadChange}
+                    className="h-5 w-5 border-none bg-transparent p-0 shadow-none"
+                    displayMode="iconOnly"
+                  />
+                </PermissionAware>
               </span>
               <span className="text-muted-foreground text-xs">Lead</span>
               <span className="ml-1 font-medium">

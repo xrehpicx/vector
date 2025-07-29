@@ -1,7 +1,14 @@
 import { query, mutation } from "./_generated/server";
-import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import { v, ConvexError } from "convex/values";
+import type { Id, Doc } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requirePermission, PERMISSIONS } from "./permissions";
+import {
+  canViewProject,
+  canEditProject,
+  canDeleteProject,
+  canManageProjectMembers,
+} from "./access";
 
 /**
  * Get project by organization slug and project key
@@ -12,11 +19,6 @@ export const getByKey = query({
     projectKey: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
     // Find organization
     const org = await ctx.db
       .query("organizations")
@@ -24,19 +26,7 @@ export const getByKey = query({
       .first();
 
     if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    // Verify user is a member of the organization
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+      throw new ConvexError("ORGANIZATION_NOT_FOUND");
     }
 
     // Find project by key and organization
@@ -48,7 +38,12 @@ export const getByKey = query({
       .first();
 
     if (!project) {
-      throw new Error("Project not found");
+      throw new ConvexError("PROJECT_NOT_FOUND");
+    }
+
+    // Check if user can view this project based on visibility
+    if (!(await canViewProject(ctx, project))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Get project details including lead user
@@ -74,12 +69,19 @@ export const create = mutation({
       leadId: v.optional(v.id("users")),
       teamId: v.optional(v.id("teams")),
       statusId: v.optional(v.id("projectStatuses")),
+      visibility: v.optional(
+        v.union(
+          v.literal("private"),
+          v.literal("organization"),
+          v.literal("public"),
+        ),
+      ),
     }),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
-      throw new Error("Not authenticated");
+      throw new ConvexError("UNAUTHORIZED");
     }
 
     // Find organization
@@ -89,20 +91,10 @@ export const create = mutation({
       .first();
 
     if (!org) {
-      throw new Error("Organization not found");
+      throw new ConvexError("ORGANIZATION_NOT_FOUND");
     }
 
-    // Verify user has permission to create projects
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
-    }
+    await requirePermission(ctx, org._id, PERMISSIONS.PROJECT_CREATE);
 
     // Check if project key is unique within the organization
     const existingProject = await ctx.db
@@ -113,7 +105,7 @@ export const create = mutation({
       .first();
 
     if (existingProject) {
-      throw new Error("Project key already exists in this organization");
+      throw new ConvexError("PROJECT_KEY_EXISTS");
     }
 
     // Validate lead user exists and is member of org if provided
@@ -127,7 +119,7 @@ export const create = mutation({
         .first();
 
       if (!leadMembership) {
-        throw new Error("Project lead must be a member of the organization");
+        throw new ConvexError("INVALID_PROJECT_LEAD");
       }
     }
 
@@ -135,25 +127,25 @@ export const create = mutation({
     if (args.data.teamId) {
       const team = await ctx.db.get(args.data.teamId);
       if (!team || team.organizationId !== org._id) {
-        throw new Error("Team not found or not in this organization");
+        throw new ConvexError("INVALID_TEAM");
       }
     }
 
     // Validate input
     if (!args.data.key.trim()) {
-      throw new Error("Project key is required");
+      throw new ConvexError("INVALID_INPUT");
     }
     if (!args.data.name.trim()) {
-      throw new Error("Project name is required");
+      throw new ConvexError("INVALID_INPUT");
     }
     if (args.data.key.length > 20) {
-      throw new Error("Project key must be 20 characters or less");
+      throw new ConvexError("INVALID_INPUT");
     }
     if (args.data.name.length > 100) {
-      throw new Error("Project name must be 100 characters or less");
+      throw new ConvexError("INVALID_INPUT");
     }
     if (args.data.description && args.data.description.length > 1000) {
-      throw new Error("Project description must be 1000 characters or less");
+      throw new ConvexError("INVALID_INPUT");
     }
 
     // Create project
@@ -166,6 +158,15 @@ export const create = mutation({
       teamId: args.data.teamId,
       statusId: args.data.statusId,
       createdBy: userId,
+      visibility: args.data.visibility || "organization", // Default to organization visibility
+    });
+
+    // Automatically add the creator as a project member with "lead" role
+    await ctx.db.insert("projectMembers", {
+      projectId: projectId,
+      userId: userId,
+      role: "lead", // Using "lead" as the owner role for project members
+      joinedAt: Date.now(),
     });
 
     return { projectId };
@@ -177,8 +178,7 @@ export const create = mutation({
  */
 export const update = mutation({
   args: {
-    orgSlug: v.string(),
-    projectKey: v.string(),
+    projectId: v.id("projects"),
     data: v.object({
       name: v.optional(v.string()),
       description: v.optional(v.string()),
@@ -190,104 +190,40 @@ export const update = mutation({
     }),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    // Find project
-    const project = await ctx.db
-      .query("projects")
-      .withIndex("by_org_key", (q) =>
-        q.eq("organizationId", org._id).eq("key", args.projectKey),
-      )
-      .first();
-
+    const project = await ctx.db.get(args.projectId);
     if (!project) {
-      throw new Error("Project not found");
+      throw new ConvexError("PROJECT_NOT_FOUND");
     }
 
-    // Verify user has permission to update project
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+    if (!(await canEditProject(ctx, project))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Validate lead user if provided
     if (args.data.leadId) {
-      const leadId = args.data.leadId;
       const leadMembership = await ctx.db
         .query("members")
         .withIndex("by_org_user", (q) =>
-          q.eq("organizationId", org._id).eq("userId", leadId),
+          q
+            .eq("organizationId", project.organizationId)
+            .eq("userId", args.data.leadId!),
         )
         .first();
 
       if (!leadMembership) {
-        throw new Error("Project lead must be a member of the organization");
+        throw new ConvexError("INVALID_PROJECT_LEAD");
       }
     }
 
     // Validate team exists in organization if provided
     if (args.data.teamId) {
       const team = await ctx.db.get(args.data.teamId);
-      if (!team || team.organizationId !== org._id) {
-        throw new Error("Team not found or not in this organization");
+      if (!team || team.organizationId !== project.organizationId) {
+        throw new ConvexError("INVALID_TEAM");
       }
     }
 
-    // Update project - only update provided fields
-    const updateData: Partial<{
-      name: string;
-      description: string;
-      leadId: Id<"users">;
-      teamId: Id<"teams">;
-      statusId: Id<"projectStatuses">;
-      icon: string;
-      color: string;
-    }> = {};
-
-    if (args.data.name !== undefined) {
-      updateData.name = args.data.name;
-    }
-    if (args.data.description !== undefined) {
-      updateData.description = args.data.description;
-    }
-    if (args.data.leadId !== undefined) {
-      updateData.leadId = args.data.leadId;
-    }
-    if (args.data.teamId !== undefined) {
-      updateData.teamId = args.data.teamId;
-    }
-    if (args.data.statusId !== undefined) {
-      updateData.statusId = args.data.statusId;
-    }
-    if (args.data.icon !== undefined) {
-      updateData.icon = args.data.icon;
-    }
-    if (args.data.color !== undefined) {
-      updateData.color = args.data.color;
-    }
-
-    if (Object.keys(updateData).length > 0) {
-      await ctx.db.patch(project._id, updateData);
-    }
+    await ctx.db.patch(project._id, { ...args.data });
 
     return { success: true };
   },
@@ -338,11 +274,6 @@ export const list = query({
     teamId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
     // Find organization
     const org = await ctx.db
       .query("organizations")
@@ -350,19 +281,7 @@ export const list = query({
       .first();
 
     if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+      throw new ConvexError("ORGANIZATION_NOT_FOUND");
     }
 
     // Get all projects in organization
@@ -385,7 +304,16 @@ export const list = query({
       }
     }
 
-    const projects = await projectsQuery.collect();
+    const allProjects = await projectsQuery.collect();
+
+    // Filter projects based on visibility permissions
+    const projectPromises = allProjects.map(async (project) => {
+      const canView = await canViewProject(ctx, project);
+      return canView ? project : null;
+    });
+    const projects = (await Promise.all(projectPromises)).filter(
+      (project): project is Doc<"projects"> => project !== null,
+    );
 
     // Batch database calls for better performance
     const leadIds = projects
@@ -422,46 +350,17 @@ export const list = query({
  */
 export const listMembers = query({
   args: {
-    orgSlug: v.string(),
-    projectKey: v.string(),
+    projectId: v.id("projects"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Find organization and project
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const project = await ctx.db
-      .query("projects")
-      .withIndex("by_org_key", (q) =>
-        q.eq("organizationId", org._id).eq("key", args.projectKey),
-      )
-      .first();
-
+    const project = await ctx.db.get(args.projectId);
     if (!project) {
-      throw new Error("Project not found");
+      throw new ConvexError("PROJECT_NOT_FOUND");
     }
 
-    // Verify user has access
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new Error("Access denied - not a member of this organization");
+    // Check if user can view this project based on visibility
+    if (!(await canViewProject(ctx, project))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Get project members
@@ -490,60 +389,32 @@ export const listMembers = query({
  */
 export const addMember = mutation({
   args: {
-    orgSlug: v.string(),
-    projectKey: v.string(),
+    projectId: v.id("projects"),
     userId: v.id("users"),
     role: v.union(v.literal("lead"), v.literal("member")),
   },
   handler: async (ctx, args) => {
-    const currentUserId = await getAuthUserId(ctx);
-    if (currentUserId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Find organization and project
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const project = await ctx.db
-      .query("projects")
-      .withIndex("by_org_key", (q) =>
-        q.eq("organizationId", org._id).eq("key", args.projectKey),
-      )
-      .first();
-
+    const project = await ctx.db.get(args.projectId);
     if (!project) {
-      throw new Error("Project not found");
+      throw new ConvexError("PROJECT_NOT_FOUND");
     }
 
-    // Verify current user has permission
-    const currentUserMembership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", currentUserId),
-      )
-      .first();
-
-    if (!currentUserMembership) {
-      throw new Error("Access denied - not a member of this organization");
+    if (!(await canManageProjectMembers(ctx, project, "add"))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Verify target user is member of organization
     const targetUserMembership = await ctx.db
       .query("members")
       .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", args.userId),
+        q
+          .eq("organizationId", project.organizationId)
+          .eq("userId", args.userId),
       )
       .first();
 
     if (!targetUserMembership) {
-      throw new Error("User is not a member of this organization");
+      throw new ConvexError("USER_NOT_MEMBER");
     }
 
     // Check if user is already a project member
@@ -555,7 +426,7 @@ export const addMember = mutation({
       .first();
 
     if (existingMember) {
-      throw new Error("User is already a member of this project");
+      throw new ConvexError("USER_ALREADY_MEMBER");
     }
 
     // Add project member
@@ -575,58 +446,21 @@ export const addMember = mutation({
  */
 export const removeMember = mutation({
   args: {
-    orgSlug: v.string(),
-    projectKey: v.string(),
     membershipId: v.id("projectMembers"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Find organization and project
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const project = await ctx.db
-      .query("projects")
-      .withIndex("by_org_key", (q) =>
-        q.eq("organizationId", org._id).eq("key", args.projectKey),
-      )
-      .first();
-
-    if (!project) {
-      throw new Error("Project not found");
-    }
-
-    // Get the membership to remove
     const membership = await ctx.db.get(args.membershipId);
-    if (!membership || membership.projectId !== project._id) {
-      throw new Error("Project membership not found");
+    if (!membership) {
+      throw new ConvexError("PROJECT_MEMBERSHIP_NOT_FOUND");
     }
 
-    // Verify user has permission or is removing themselves
-    const userMembership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
+    const project = await ctx.db.get(membership.projectId);
+    if (!project) {
+      throw new ConvexError("PROJECT_NOT_FOUND");
+    }
 
-    const isRemovingSelf = membership.userId === userId;
-    const hasPermission =
-      userMembership &&
-      (userMembership.role === "owner" || userMembership.role === "admin");
-
-    if (!isRemovingSelf && !hasPermission) {
-      throw new Error("Insufficient permissions to remove project member");
+    if (!(await canManageProjectMembers(ctx, project, "remove"))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Remove membership
@@ -641,49 +475,16 @@ export const removeMember = mutation({
  */
 export const deleteProject = mutation({
   args: {
-    orgSlug: v.string(),
-    projectKey: v.string(),
+    projectId: v.id("projects"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new Error("Not authenticated");
-    }
-
-    // Find organization and project
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new Error("Organization not found");
-    }
-
-    const project = await ctx.db
-      .query("projects")
-      .withIndex("by_org_key", (q) =>
-        q.eq("organizationId", org._id).eq("key", args.projectKey),
-      )
-      .first();
-
+    const project = await ctx.db.get(args.projectId);
     if (!project) {
-      throw new Error("Project not found");
+      throw new ConvexError("PROJECT_NOT_FOUND");
     }
 
-    // Verify user has permission to delete project
-    const membership = await ctx.db
-      .query("members")
-      .withIndex("by_org_user", (q) =>
-        q.eq("organizationId", org._id).eq("userId", userId),
-      )
-      .first();
-
-    if (
-      !membership ||
-      (membership.role !== "owner" && membership.role !== "admin")
-    ) {
-      throw new Error("Insufficient permissions to delete project");
+    if (!(await canDeleteProject(ctx, project))) {
+      throw new ConvexError("FORBIDDEN");
     }
 
     // Delete project and related data
@@ -709,6 +510,31 @@ export const deleteProject = mutation({
 
     // Finally delete the project
     await ctx.db.delete(project._id);
+
+    return { success: true };
+  },
+});
+
+export const changeVisibility = mutation({
+  args: {
+    projectId: v.id("projects"),
+    visibility: v.union(
+      v.literal("private"),
+      v.literal("organization"),
+      v.literal("public"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) throw new ConvexError("PROJECT_NOT_FOUND");
+
+    if (!(await canEditProject(ctx, project))) {
+      throw new ConvexError("FORBIDDEN");
+    }
+
+    await ctx.db.patch(project._id, {
+      visibility: args.visibility,
+    });
 
     return { success: true };
   },

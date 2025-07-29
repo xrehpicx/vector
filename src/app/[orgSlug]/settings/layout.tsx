@@ -20,8 +20,23 @@ export default function OrgSettingsLayout({
   const user = useQuery(api.users.currentUser);
   const members = useQuery(api.organizations.listMembersWithRoles, { orgSlug });
   const organization = useQuery(api.organizations.getBySlug, { orgSlug });
+  const userOrganizations = useQuery(api.users.getOrganizations);
   const userRole =
     members?.find((m) => m.userId === user?._id)?.role || "member";
+
+  // Transform organizations to match the expected interface
+  const organizations =
+    userOrganizations
+      ?.map((org) => {
+        if (!org) return null;
+        return {
+          id: org._id,
+          name: org.name,
+          slug: org.slug,
+          logo: org.logo,
+        };
+      })
+      .filter((org): org is NonNullable<typeof org> => org !== null) || [];
 
   return (
     <div className="bg-secondary flex h-screen">
@@ -34,7 +49,7 @@ export default function OrgSettingsLayout({
               currentOrgSlug={orgSlug}
               currentOrgName={organization?.name ?? "Organization"}
               currentOrgLogo={organization?.logo}
-              organizations={[]}
+              organizations={organizations}
             />
           </div>
 

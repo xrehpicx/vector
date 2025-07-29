@@ -16,12 +16,13 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Check, User } from "lucide-react";
 import { useQuery } from "convex/react";
-import { api } from "@/lib/convex";
+import { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
+import { useAccess } from "@/components/ui/permission-aware";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { FunctionReturnType } from "convex/server";
 
 type ProjectMember = FunctionReturnType<
   typeof api.projects.listMembers
@@ -73,6 +74,7 @@ export function ProjectLeadSelector({
 }: ProjectLeadSelectorProps) {
   const [open, setOpen] = useState(false);
   const { signOut } = useAuthActions();
+  const { viewOnly } = useAccess();
   const currentUser = useQuery(api.users.getCurrentUser);
   const currentUserId = currentUser?._id;
 
@@ -202,9 +204,12 @@ export function ProjectLeadSelector({
               <CommandItem
                 value=""
                 onSelect={() => {
-                  onLeadSelect("");
-                  setOpen(false);
+                  if (!viewOnly) {
+                    onLeadSelect("");
+                    setOpen(false);
+                  }
                 }}
+                disabled={viewOnly}
               >
                 <Check
                   className={cn(
@@ -213,6 +218,11 @@ export function ProjectLeadSelector({
                   )}
                 />
                 No lead
+                {viewOnly && (
+                  <span className="text-muted-foreground ml-auto text-xs">
+                    (view only)
+                  </span>
+                )}
               </CommandItem>
               {sortedMembers.map((member) => (
                 <CommandItem
@@ -223,9 +233,12 @@ export function ProjectLeadSelector({
                       : member.name || member.email
                   }
                   onSelect={() => {
-                    onLeadSelect(member.userId);
-                    setOpen(false);
+                    if (!viewOnly) {
+                      onLeadSelect(member.userId);
+                      setOpen(false);
+                    }
                   }}
+                  disabled={viewOnly}
                 >
                   <Check
                     className={cn(
@@ -266,6 +279,11 @@ export function ProjectLeadSelector({
                       </span>
                     )}
                   </div>
+                  {viewOnly && (
+                    <span className="text-muted-foreground ml-auto text-xs">
+                      (view only)
+                    </span>
+                  )}
                 </CommandItem>
               ))}
             </CommandGroup>

@@ -10,13 +10,13 @@ import { api } from "@/lib/convex";
 
 interface TeamsPageContentProps {
   orgSlug: string;
-  isAdminOrOwner: boolean;
+  canCreateTeams: boolean;
   orgName?: string;
 }
 
 export function TeamsPageContent({
   orgSlug,
-  isAdminOrOwner,
+  canCreateTeams,
 }: TeamsPageContentProps) {
   // --------------------------------------------------
   // Pagination (server-side)
@@ -39,6 +39,8 @@ export function TeamsPageContent({
       icon: team.icon,
       color: team.color,
       createdAt: new Date(team._creationTime),
+      lead: team.lead,
+      memberCount: team.memberCount,
     })) ?? [];
 
   // Ensure page stays within bounds when total changes
@@ -72,7 +74,7 @@ export function TeamsPageContent({
       <PageSkeleton
         showTabs={true}
         tabCount={1}
-        showCreateButton={isAdminOrOwner}
+        showCreateButton={canCreateTeams}
         tableRows={8}
         tableColumns={4}
       />
@@ -94,7 +96,7 @@ export function TeamsPageContent({
               <span className="text-muted-foreground text-xs">{total}</span>
             </Button>
           </div>
-          {isAdminOrOwner && (
+          {canCreateTeams && (
             <CreateTeamButton orgSlug={orgSlug} size="sm" className="h-6" />
           )}
         </div>

@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, UserPlus, Bot, Shield, Zap, Users } from "lucide-react";
 import Link from "next/link";
+import { extractAuthErrorMessage } from "@/lib/auth-error-handler";
 
 export const dynamic = "force-dynamic";
 
@@ -50,9 +51,7 @@ function SignupForm() {
       router.push(redirectTo);
     } catch (error) {
       console.error("Sign up error:", error);
-      setError(
-        error instanceof Error ? error.message : "Failed to create account",
-      );
+      setError(extractAuthErrorMessage(error));
     } finally {
       setLoading(false);
     }

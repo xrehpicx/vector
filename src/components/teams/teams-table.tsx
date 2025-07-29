@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -18,6 +19,10 @@ import { api } from "@/lib/convex";
 import { getDynamicIcon } from "@/lib/dynamic-icons";
 import { IconPicker } from "@/components/ui/icon-picker";
 
+// Permission system
+import { PermissionAware } from "@/components/ui/permission-aware";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
+
 interface Team {
   id: string;
   name: string;
@@ -26,6 +31,12 @@ interface Team {
   icon?: string | null;
   color?: string | null;
   createdAt?: Date | string;
+  lead?: {
+    _id: string;
+    name?: string | null;
+    email?: string | null;
+  } | null;
+  memberCount?: number;
 }
 
 interface TeamsTableProps {
@@ -53,6 +64,20 @@ export function TeamsTable({
         data: { icon: iconName || undefined },
       });
     }
+  };
+
+  const getInitials = (
+    name: string | null | undefined,
+    email: string | null | undefined,
+  ): string => {
+    const displayName = name || email;
+    if (!displayName) return "?";
+    return displayName
+      .split(" ")
+      .map((part) => part.charAt(0))
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   if (teams.length === 0) {
@@ -90,16 +115,25 @@ export function TeamsTable({
               className="hover:bg-muted/50 flex items-center gap-3 px-3 py-2 transition-colors"
             >
               {/* Team Icon Picker */}
-              <IconPicker
-                value={team.icon || null}
-                onValueChange={(icon) => handleIconChange(team.id, icon)}
-                trigger={
-                  <div className="flex-shrink-0 cursor-pointer">
-                    <TeamIcon className="size-4" style={{ color: teamColor }} />
-                  </div>
-                }
-                className="border-none bg-transparent p-0 shadow-none"
-              />
+              <PermissionAware
+                orgSlug={orgSlug}
+                permission={PERMISSIONS.TEAM_EDIT}
+                fallbackMessage="You don't have permission to change team icon"
+              >
+                <IconPicker
+                  value={team.icon || null}
+                  onValueChange={(icon) => handleIconChange(team.id, icon)}
+                  trigger={
+                    <div className="flex-shrink-0 cursor-pointer">
+                      <TeamIcon
+                        className="size-4"
+                        style={{ color: teamColor }}
+                      />
+                    </div>
+                  }
+                  className="border-none bg-transparent p-0 shadow-none"
+                />
+              </PermissionAware>
 
               {/* Team Key Badge */}
               <Badge
@@ -126,6 +160,26 @@ export function TeamsTable({
                   </>
                 )}
               </Link>
+
+              {/* Team Lead */}
+              <div className="flex-shrink-0">
+                {team.lead ? (
+                  <Avatar className="size-5">
+                    <AvatarFallback className="text-xs">
+                      {getInitials(team.lead.name, team.lead.email)}
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <div className="text-muted-foreground flex size-5 items-center justify-center">
+                    <Users className="size-3" />
+                  </div>
+                )}
+              </div>
+
+              {/* Member Count */}
+              <div className="text-muted-foreground flex-shrink-0 text-xs">
+                <span>{team.memberCount || 0} members</span>
+              </div>
 
               {/* Created Date */}
               <div className="text-muted-foreground flex-shrink-0 text-xs">

@@ -17,6 +17,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
   // Fetch current user and organization data
   const user = useQuery(api.users.currentUser);
   const organization = useQuery(api.organizations.getBySlug, { orgSlug });
+  const userOrganizations = useQuery(api.users.getOrganizations);
+
+  // Transform organizations to match the expected interface
+  const organizations =
+    userOrganizations
+      ?.map((org) => {
+        if (!org) return null;
+        return {
+          id: org._id,
+          name: org.name,
+          slug: org.slug,
+          logo: org.logo,
+        };
+      })
+      .filter((org): org is NonNullable<typeof org> => org !== null) || [];
 
   // Don't render until we have the data
   if (user === undefined || organization === undefined) {
@@ -73,7 +88,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               currentOrgSlug={orgSlug}
               currentOrgName={organization?.name ?? "Organization"}
               currentOrgLogo={organization?.logo}
-              organizations={[]}
+              organizations={organizations}
             />
           </div>
 

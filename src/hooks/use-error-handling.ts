@@ -1,15 +1,16 @@
 import { useState, useCallback } from "react";
 import { analyzeError, type ErrorInfo } from "@/lib/error-handling";
 import { useMutation } from "convex/react";
+import type { FunctionReference } from "convex/server";
 
 /**
  * Hook for handling Convex mutations with consistent error handling
  */
-export function useConvexMutation<T extends any>(
+export function useConvexMutation<T extends FunctionReference<"mutation">>(
   mutation: T,
   options?: {
     context?: string;
-    onSuccess?: (result: any) => void;
+    onSuccess?: (result: unknown) => void;
     onError?: (error: ErrorInfo) => void;
   },
 ) {
@@ -18,12 +19,14 @@ export function useConvexMutation<T extends any>(
   const convexMutation = useMutation(mutation);
 
   const execute = useCallback(
-    async (...args: any[]): Promise<any | null> => {
+    async (args?: unknown): Promise<unknown | null> => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const result = await convexMutation(...args);
+        const result = await convexMutation(
+          args as Parameters<typeof convexMutation>[0],
+        );
 
         if (options?.onSuccess) {
           options.onSuccess(result);
@@ -57,11 +60,13 @@ export function useConvexMutation<T extends any>(
 /**
  * Hook for handling form submissions with error handling
  */
-export function useFormSubmission<T extends (...args: any[]) => Promise<any>>(
+export function useFormSubmission<
+  T extends (...args: never[]) => Promise<unknown>,
+>(
   mutation: T,
   options?: {
     context?: string;
-    onSuccess?: (result: Awaited<ReturnType<T>>) => void;
+    onSuccess?: (result: unknown) => void;
     onError?: (error: ErrorInfo) => void;
     successMessage?: string;
   },
@@ -70,7 +75,7 @@ export function useFormSubmission<T extends (...args: any[]) => Promise<any>>(
   const [error, setError] = useState<ErrorInfo | null>(null);
 
   const submit = useCallback(
-    async (...args: Parameters<T>): Promise<Awaited<ReturnType<T>> | null> => {
+    async (...args: Parameters<T>): Promise<unknown | null> => {
       setIsSubmitting(true);
       setError(null);
 
@@ -109,13 +114,15 @@ export function useFormSubmission<T extends (...args: any[]) => Promise<any>>(
 /**
  * Hook for handling async operations with retry logic
  */
-export function useAsyncOperation<T extends (...args: any[]) => Promise<any>>(
+export function useAsyncOperation<
+  T extends (...args: never[]) => Promise<unknown>,
+>(
   operation: T,
   options?: {
     context?: string;
     maxRetries?: number;
     retryDelay?: number;
-    onSuccess?: (result: Awaited<ReturnType<T>>) => void;
+    onSuccess?: (result: unknown) => void;
     onError?: (error: ErrorInfo) => void;
   },
 ) {
@@ -124,7 +131,7 @@ export function useAsyncOperation<T extends (...args: any[]) => Promise<any>>(
   const [retryCount, setRetryCount] = useState(0);
 
   const execute = useCallback(
-    async (...args: Parameters<T>): Promise<Awaited<ReturnType<T>> | null> => {
+    async (...args: Parameters<T>): Promise<unknown | null> => {
       setIsLoading(true);
       setError(null);
 

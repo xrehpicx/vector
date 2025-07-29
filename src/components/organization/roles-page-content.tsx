@@ -18,9 +18,8 @@ import { CreateRoleDialog } from "./create-role-dialog";
 import { EditRoleDialog } from "./edit-role-dialog";
 import { AssignRoleDialog } from "./assign-role-dialog";
 import { CustomRolesTable } from "./custom-roles-table";
-import { usePermission } from "@/hooks/use-permissions";
-import { PERMISSIONS } from "@/lib/permissions";
-import { BUILTIN_ROLE_PERMISSIONS } from "@/lib/builtin-role-permissions";
+import { useScopedPermission } from "@/hooks/use-permissions";
+import { PERMISSIONS } from "@/convex/_shared/permissions";
 import type { Id } from "@/convex/_generated/dataModel";
 
 interface RolesPageContentProps {
@@ -30,25 +29,26 @@ interface RolesPageContentProps {
 // Mapping from permission identifiers to human-readable labels (keep in sync with dialogs)
 const PERMISSION_LABELS: Record<string, string> = {
   [PERMISSIONS.ORG_VIEW]: "View Organization",
-  [PERMISSIONS.ORG_MANAGE]: "Manage Organization",
-  [PERMISSIONS.ORG_INVITE]: "Invite Members",
-
-  [PERMISSIONS.ROLE_CREATE]: "Create Roles",
-  [PERMISSIONS.ROLE_UPDATE]: "Update Roles",
-  [PERMISSIONS.ROLE_DELETE]: "Delete Roles",
-  [PERMISSIONS.ROLE_ASSIGN]: "Assign Roles",
+  [PERMISSIONS.ORG_MANAGE_SETTINGS]: "Manage Organization Settings",
+  [PERMISSIONS.ORG_MANAGE_BILLING]: "Manage Billing",
+  [PERMISSIONS.ORG_MANAGE_MEMBERS]: "Manage Members",
+  [PERMISSIONS.ORG_MANAGE_ROLES]: "Manage Roles",
 
   [PERMISSIONS.PROJECT_CREATE]: "Create Projects",
-  [PERMISSIONS.PROJECT_UPDATE]: "Update Projects",
+  [PERMISSIONS.PROJECT_VIEW]: "View Projects",
+  [PERMISSIONS.PROJECT_EDIT]: "Edit Projects",
   [PERMISSIONS.PROJECT_DELETE]: "Delete Projects",
 
   [PERMISSIONS.TEAM_CREATE]: "Create Teams",
-  [PERMISSIONS.TEAM_UPDATE]: "Update Teams",
+  [PERMISSIONS.TEAM_VIEW]: "View Teams",
+  [PERMISSIONS.TEAM_EDIT]: "Edit Teams",
   [PERMISSIONS.TEAM_DELETE]: "Delete Teams",
 
   [PERMISSIONS.ISSUE_CREATE]: "Create Issues",
-  [PERMISSIONS.ISSUE_UPDATE]: "Update Issues",
+  [PERMISSIONS.ISSUE_VIEW]: "View Issues",
+  [PERMISSIONS.ISSUE_EDIT]: "Edit Issues",
   [PERMISSIONS.ISSUE_DELETE]: "Delete Issues",
+  [PERMISSIONS.ISSUE_ASSIGN]: "Assign Issues",
 };
 
 export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
@@ -58,21 +58,21 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
     null,
   );
 
-  const { hasPermission: canCreateRoles } = usePermission(
-    orgSlug,
-    PERMISSIONS.ROLE_CREATE,
+  const { hasPermission: canCreateRoles } = useScopedPermission(
+    { orgSlug },
+    PERMISSIONS.ORG_MANAGE_ROLES,
   );
-  const { hasPermission: canUpdateRoles } = usePermission(
-    orgSlug,
-    PERMISSIONS.ROLE_UPDATE,
+  const { hasPermission: canUpdateRoles } = useScopedPermission(
+    { orgSlug },
+    PERMISSIONS.ORG_MANAGE_ROLES,
   );
-  const { hasPermission: canDeleteRoles } = usePermission(
-    orgSlug,
-    PERMISSIONS.ROLE_DELETE,
+  const { hasPermission: canDeleteRoles } = useScopedPermission(
+    { orgSlug },
+    PERMISSIONS.ORG_MANAGE_ROLES,
   );
-  const { hasPermission: canAssignRoles } = usePermission(
-    orgSlug,
-    PERMISSIONS.ROLE_ASSIGN,
+  const { hasPermission: canAssignRoles } = useScopedPermission(
+    { orgSlug },
+    PERMISSIONS.ORG_MANAGE_ROLES,
   );
 
   // Fetch members to compute real counts for system roles
@@ -86,27 +86,22 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
     return counts;
   }, [members]);
 
-  const rolesRaw = useQuery(api.roles.list, { orgSlug }) || [];
-  const roles = rolesRaw.map((role) => ({
-    _id: role._id,
-    name: role.name,
-    description: role.description,
-    createdAt: role._creationTime,
-    system: role.system,
-  }));
-  const deleteMutation = useMutation(api.roles.deleteRole);
+  // Note: Custom roles functionality has been moved to team/project scoped roles
+  // This page now focuses on organization-level role management
+  const roles: any[] = []; // Empty for now - custom org roles can be added later
 
   const handleDeleteRole = async (roleId: Id<"orgRoles">) => {
     if (confirm("Are you sure you want to delete this role?")) {
       try {
-        await deleteMutation({ orgSlug, roleId });
+        // Placeholder - implement when custom org roles are added
+        console.log("Delete role:", roleId);
       } catch (error) {
         console.error("Failed to delete role:", error);
       }
     }
   };
 
-  // Built-in roles for display (permissions derived from source of truth)
+  // Built-in roles for display with new permission system
   const builtInRoles = [
     {
       name: "Owner",
@@ -129,9 +124,14 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
       color: "text-blue-600",
       bgColor: "bg-blue-50",
       borderColor: "border-blue-200",
-      permissions: BUILTIN_ROLE_PERMISSIONS.admin
-        .slice(0, 6) // show up to 6 key permissions
-        .map((p) => PERMISSION_LABELS[p] ?? p),
+      permissions: [
+        "Manage Organization Settings",
+        "Manage Members",
+        "Manage Roles",
+        "Create Teams",
+        "Create Projects",
+        "Manage Issues",
+      ],
       memberCount: roleCounts.admin.toString(),
     },
     {
@@ -143,9 +143,13 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
       color: "text-green-600",
       bgColor: "bg-green-50",
       borderColor: "border-green-200",
-      permissions: BUILTIN_ROLE_PERMISSIONS.member
-        .slice(0, 6)
-        .map((p) => PERMISSION_LABELS[p] ?? p),
+      permissions: [
+        "View Organization",
+        "Create Issues",
+        "View Issues",
+        "View Teams",
+        "View Projects",
+      ],
       memberCount: roleCounts.member.toString(),
     },
   ];
@@ -198,7 +202,7 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
                       Key Permissions
                     </div>
                     <div className="space-y-1">
-                      {role.permissions.map((permission) => (
+                      {role.permissions.map((permission: string) => (
                         <div
                           key={permission}
                           className="flex items-center gap-2"

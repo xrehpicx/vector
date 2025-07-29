@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, ShieldCheck } from "lucide-react";
+import { extractAuthErrorMessage } from "@/lib/auth-error-handler";
 import Link from "next/link";
 import { useAction } from "convex/react";
 import { api } from "@/lib/convex";
@@ -80,11 +81,7 @@ export default function SetupAdminPage() {
         "/auth/login?message=Admin account created successfully. Please sign in.",
       );
     } catch (error) {
-      setGlobalError(
-        error instanceof Error
-          ? error.message
-          : "Failed to create admin account",
-      );
+      setGlobalError(extractAuthErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
