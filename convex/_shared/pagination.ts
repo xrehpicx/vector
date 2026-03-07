@@ -26,9 +26,11 @@ export async function applyPagination<T>(
   ctx: QueryCtx,
   query: QueryInitializer<GenericTableInfo>, // Convex query object
   limit: number = 25,
+  cursor?: string,
 ): Promise<PaginationResult<T>> {
   const result = await query.order('desc').paginate({
     numItems: limit,
+    cursor: cursor ?? null,
   });
 
   return {
