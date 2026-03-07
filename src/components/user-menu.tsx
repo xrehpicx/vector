@@ -1,6 +1,5 @@
 'use client';
 
-import { useAuthActions } from '@convex-dev/auth/react';
 import { useQuery } from 'convex/react';
 import { api } from '@/lib/convex';
 import {
@@ -14,52 +13,53 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ChevronsUpDown, LogOut, User, Settings } from 'lucide-react';
+import { authClient } from '@/lib/auth-client';
+import { useRouter } from 'next/navigation';
 
 export function UserMenu() {
-  const { signOut } = useAuthActions();
   const user = useQuery(api.users.currentUser);
+  const router = useRouter();
 
   if (user === undefined || user === null) {
     return null;
   }
 
-  const handleProfileClick = () => {
-    window.location.href = '/settings/profile';
-  };
-
-  const handleSettingsClick = () => {
-    window.location.href = '/settings';
+  const handleSignOut = async () => {
+    await authClient.signOut();
   };
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant='ghost' className='w-full justify-start gap-2 p-2'>
-          <Avatar className='size-8'>
+          <Avatar className='size-6'>
             {user.image && <AvatarImage src={user.image} alt={user.name} />}
-            <AvatarFallback>{user.name?.[0]}</AvatarFallback>
+            <AvatarFallback className='text-xs'>
+              {user.name?.[0]}
+            </AvatarFallback>
           </Avatar>
-          <div className='flex flex-col items-start'>
-            <span className='text-sm font-medium'>{user.name}</span>
-            <span className='text-muted-foreground text-xs'>{user.email}</span>
+          <div className='flex min-w-0 flex-col items-start'>
+            <span className='truncate text-sm font-medium'>{user.name}</span>
           </div>
-          <ChevronsUpDown className='ml-auto size-4' />
+          <ChevronsUpDown className='text-muted-foreground ml-auto size-3.5' />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className='w-56' align='end' forceMount>
-        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+      <DropdownMenuContent className='w-48' align='end' forceMount>
+        <DropdownMenuLabel className='pb-0 text-xs font-normal'>
+          <span className='text-muted-foreground'>{user.email}</span>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleProfileClick}>
-          <User className='mr-2 size-4' />
+        <DropdownMenuItem onClick={() => router.push('/settings/profile')}>
+          <User className='mr-2 size-3.5' />
           <span>Profile</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleSettingsClick}>
-          <Settings className='mr-2 size-4' />
+        <DropdownMenuItem onClick={() => router.push('/settings')}>
+          <Settings className='mr-2 size-3.5' />
           <span>Settings</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => signOut()}>
-          <LogOut className='mr-2 size-4' />
+        <DropdownMenuItem onClick={() => void handleSignOut()}>
+          <LogOut className='mr-2 size-3.5' />
           <span>Log out</span>
         </DropdownMenuItem>
       </DropdownMenuContent>

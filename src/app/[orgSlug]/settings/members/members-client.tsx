@@ -39,8 +39,10 @@ interface MembersSettingsPageClientProps {
 export default function MembersSettingsPageClient({
   orgSlug,
 }: MembersSettingsPageClientProps) {
-  const members = useQuery(api.organizations.listMembersWithRoles, { orgSlug });
-  const removeMember = useMutation(api.organizations.removeMember);
+  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
+    orgSlug,
+  });
+  const removeMember = useMutation(api.organizations.mutations.removeMember);
   const [selectedMember, setSelectedMember] = useState<Doc<'members'> | null>(
     null
   );

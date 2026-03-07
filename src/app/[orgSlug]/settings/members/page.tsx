@@ -22,30 +22,34 @@ export default function MembersSettingsPage({}: MembersSettingsPageProps) {
     PERMISSIONS.ORG_MANAGE_MEMBERS
   );
 
-  // Show loading state while checking permissions
   if (permissionLoading) {
     return (
-      <div className='flex h-screen w-full items-center justify-center'>
-        <div className='text-2xl font-semibold'>Loading...</div>
+      <div className='bg-background h-full'>
+        <div className='border-b'>
+          <div className='flex items-center p-1'>
+            <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+              <Users className='size-3.5' />
+              Members
+            </span>
+          </div>
+        </div>
+        <div className='text-muted-foreground p-3 text-sm'>Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className='space-y-6 p-6'>
-      {/* Header */}
-      <div className='space-y-1'>
-        <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-          <Users className='size-5' />
-          Members & Access
-        </h1>
-        <p className='text-muted-foreground text-sm'>
-          Manage organization members, roles, and invitations
-        </p>
+    <div className='bg-background h-full'>
+      <div className='border-b'>
+        <div className='flex items-center p-1'>
+          <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+            <Users className='size-3.5' />
+            Members & Access
+          </span>
+        </div>
       </div>
 
-      {/* Members List */}
-      <div className='space-y-4'>
+      <div className='p-3'>
         <MembersList orgSlug={orgSlug} />
       </div>
     </div>

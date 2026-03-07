@@ -59,21 +59,26 @@ export function ProjectMembersSection({
 }) {
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
 
-  const project = useQuery(api.projects.getByKey, { orgSlug, projectKey });
+  const project = useQuery(api.projects.queries.getByKey, {
+    orgSlug,
+    projectKey,
+  });
   const projectId = project?._id;
 
   // Fetch members for this project
   const members =
-    useQuery(api.projects.listMembers, projectId ? { projectId } : 'skip') ??
-    [];
+    useQuery(
+      api.projects.queries.listMembers,
+      projectId ? { projectId } : 'skip'
+    ) ?? [];
 
   // Fetch organization members for filtering
   const orgMembers =
-    useQuery(api.organizations.listMembers, {
+    useQuery(api.organizations.queries.listMembers, {
       orgSlug,
     }) ?? [];
 
-  const removeMemberMutation = useMutation(api.projects.removeMember);
+  const removeMemberMutation = useMutation(api.projects.mutations.removeMember);
 
   const handleRemoveMember = (membershipId: Id<'projectMembers'>) => {
     if (!confirm('Remove this member from the project?')) return;
@@ -203,19 +208,24 @@ function AddMemberDialog({
   const [isAddingMember, setIsAddingMember] = useState(false);
 
   const orgMembers =
-    useQuery(api.organizations.listMembers, {
+    useQuery(api.organizations.queries.listMembers, {
       orgSlug,
     }) ?? [];
 
-  const project = useQuery(api.projects.getByKey, { orgSlug, projectKey });
+  const project = useQuery(api.projects.queries.getByKey, {
+    orgSlug,
+    projectKey,
+  });
   const projectId = project?._id;
 
   // Fetch current project members to filter them out
   const projectMembers =
-    useQuery(api.projects.listMembers, projectId ? { projectId } : 'skip') ??
-    [];
+    useQuery(
+      api.projects.queries.listMembers,
+      projectId ? { projectId } : 'skip'
+    ) ?? [];
 
-  const addMemberMutation = useMutation(api.projects.addMember);
+  const addMemberMutation = useMutation(api.projects.mutations.addMember);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -359,7 +369,7 @@ function AddMemberDialog({
 // Members List Component
 // ------------------------------
 type ProjectMember = FunctionReturnType<
-  typeof api.projects.listMembers
+  typeof api.projects.queries.listMembers
 >[number];
 
 function MembersList({

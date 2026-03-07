@@ -42,7 +42,7 @@ export function CreateRoleDialog({
   const [description, setDescription] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
-  const createMutation = useMutation(api.roles.create);
+  const createMutation = useMutation(api.roles.index.create);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {

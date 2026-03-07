@@ -16,7 +16,9 @@ export default function PrioritiesSettingsPage({}: PrioritiesSettingsPageProps) 
   const orgSlug = paramsObj.orgSlug as string;
 
   const user = useQuery(api.users.currentUser);
-  const members = useQuery(api.organizations.listMembersWithRoles, { orgSlug });
+  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
+    orgSlug,
+  });
 
   const userRole = members?.find(m => m.userId === user?._id)?.role || 'member';
   const isOwner = userRole === 'owner';
@@ -28,20 +30,19 @@ export default function PrioritiesSettingsPage({}: PrioritiesSettingsPageProps) 
   }
 
   return (
-    <div className='space-y-6 p-6'>
-      {/* Header */}
-      <div className='space-y-1'>
-        <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-          <Settings2 className='size-5' />
-          Issue Priorities
-        </h1>
-        <p className='text-muted-foreground text-sm'>
-          Configure issue priorities for your organization
-        </p>
+    <div className='bg-background h-full'>
+      <div className='border-b'>
+        <div className='flex items-center p-1'>
+          <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+            <Settings2 className='size-3.5' />
+            Issue Priorities
+          </span>
+        </div>
       </div>
 
-      {/* Priorities Management */}
-      <PrioritiesPageContent orgSlug={orgSlug} />
+      <div className='p-3'>
+        <PrioritiesPageContent orgSlug={orgSlug} />
+      </div>
     </div>
   );
 }

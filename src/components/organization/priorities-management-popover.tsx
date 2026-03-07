@@ -102,7 +102,9 @@ export function PrioritiesManagementPopover({
   children,
 }: PrioritiesManagementPopoverProps) {
   const [isDeleting, setIsDeleting] = useState(false);
-  const deleteMutation = useMutation(api.organizations.deleteIssuePriority);
+  const deleteMutation = useMutation(
+    api.organizations.mutations.deleteIssuePriority
+  );
 
   const [name, setName] = useState(priority?.name || '');
   const [color, setColor] = useState(priority?.color || DEFAULT_COLORS[0]);

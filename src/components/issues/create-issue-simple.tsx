@@ -32,13 +32,13 @@ import type { FunctionReturnType } from 'convex/server';
 
 // Infer types from Convex query outputs
 type Project = FunctionReturnType<
-  typeof api.organizations.listProjects
+  typeof api.organizations.queries.listProjects
 >[number];
 type State = FunctionReturnType<
-  typeof api.organizations.listIssueStates
+  typeof api.organizations.queries.listIssueStates
 >[number];
 type Priority = FunctionReturnType<
-  typeof api.organizations.listIssuePriorities
+  typeof api.organizations.queries.listIssuePriorities
 >[number];
 
 interface CreateIssueSimpleProps {
@@ -62,11 +62,18 @@ export function CreateIssueSimple({
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch data
-  const projectsData = useQuery(api.organizations.listProjects, { orgSlug });
-  const statesData = useQuery(api.organizations.listIssueStates, { orgSlug });
-  const prioritiesData = useQuery(api.organizations.listIssuePriorities, {
+  const projectsData = useQuery(api.organizations.queries.listProjects, {
     orgSlug,
   });
+  const statesData = useQuery(api.organizations.queries.listIssueStates, {
+    orgSlug,
+  });
+  const prioritiesData = useQuery(
+    api.organizations.queries.listIssuePriorities,
+    {
+      orgSlug,
+    }
+  );
 
   const projects = useMemo(() => projectsData ?? [], [projectsData]);
   const states = useMemo(() => statesData ?? [], [statesData]);
@@ -95,7 +102,7 @@ export function CreateIssueSimple({
     }
   }, [priorities, selectedPriority]);
 
-  const createMutation = useMutation(api.issues.create);
+  const createMutation = useMutation(api.issues.mutations.create);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

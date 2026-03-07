@@ -27,7 +27,7 @@ export async function emailSender({
   });
 
   await transporter.sendMail({
-    from: env.SMTP_FROM ?? env.SMTP_USER ?? 'AIKP <no-reply@aikp.local>',
+    from: env.SMTP_FROM ?? env.SMTP_USER ?? 'Vector <no-reply@vector.local>',
     to,
     subject,
     html,

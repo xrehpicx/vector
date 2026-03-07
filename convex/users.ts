@@ -1,8 +1,9 @@
 import { query, mutation, action } from './_generated/server';
 import { v, ConvexError } from 'convex/values';
-import { createAccount, getAuthUserId } from '@convex-dev/auth/server';
-import { auth } from './auth';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
+import { createAuth } from './auth';
+import { getAuthUserId } from './authUtils';
 
 /**
  * Get the current authenticated user
@@ -78,30 +79,33 @@ export const bootstrapAdmin = action({
     password: v.string(),
     username: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ id: Id<'users'> }> => {
     // Check if admin already exists
-    const existingAdmin = await ctx.runQuery(api.users.adminExists);
+    const existingAdmin = await ctx.runQuery(api.users.adminExists, {});
 
     if (existingAdmin) {
       throw new ConvexError('ADMIN_ALREADY_EXISTS');
     }
 
-    // Create the admin user using Convex Auth's createAccount
-    const { account, user } = await createAccount(ctx, {
-      provider: 'password',
-      account: {
-        id: args.email, // unique identifier
-        secret: args.password, // Convex Auth will hash this automatically
-      },
-      profile: {
+    const result = await createAuth(ctx).api.signUpEmail({
+      body: {
         email: args.email,
+        password: args.password,
         name: args.name,
-        username: args.username,
-        role: 'admin', // Set admin role immediately
+        ...(args.username ? { username: args.username } : {}),
       },
     });
 
-    return { id: user._id };
+    const authUserId = result.user?.id;
+    if (!authUserId) {
+      throw new ConvexError('BOOTSTRAP_ADMIN_CREATION_FAILED');
+    }
+
+    const userId = await ctx.runMutation(internal.auth.setBootstrapAdminRole, {
+      authUserId,
+    });
+
+    return { id: userId };
   },
 });
 

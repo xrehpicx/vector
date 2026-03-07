@@ -8,6 +8,28 @@ export interface AuthError {
   status?: number;
 }
 
+function getErrorFields(error: unknown): AuthError | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  const record = error as Record<string, unknown>;
+  const message =
+    typeof record.message === 'string' ? record.message : undefined;
+  const code = typeof record.code === 'string' ? record.code : undefined;
+  const status = typeof record.status === 'number' ? record.status : undefined;
+
+  if (!message && !code && status === undefined) {
+    return null;
+  }
+
+  return {
+    message: message ?? 'Authentication failed',
+    code,
+    status,
+  };
+}
+
 /**
  * Extract user-friendly error message from Convex Auth errors
  */
@@ -15,6 +37,47 @@ export function extractAuthErrorMessage(error: unknown): string {
   // Handle null/undefined
   if (!error) {
     return 'An unexpected error occurred';
+  }
+
+  const authError = getErrorFields(error);
+  if (authError) {
+    if (
+      authError.code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' ||
+      authError.message.includes('already exists')
+    ) {
+      return 'An account with this email already exists. Please sign in instead';
+    }
+
+    if (
+      authError.code === 'INVALID_EMAIL_OR_PASSWORD' ||
+      authError.code === 'INVALID_USERNAME_OR_PASSWORD'
+    ) {
+      return 'Invalid email, username, or password';
+    }
+
+    if (authError.code === 'PASSWORD_TOO_SHORT') {
+      return 'Password must be at least 6 characters long';
+    }
+
+    if (authError.code === 'INVALID_USERNAME') {
+      return 'Username can only contain letters, numbers, periods, hyphens, and underscores';
+    }
+
+    if (authError.code === 'USERNAME_TOO_SHORT') {
+      return 'Username must be at least 3 characters long';
+    }
+
+    if (authError.code === 'USERNAME_TOO_LONG') {
+      return 'Username must be less than 20 characters';
+    }
+
+    if (
+      authError.status === 401 ||
+      authError.status === 403 ||
+      authError.status === 422
+    ) {
+      return authError.message;
+    }
   }
 
   // Handle Error objects

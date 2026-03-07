@@ -81,29 +81,46 @@ const groupStatesByType = <T extends { type: string }>(
 };
 
 export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
-  const issueStates = useQuery(api.organizations.listIssueStates, { orgSlug });
-  const projectStatuses = useQuery(api.organizations.listProjectStatuses, {
+  const issueStates = useQuery(api.organizations.queries.listIssueStates, {
     orgSlug,
   });
-  const priorities = useQuery(api.organizations.listIssuePriorities, {
+  const projectStatuses = useQuery(
+    api.organizations.queries.listProjectStatuses,
+    {
+      orgSlug,
+    }
+  );
+  const priorities = useQuery(api.organizations.queries.listIssuePriorities, {
     orgSlug,
   });
 
-  const createIssueState = useMutation(api.organizations.createIssueState);
-  const updateIssueState = useMutation(api.organizations.updateIssueState);
+  const createIssueState = useMutation(
+    api.organizations.mutations.createIssueState
+  );
+  const updateIssueState = useMutation(
+    api.organizations.mutations.updateIssueState
+  );
   const createProjectStatus = useMutation(
-    api.organizations.createProjectStatus
+    api.organizations.mutations.createProjectStatus
   );
   const updateProjectStatus = useMutation(
-    api.organizations.updateProjectStatus
+    api.organizations.mutations.updateProjectStatus
   );
-  const resetIssueMutation = useMutation(api.organizations.resetIssueStates);
+  const resetIssueMutation = useMutation(
+    api.organizations.mutations.resetIssueStates
+  );
   const resetStatusMutation = useMutation(
-    api.organizations.resetProjectStatuses
+    api.organizations.mutations.resetProjectStatuses
   );
-  const createPriority = useMutation(api.organizations.createIssuePriority);
-  const updatePriority = useMutation(api.organizations.updateIssuePriority);
-  const resetPriorities = useMutation(api.organizations.resetIssuePriorities);
+  const createPriority = useMutation(
+    api.organizations.mutations.createIssuePriority
+  );
+  const updatePriority = useMutation(
+    api.organizations.mutations.updateIssuePriority
+  );
+  const resetPriorities = useMutation(
+    api.organizations.mutations.resetIssuePriorities
+  );
 
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;

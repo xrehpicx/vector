@@ -24,7 +24,7 @@ async function runMigrations() {
       '📋 Step 1: Creating default roles for existing teams and projects...'
     );
     const defaultRolesResult = await client.mutation(
-      api.migrations.migrateDefaultRoles,
+      api.migrations.index.migrateDefaultRoles,
       {}
     );
     console.log('✅ Default roles created:', defaultRolesResult.message);
@@ -34,7 +34,7 @@ async function runMigrations() {
       '👥 Step 2: Assigning existing team members to Member roles...'
     );
     const teamMembersResult = await client.mutation(
-      api.migrations.migrateTeamMembers,
+      api.migrations.index.migrateTeamMembers,
       {}
     );
     console.log('✅ Team members assigned:', teamMembersResult.message);
@@ -44,7 +44,7 @@ async function runMigrations() {
       '👥 Step 3: Assigning existing project members to Member roles...'
     );
     const projectMembersResult = await client.mutation(
-      api.migrations.migrateProjectMembers,
+      api.migrations.index.migrateProjectMembers,
       {}
     );
     console.log('✅ Project members assigned:', projectMembersResult.message);

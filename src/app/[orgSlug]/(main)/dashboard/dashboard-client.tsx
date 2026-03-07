@@ -3,7 +3,6 @@
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { PageSkeleton } from '@/components/ui/table-skeleton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, FolderOpen, GitBranch, Bug } from 'lucide-react';
 
 interface DashboardClientProps {
@@ -11,7 +10,7 @@ interface DashboardClientProps {
 }
 
 export default function DashboardClient({ orgSlug }: DashboardClientProps) {
-  const orgStats = useQuery(api.organizations.getOrganizationStats, {
+  const orgStats = useQuery(api.organizations.queries.getOrganizationStats, {
     orgSlug,
   });
 
@@ -22,62 +21,45 @@ export default function DashboardClient({ orgSlug }: DashboardClientProps) {
   if (orgStats === null) {
     return (
       <div className='flex items-center justify-center py-8'>
-        <p className='text-muted-foreground'>Organization not found</p>
+        <p className='text-muted-foreground text-sm'>Organization not found</p>
       </div>
     );
   }
 
   const { memberCount, teamCount, projectCount, issueCount } = orgStats;
 
+  const stats = [
+    { label: 'Members', value: memberCount, icon: Users },
+    { label: 'Teams', value: teamCount, icon: GitBranch },
+    { label: 'Projects', value: projectCount, icon: FolderOpen },
+    { label: 'Issues', value: issueCount, icon: Bug },
+  ];
+
   return (
-    <div className='space-y-6'>
-      <div>
-        <h1 className='text-3xl font-bold'>Dashboard</h1>
-        <p className='text-muted-foreground'>
-          Welcome to your organization overview
-        </p>
+    <div className='bg-background h-full'>
+      {/* Header - matches the dense style of issues/projects/teams */}
+      <div className='border-b'>
+        <div className='flex items-center justify-between p-1'>
+          <div className='flex items-center gap-1'>
+            <span className='px-3 text-xs font-medium'>Dashboard</span>
+          </div>
+        </div>
       </div>
 
-      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
-        <Card>
-          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-            <CardTitle className='text-sm font-medium'>Members</CardTitle>
-            <Users className='text-muted-foreground h-4 w-4' />
-          </CardHeader>
-          <CardContent>
-            <div className='text-2xl font-bold'>{memberCount}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-            <CardTitle className='text-sm font-medium'>Teams</CardTitle>
-            <GitBranch className='text-muted-foreground h-4 w-4' />
-          </CardHeader>
-          <CardContent>
-            <div className='text-2xl font-bold'>{teamCount}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-            <CardTitle className='text-sm font-medium'>Projects</CardTitle>
-            <FolderOpen className='text-muted-foreground h-4 w-4' />
-          </CardHeader>
-          <CardContent>
-            <div className='text-2xl font-bold'>{projectCount}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-            <CardTitle className='text-sm font-medium'>Issues</CardTitle>
-            <Bug className='text-muted-foreground h-4 w-4' />
-          </CardHeader>
-          <CardContent>
-            <div className='text-2xl font-bold'>{issueCount}</div>
-          </CardContent>
-        </Card>
+      {/* Stats grid */}
+      <div className='bg-border grid grid-cols-2 gap-px border-b lg:grid-cols-4'>
+        {stats.map(stat => (
+          <div
+            key={stat.label}
+            className='bg-background flex items-center gap-3 px-4 py-3'
+          >
+            <stat.icon className='text-muted-foreground size-4 flex-shrink-0' />
+            <div className='min-w-0'>
+              <p className='text-muted-foreground text-xs'>{stat.label}</p>
+              <p className='text-lg font-semibold tabular-nums'>{stat.value}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

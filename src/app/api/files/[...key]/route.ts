@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { api } from '@/convex/_generated/api';
 import { ConvexHttpClient } from 'convex/browser';
+import { api } from '@/convex/_generated/api';
 
 interface Params {
   key: string[];
@@ -18,9 +18,12 @@ export async function GET(
     const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
     // Get the file URL from Convex
-    const fileUrl = await convex.query(api.organizations.getFileUrlByString, {
-      storageIdString: storageId,
-    });
+    const fileUrl = await convex.query(
+      api.organizations.queries.getFileUrlByString,
+      {
+        storageIdString: storageId,
+      }
+    );
 
     if (!fileUrl) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 });

@@ -19,20 +19,19 @@ export default function RolesSettingsPage({}: RolesSettingsPageProps) {
       orgSlug={orgSlug}
       permission={PERMISSIONS.ORG_MANAGE_ROLES}
     >
-      <div className='space-y-6 p-6'>
-        {/* Header */}
-        <div className='space-y-1'>
-          <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-            <Shield className='size-5' />
-            Roles & Permissions
-          </h1>
-          <p className='text-muted-foreground text-sm'>
-            Create custom roles and configure permissions for your organization
-          </p>
+      <div className='bg-background h-full'>
+        <div className='border-b'>
+          <div className='flex items-center p-1'>
+            <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+              <Shield className='size-3.5' />
+              Roles & Permissions
+            </span>
+          </div>
         </div>
 
-        {/* Roles Management */}
-        <RolesPageContent orgSlug={orgSlug} />
+        <div className='p-3'>
+          <RolesPageContent orgSlug={orgSlug} />
+        </div>
       </div>
     </PermissionBoundary>
   );

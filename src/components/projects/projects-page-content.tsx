@@ -247,22 +247,24 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
         </div>
 
         {/* Pagination controls */}
-        <div className='text-muted-foreground flex justify-between border-t p-2 text-xs'>
+        <div className='text-muted-foreground flex items-center justify-between border-t px-3 py-1.5 text-xs'>
           <span>
             Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}
           </span>
-          <div className='flex gap-2'>
+          <div className='flex gap-1'>
             <Button
-              variant='outline'
+              variant='ghost'
               size='sm'
+              className='h-6 px-2 text-xs'
               disabled={page === 1}
               onClick={() => setPage(p => Math.max(1, p - 1))}
             >
               Prev
             </Button>
             <Button
-              variant='outline'
+              variant='ghost'
               size='sm'
+              className='h-6 px-2 text-xs'
               disabled={page * PAGE_SIZE >= total}
               onClick={() => setPage(p => p + 1)}
             >

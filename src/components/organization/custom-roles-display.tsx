@@ -25,7 +25,7 @@ export function CustomRolesDisplay({
     null
   );
 
-  const removeRoleMutation = useMutation(api.roles.removeAssignment);
+  const removeRoleMutation = useMutation(api.roles.index.removeAssignment);
 
   const handleRemoveRole = async (roleId: Id<'orgRoles'>) => {
     setRemovingRoleId(roleId);

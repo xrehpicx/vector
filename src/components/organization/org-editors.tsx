@@ -32,7 +32,7 @@ export function OrgNameEditor({ orgSlug, initialValue }: EditorProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const mutation = useMutation(api.organizations.update);
+  const mutation = useMutation(api.organizations.mutations.update);
 
   // Reset value when editing starts
   useEffect(() => {
@@ -171,7 +171,7 @@ export function OrgSlugEditor({ orgSlug, initialValue }: EditorProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const mutation = useMutation(api.organizations.update);
+  const mutation = useMutation(api.organizations.mutations.update);
 
   // Reset value when editing starts
   useEffect(() => {
@@ -345,12 +345,14 @@ export function OrgLogoEditor({ orgSlug, initialValue }: LogoEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generateUploadUrl = useMutation(
-    api.organizations.generateLogoUploadUrl
+    api.organizations.mutations.generateLogoUploadUrl
   );
   const updateLogoWithStorageId = useMutation(
-    api.organizations.updateLogoWithStorageId
+    api.organizations.mutations.updateLogoWithStorageId
   );
-  const getLogoUrl = useQuery(api.organizations.getLogoUrl, { orgSlug });
+  const getLogoUrl = useQuery(api.organizations.queries.getLogoUrl, {
+    orgSlug,
+  });
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

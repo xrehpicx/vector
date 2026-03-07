@@ -105,7 +105,9 @@ export function PrioritiesManagementDialog({
   onSave,
   orgSlug,
 }: PrioritiesManagementDialogProps) {
-  const deleteMutation = useMutation(api.organizations.deleteIssuePriority);
+  const deleteMutation = useMutation(
+    api.organizations.mutations.deleteIssuePriority
+  );
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [name, setName] = useState(priority?.name || '');

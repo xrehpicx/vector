@@ -31,14 +31,22 @@ function getInitials(name?: string, email?: string): string {
 }
 
 export function MembersList({ orgSlug }: { orgSlug: string }) {
-  const members = useQuery(api.organizations.listMembersWithRoles, { orgSlug });
-  const invites = useQuery(api.organizations.listInvites, { orgSlug });
+  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
+    orgSlug,
+  });
+  const invites = useQuery(api.organizations.queries.listInvites, { orgSlug });
   const currentUser = useQuery(api.users.getCurrentUser);
   const [showInvite, setShowInvite] = useState(false);
 
-  const removeMemberMutation = useMutation(api.organizations.removeMember);
-  const revokeInviteMutation = useMutation(api.organizations.revokeInvite);
-  const resendInviteMutation = useMutation(api.organizations.resendInvite);
+  const removeMemberMutation = useMutation(
+    api.organizations.mutations.removeMember
+  );
+  const revokeInviteMutation = useMutation(
+    api.organizations.mutations.revokeInvite
+  );
+  const resendInviteMutation = useMutation(
+    api.organizations.mutations.resendInvite
+  );
 
   const { isAdmin, currentUserId } = useMemo(() => {
     if (!currentUser || !members) {

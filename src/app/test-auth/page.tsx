@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuthActions } from '@convex-dev/auth/react';
 import { Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
 import { useQuery } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
 import { extractAuthErrorMessage } from '@/lib/auth-error-handler';
+import { authClient } from '@/lib/auth-client';
 
 export default function TestAuthPage() {
   return (
@@ -28,7 +28,6 @@ export default function TestAuthPage() {
 }
 
 function SignInForm() {
-  const { signIn } = useAuthActions();
   const [error, setError] = useState<string | null>(null);
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -37,7 +36,24 @@ function SignInForm() {
 
     try {
       const formData = new FormData(e.currentTarget);
-      await signIn('password', formData);
+      const email = String(formData.get('email') ?? '');
+      const password = String(formData.get('password') ?? '');
+      const name = String(formData.get('name') ?? '').trim();
+
+      const result = name
+        ? await authClient.signUp.email({
+            email,
+            password,
+            name,
+          })
+        : await authClient.signIn.email({
+            email,
+            password,
+          });
+
+      if (result.error) {
+        throw result.error;
+      }
     } catch (error) {
       console.error('Sign in error:', error);
       setError(extractAuthErrorMessage(error));
@@ -103,7 +119,6 @@ function SignInForm() {
 }
 
 function UserProfile() {
-  const { signOut } = useAuthActions();
   const user = useQuery(api.users.currentUser);
 
   if (!user) {
@@ -130,7 +145,7 @@ function UserProfile() {
       </div>
 
       <button
-        onClick={() => signOut()}
+        onClick={() => void authClient.signOut()}
         className='mt-4 inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none'
       >
         Sign Out

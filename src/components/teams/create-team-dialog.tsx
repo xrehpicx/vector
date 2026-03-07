@@ -55,7 +55,7 @@ function CreateTeamDialogContent({
 
   // Get organization members for lead selection
   const orgMembersData =
-    useQuery(api.organizations.listMembers, { orgSlug }) ?? [];
+    useQuery(api.organizations.queries.listMembers, { orgSlug }) ?? [];
 
   // Transform orgMembers to match the expected Member interface
   const orgMembers = orgMembersData.map(member => ({
@@ -64,7 +64,7 @@ function CreateTeamDialogContent({
     email: member.user?.email || '',
   }));
 
-  const createMutation = useMutation(api.teams.create);
+  const createMutation = useMutation(api.teams.mutations.create);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

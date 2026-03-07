@@ -35,12 +35,12 @@ export function EditRoleDialog({
   const [description, setDescription] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
-  const role = useQuery(api.roles.get, {
+  const role = useQuery(api.roles.index.get, {
     orgSlug: orgSlug,
     roleId,
   });
 
-  const rolePermissionsQuery = useQuery(api.roles.getPermissions, {
+  const rolePermissionsQuery = useQuery(api.roles.index.getPermissions, {
     roleId,
   });
 
@@ -55,7 +55,7 @@ export function EditRoleDialog({
     }
   }, [role, rolePermissionsQuery]);
 
-  const updateMutation = useMutation(api.roles.update);
+  const updateMutation = useMutation(api.roles.index.update);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -4,7 +4,7 @@ import {
   type QueryCtx,
   type MutationCtx,
 } from '../_generated/server';
-import { getAuthUserId } from '@convex-dev/auth/server';
+import { getAuthUserId } from '../authUtils';
 import { v, ConvexError } from 'convex/values';
 import { Id, Doc } from '../_generated/dataModel';
 import { PERMISSIONS, requirePermission } from '../permissions/utils';

@@ -29,7 +29,7 @@ export function InviteDialog({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<NonOwnerMemberRole>('member');
 
-  const inviteMutation = useMutation(api.organizations.invite);
+  const inviteMutation = useMutation(api.organizations.mutations.invite);
 
   const { submit, isSubmitting, error } = useFormSubmission(inviteMutation, {
     context: 'Invite',

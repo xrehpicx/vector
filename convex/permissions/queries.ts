@@ -1,7 +1,7 @@
 import { query } from '../_generated/server';
 import { v } from 'convex/values';
 import { PERMISSIONS, type Permission } from '../_shared/permissions';
-import { getAuthUserId } from '@convex-dev/auth/server';
+import { getAuthUserId } from '../authUtils';
 import type { Id } from '../_generated/dataModel';
 
 export type VisibilityState = 'private' | 'organization' | 'public';

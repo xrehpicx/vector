@@ -25,7 +25,7 @@ export function TeamsPageContent({
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
 
-  const teamsData = useQuery(api.teams.list, { orgSlug });
+  const teamsData = useQuery(api.teams.queries.list, { orgSlug });
   const total = teamsData?.length ?? 0;
 
   const isLoading = teamsData === undefined;
@@ -55,7 +55,7 @@ export function TeamsPageContent({
   // Team operations
   // --------------------------------------------------
 
-  const deleteMutation = useMutation(api.teams.deleteTeam);
+  const deleteMutation = useMutation(api.teams.mutations.deleteTeam);
 
   const handleDelete = (teamId: string) => {
     deleteMutation({ teamId: teamId as Id<'teams'> });

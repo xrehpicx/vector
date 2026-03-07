@@ -31,40 +31,43 @@ export default function OrgSettingsPageClient({
   const isOwner = userRole === 'owner';
   const isAdmin = userRole === 'admin' || isOwner;
 
+  const header = (
+    <div className='border-b'>
+      <div className='flex items-center p-1'>
+        <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+          <Building className='size-3.5' />
+          Organization
+        </span>
+      </div>
+    </div>
+  );
+
   if (org === undefined) {
     return (
-      <div className='space-y-6 p-6'>
-        <div className='space-y-1'>
-          <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-            <Building className='size-5' />
-            Organization Information
-          </h1>
-          <p className='text-muted-foreground text-sm'>Loading...</p>
-        </div>
+      <div className='bg-background h-full'>
+        {header}
+        <div className='text-muted-foreground p-3 text-sm'>Loading...</div>
       </div>
     );
   }
 
   if (org === null) {
-    return <div>Organization not found</div>;
+    return (
+      <div className='bg-background h-full'>
+        {header}
+        <div className='text-muted-foreground p-3 text-sm'>
+          Organization not found
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className='space-y-6 p-6'>
-      {/* Header */}
-      <div className='space-y-1'>
-        <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-          <Building className='size-5' />
-          Organization Information
-        </h1>
-        <p className='text-muted-foreground text-sm'>
-          Manage your organization&apos;s basic information and branding
-        </p>
-      </div>
+    <div className='bg-background h-full'>
+      {header}
 
-      {/* Organization Settings */}
-      <div className='space-y-6'>
-        <div className='grid gap-6 sm:grid-cols-2'>
+      <div className='space-y-4 p-3'>
+        <div className='grid gap-4 sm:grid-cols-2'>
           <div className='space-y-2'>
             <label className='text-sm font-medium'>Organization Name</label>
             {isAdmin ? (

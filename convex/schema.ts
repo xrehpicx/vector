@@ -1,12 +1,7 @@
 import { defineSchema, defineTable } from 'convex/server';
-import { authTables } from '@convex-dev/auth/server';
 import { v } from 'convex/values';
 
 export default defineSchema({
-  // Include Convex Auth tables (users, authSessions, authAccounts, etc.)
-  ...authTables,
-
-  // Extend the users table with additional fields for Better-Auth compatibility
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),

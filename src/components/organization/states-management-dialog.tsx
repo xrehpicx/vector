@@ -219,9 +219,11 @@ export function StatesManagementDialog({
     state?.type || (type === 'issue' ? 'todo' : 'planned')
   );
 
-  const deleteIssueState = useMutation(api.organizations.deleteIssueState);
+  const deleteIssueState = useMutation(
+    api.organizations.mutations.deleteIssueState
+  );
   const deleteProjectStatus = useMutation(
-    api.organizations.deleteProjectStatus
+    api.organizations.mutations.deleteProjectStatus
   );
 
   const [isDeleting, setIsDeleting] = useState(false);

@@ -7,27 +7,23 @@ export default async function OrgSetupPage() {
   // the main page to handle users who already have organizations.
 
   return (
-    <div className='from-muted/50 via-muted/25 to-background flex min-h-screen items-center justify-center bg-gradient-to-b px-4'>
-      <div className='mx-auto w-full max-w-md space-y-8'>
-        {/* Header */}
-        <div className='text-center'>
-          <h1 className='text-3xl font-bold tracking-tight'>
-            Create Your Organization
+    <div className='flex min-h-screen items-center justify-center px-4'>
+      <div className='w-full max-w-sm space-y-6'>
+        <div className='space-y-1'>
+          <h1 className='text-2xl font-semibold tracking-tight'>
+            Create your organization
           </h1>
-          <p className='text-muted-foreground mt-2'>
-            Get started by setting up your workspace
+          <p className='text-muted-foreground text-sm'>
+            Set up your workspace to get started
           </p>
         </div>
 
-        {/* Form Card */}
-        <div className='border-border/40 bg-background/95 supports-[backdrop-filter]:bg-background/80 rounded-xl border p-8 shadow-xl backdrop-blur'>
+        <div className='rounded-lg border p-6'>
           <OrgSetupForm />
         </div>
 
-        {/* Footer */}
-        <p className='text-muted-foreground text-center text-sm'>
-          You can invite team members and create projects after setting up your
-          organization.
+        <p className='text-muted-foreground text-center text-xs'>
+          You can invite team members and create projects after setup.
         </p>
       </div>
     </div>

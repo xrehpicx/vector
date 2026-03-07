@@ -53,7 +53,7 @@ export function TeamsTable({
   onDelete,
   deletePending = false,
 }: TeamsTableProps) {
-  const updateIconMutation = useMutation(api.teams.update);
+  const updateIconMutation = useMutation(api.teams.mutations.update);
 
   const handleIconChange = (teamId: string, iconName: string | null) => {
     updateIconMutation({
@@ -78,14 +78,8 @@ export function TeamsTable({
 
   if (teams.length === 0) {
     return (
-      <div className='flex items-center justify-center py-12'>
-        <div className='text-center'>
-          <div className='mb-4 text-4xl'>👥</div>
-          <h3 className='mb-2 text-lg font-semibold'>No teams found</h3>
-          <p className='text-muted-foreground mb-6'>
-            Get started by creating your first team.
-          </p>
-        </div>
+      <div className='text-muted-foreground flex items-center justify-center py-12 text-sm'>
+        No teams found
       </div>
     );
   }

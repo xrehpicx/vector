@@ -10,14 +10,16 @@ export default function SettingsPage() {
 
   if (user === undefined) {
     return (
-      <div className='space-y-6 p-6'>
-        <div className='space-y-1'>
-          <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-            <Settings className='size-5' />
-            Settings
-          </h1>
-          <p className='text-muted-foreground text-sm'>Loading...</p>
+      <div className='bg-background h-full'>
+        <div className='border-b'>
+          <div className='flex items-center p-1'>
+            <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+              <Settings className='size-3.5' />
+              Settings
+            </span>
+          </div>
         </div>
+        <div className='text-muted-foreground p-3 text-sm'>Loading...</div>
       </div>
     );
   }
@@ -27,63 +29,42 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className='space-y-6 p-6'>
-      {/* Header */}
-      <div className='space-y-1'>
-        <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-          <Settings className='size-5' />
-          Settings
-        </h1>
-        <p className='text-muted-foreground text-sm'>
-          Manage your account settings and preferences
-        </p>
+    <div className='bg-background h-full'>
+      <div className='border-b'>
+        <div className='flex items-center p-1'>
+          <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+            <Settings className='size-3.5' />
+            Settings
+          </span>
+        </div>
       </div>
 
-      {/* Settings Options */}
-      <div className='space-y-6'>
-        <div className='grid gap-6 sm:grid-cols-2'>
-          <div className='space-y-2'>
-            <label className='text-sm font-medium'>Profile Settings</label>
-            <Link
-              href='/settings/profile'
-              className='hover:bg-muted/50 flex items-center gap-3 rounded-lg border p-4 transition-colors'
-            >
-              <div className='bg-primary/10 flex h-10 w-10 items-center justify-center rounded-md'>
-                <User className='text-primary size-5' />
-              </div>
-              <div>
-                <h3 className='font-medium'>Profile</h3>
-                <p className='text-muted-foreground text-sm'>
-                  Update your personal information and preferences
-                </p>
-              </div>
-            </Link>
+      <div className='space-y-2 p-3'>
+        <Link
+          href='/settings/profile'
+          className='hover:bg-muted/50 flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors'
+        >
+          <User className='text-muted-foreground size-4' />
+          <div>
+            <p className='text-sm font-medium'>Profile</p>
             <p className='text-muted-foreground text-xs'>
-              Manage your personal information and account settings
+              Update your personal information
             </p>
           </div>
+        </Link>
 
-          <div className='space-y-2'>
-            <label className='text-sm font-medium'>Invitations</label>
-            <Link
-              href='/settings/invites'
-              className='hover:bg-muted/50 flex items-center gap-3 rounded-lg border p-4 transition-colors'
-            >
-              <div className='bg-primary/10 flex h-10 w-10 items-center justify-center rounded-md'>
-                <Mail className='text-primary size-5' />
-              </div>
-              <div>
-                <h3 className='font-medium'>Invites</h3>
-                <p className='text-muted-foreground text-sm'>
-                  Manage organization invitations
-                </p>
-              </div>
-            </Link>
+        <Link
+          href='/settings/invites'
+          className='hover:bg-muted/50 flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors'
+        >
+          <Mail className='text-muted-foreground size-4' />
+          <div>
+            <p className='text-sm font-medium'>Invitations</p>
             <p className='text-muted-foreground text-xs'>
-              Accept or decline pending organization invitations
+              Manage organization invitations
             </p>
           </div>
-        </div>
+        </Link>
       </div>
     </div>
   );

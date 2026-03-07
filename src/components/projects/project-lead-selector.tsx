@@ -24,7 +24,7 @@ import type { FunctionReturnType } from 'convex/server';
 import { useAccess } from '@/components/ui/permission-aware';
 
 type ProjectMember = FunctionReturnType<
-  typeof api.projects.listMembers
+  typeof api.projects.queries.listMembers
 >[number];
 type OrgMember = {
   userId: string;
@@ -79,16 +79,16 @@ export function ProjectLeadSelector({
 
   // Fetch organization members (for project creation)
   const orgMembers: OrgMember[] =
-    useQuery(api.organizations.listMembers, { orgSlug }) ?? [];
+    useQuery(api.organizations.queries.listMembers, { orgSlug }) ?? [];
   const project = useQuery(
-    api.projects.getByKey,
+    api.projects.queries.getByKey,
     projectKey ? { orgSlug, projectKey } : 'skip'
   );
 
   // Fetch project members if projectKey and project ID are available
   const projectMembers: ProjectMember[] =
     useQuery(
-      api.projects.listMembers,
+      api.projects.queries.listMembers,
       projectKey && project?._id ? { projectId: project._id } : 'skip'
     ) ?? [];
 

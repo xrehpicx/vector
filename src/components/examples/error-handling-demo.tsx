@@ -64,7 +64,7 @@ export function ErrorHandlingDemo() {
 function BasicMutationDemo() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<DemoError | null>(null);
-  const inviteMutation = useMutation(api.organizations.invite);
+  const inviteMutation = useMutation(api.organizations.mutations.invite);
 
   const handleInvite = async () => {
     setIsLoading(true);
@@ -125,7 +125,7 @@ function FormSubmissionDemo() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<DemoError | null>(null);
-  const inviteMutation = useMutation(api.organizations.invite);
+  const inviteMutation = useMutation(api.organizations.mutations.invite);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,7 +212,7 @@ function FormSubmissionDemo() {
 function RetryLogicDemo() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<DemoError | null>(null);
-  const inviteMutation = useMutation(api.organizations.invite);
+  const inviteMutation = useMutation(api.organizations.mutations.invite);
 
   const handleRetryDemo = async () => {
     setIsLoading(true);

@@ -30,8 +30,8 @@ export function CustomRoleAssigner({
   const [open, setOpen] = useState(false);
 
   // Fetch custom (non-system) roles for this organization
-  const roles = useQuery(api.roles.list, { orgSlug }) || [];
-  const assignMutation = useMutation(api.roles.assign);
+  const roles = useQuery(api.roles.index.list, { orgSlug }) || [];
+  const assignMutation = useMutation(api.roles.index.assign);
   const [isAssigning, setIsAssigning] = useState(false);
 
   const handleAssign = async (roleId: Id<'orgRoles'>) => {

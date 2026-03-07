@@ -48,7 +48,7 @@ export function RoleSelector({
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const mutation = useMutation(api.organizations.updateMemberRole);
+  const mutation = useMutation(api.organizations.mutations.updateMemberRole);
 
   const handleSelect = async (role: RoleValue) => {
     if (role === currentRole) return;

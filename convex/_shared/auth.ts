@@ -1,4 +1,4 @@
-import { getAuthUserId } from '@convex-dev/auth/server';
+import { getAuthUserId } from '../authUtils';
 import type { QueryCtx, MutationCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
 

@@ -51,7 +51,8 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
   );
 
   // Fetch members to compute real counts for system roles
-  const members = useQuery(api.organizations.listMembers, { orgSlug }) || [];
+  const members =
+    useQuery(api.organizations.queries.listMembers, { orgSlug }) || [];
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { owner: 0, admin: 0, member: 0 };

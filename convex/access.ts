@@ -9,7 +9,7 @@
 // It is built on top of the core permission engine in `permissions.ts`.
 // ----------------------------------------------------------------------------
 
-import { getAuthUserId } from '@convex-dev/auth/server';
+import { getAuthUserId } from './authUtils';
 import type { QueryCtx, MutationCtx } from './_generated/server';
 import type { Id, Doc } from './_generated/dataModel';
 import {

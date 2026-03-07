@@ -1,0 +1,32 @@
+version: 1
+defaults:
+  stop_timeout_sec: 8
+  shell: /bin/sh
+processes:
+  - name: build
+    command: pnpm run build
+  - name: convex:dev
+    command: pnpm run convex:dev
+  - name: dev
+    command: pnpm run dev
+  - name: format
+    command: pnpm run format
+  - name: format:check
+    command: pnpm run format:check
+  - name: generate:keys
+    command: pnpm run generate:keys
+  - name: lint
+    command: pnpm run lint
+  - name: lint:fix
+    command: pnpm run lint:fix
+  - name: prepare
+    command: pnpm run prepare
+  - name: project:setup
+    command: pnpm run project:setup
+  - name: start
+    command: pnpm run start
+groups:
+  - name: dev servers
+    processes:
+      - convex:dev
+      - dev

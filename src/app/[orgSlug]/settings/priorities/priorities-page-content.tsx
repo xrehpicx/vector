@@ -23,13 +23,19 @@ interface PrioritiesPageContentProps {
 }
 
 export function PrioritiesPageContent({ orgSlug }: PrioritiesPageContentProps) {
-  const priorities = useQuery(api.organizations.listIssuePriorities, {
+  const priorities = useQuery(api.organizations.queries.listIssuePriorities, {
     orgSlug,
   });
 
-  const createMutation = useMutation(api.organizations.createIssuePriority);
-  const updateMutation = useMutation(api.organizations.updateIssuePriority);
-  const resetMutation = useMutation(api.organizations.resetIssuePriorities);
+  const createMutation = useMutation(
+    api.organizations.mutations.createIssuePriority
+  );
+  const updateMutation = useMutation(
+    api.organizations.mutations.updateIssuePriority
+  );
+  const resetMutation = useMutation(
+    api.organizations.mutations.resetIssuePriorities
+  );
 
   const [dialogState, setDialogState] = useState<{
     isOpen: boolean;

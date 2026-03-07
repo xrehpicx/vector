@@ -1,7 +1,7 @@
 import { query } from '../_generated/server';
 import { v, ConvexError } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
-import { getAuthUserId } from '@convex-dev/auth/server';
+import { getAuthUserId } from '../authUtils';
 import { requirePermission, PERMISSIONS } from '../permissions/utils';
 import { canViewIssue } from '../access';
 

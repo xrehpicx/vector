@@ -9,10 +9,23 @@ import { Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Id } from '@/convex/_generated/dataModel';
 
+const header = (
+  <div className='border-b'>
+    <div className='flex items-center p-1'>
+      <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+        <Mail className='size-3.5' />
+        Invitations
+      </span>
+    </div>
+  </div>
+);
+
 export default function InvitesPage() {
   const invites = useQuery(api.users.getPendingInvitations);
-  const acceptInvite = useMutation(api.organizations.acceptInvitation);
-  const declineInvite = useMutation(api.organizations.revokeInvite);
+  const acceptInvite = useMutation(
+    api.organizations.mutations.acceptInvitation
+  );
+  const declineInvite = useMutation(api.organizations.mutations.revokeInvite);
 
   const handleAccept = async (inviteId: Id<'invitations'>) => {
     try {
@@ -34,112 +47,63 @@ export default function InvitesPage() {
 
   if (invites === undefined) {
     return (
-      <div className='space-y-6 p-6'>
-        <div className='space-y-1'>
-          <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-            <Mail className='size-5' />
-            Pending Invitations
-          </h1>
-          <p className='text-muted-foreground text-sm'>Loading...</p>
-        </div>
+      <div className='bg-background h-full'>
+        {header}
+        <div className='text-muted-foreground p-3 text-sm'>Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className='space-y-6 p-6'>
-      {/* Header */}
-      <div className='space-y-1'>
-        <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-          <Mail className='size-5' />
-          Pending Invitations
-        </h1>
-        <p className='text-muted-foreground text-sm'>
-          Manage your organization invitations and join new teams
-        </p>
-      </div>
+    <div className='bg-background h-full'>
+      {header}
 
-      {/* Invitation Stats */}
-      <div className='flex items-center gap-4'>
-        <div className='flex items-center gap-2'>
-          <span className='text-sm font-medium'>Pending Invites</span>
-          <Badge variant='secondary' className='text-xs'>
-            {invites.length} {invites.length === 1 ? 'invite' : 'invites'}
-          </Badge>
+      {invites.length === 0 ? (
+        <div className='text-muted-foreground flex items-center justify-center py-12 text-sm'>
+          No pending invitations
         </div>
-        {invites.length > 0 && (
-          <p className='text-muted-foreground text-xs'>
-            Accept invitations to join organizations and start collaborating
-          </p>
-        )}
-      </div>
+      ) : (
+        <div className='divide-y'>
+          {invites.map(inv => (
+            <div key={inv._id} className='flex items-center gap-3 px-3 py-2'>
+              <div className='min-w-0 flex-1'>
+                <p className='truncate text-sm font-medium'>
+                  {inv.organization?.name ?? 'Unknown Organization'}
+                </p>
+                <p className='text-muted-foreground text-xs'>
+                  Invited {format(new Date(inv._creationTime), 'MMM d, yyyy')}
+                </p>
+              </div>
 
-      {/* Invitations List */}
-      <div className='space-y-4'>
-        {invites.length === 0 ? (
-          <div className='text-muted-foreground flex h-32 items-center justify-center rounded-md border border-dashed text-sm'>
-            You have no pending invitations.
-          </div>
-        ) : (
-          <div className='overflow-hidden rounded-md border'>
-            <table className='w-full'>
-              <thead className='bg-muted/50'>
-                <tr>
-                  <th className='text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wider uppercase'>
-                    Organization
-                  </th>
-                  <th className='text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wider uppercase'>
-                    Role
-                  </th>
-                  <th className='text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wider uppercase'>
-                    Invited
-                  </th>
-                  <th className='text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wider uppercase'>
-                    Expires
-                  </th>
-                  <th className='text-muted-foreground px-4 py-3 text-right text-xs font-medium tracking-wider uppercase'>
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className='divide-border divide-y'>
-                {invites.map(inv => (
-                  <tr key={inv._id} className='hover:bg-muted/50'>
-                    <td className='px-4 py-3 text-sm font-medium'>
-                      {inv.organization?.name ?? 'Unknown Organization'}
-                    </td>
-                    <td className='px-4 py-3 text-sm'>
-                      <Badge variant='outline' className='capitalize'>
-                        {inv.role}
-                      </Badge>
-                    </td>
-                    <td className='text-muted-foreground px-4 py-3 text-sm'>
-                      {format(new Date(inv._creationTime), 'MMM d, yyyy')}
-                    </td>
-                    <td className='text-muted-foreground px-4 py-3 text-sm'>
-                      {format(new Date(inv.expiresAt), 'MMM d, yyyy')}
-                    </td>
-                    <td className='px-4 py-3 text-right'>
-                      <div className='flex justify-end gap-2'>
-                        <Button size='sm' onClick={() => handleAccept(inv._id)}>
-                          Accept
-                        </Button>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          onClick={() => handleDecline(inv._id)}
-                        >
-                          Decline
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+              <Badge variant='outline' className='text-xs capitalize'>
+                {inv.role}
+              </Badge>
+
+              <div className='text-muted-foreground text-xs'>
+                Expires {format(new Date(inv.expiresAt), 'MMM d')}
+              </div>
+
+              <div className='flex gap-1'>
+                <Button
+                  size='sm'
+                  className='h-6 text-xs'
+                  onClick={() => handleAccept(inv._id)}
+                >
+                  Accept
+                </Button>
+                <Button
+                  size='sm'
+                  variant='ghost'
+                  className='h-6 text-xs'
+                  onClick={() => handleDecline(inv._id)}
+                >
+                  Decline
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

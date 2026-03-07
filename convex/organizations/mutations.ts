@@ -1,7 +1,7 @@
 import { mutation } from '../_generated/server';
 import { v, ConvexError } from 'convex/values';
 import type { Id } from '../_generated/dataModel';
-import { getAuthUserId } from '@convex-dev/auth/server';
+import { getAuthUserId } from '../authUtils';
 import {
   ISSUE_PRIORITY_DEFAULTS,
   ISSUE_STATE_DEFAULTS,

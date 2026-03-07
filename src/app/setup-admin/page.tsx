@@ -88,8 +88,8 @@ export default function SetupAdminPage() {
   };
 
   return (
-    <div className='flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 p-6 lg:p-12 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800'>
-      <div className='w-full max-w-md space-y-8'>
+    <div className='flex min-h-screen items-center justify-center px-4'>
+      <div className='w-full max-w-sm space-y-6'>
         {globalError && (
           <Alert variant='destructive'>
             <AlertCircle className='h-4 w-4' />
@@ -97,17 +97,17 @@ export default function SetupAdminPage() {
           </Alert>
         )}
 
-        <Card className='border-0 bg-white/90 shadow-xl backdrop-blur-sm dark:bg-slate-900/90'>
-          <CardHeader className='space-y-3 pb-6'>
-            <div className='flex items-center space-x-2'>
-              <ShieldCheck className='h-5 w-5 text-emerald-600' />
-              <CardTitle className='text-xl'>Initial Admin Setup</CardTitle>
+        <Card className='border shadow-sm'>
+          <CardHeader className='space-y-1 pb-4'>
+            <div className='flex items-center gap-2'>
+              <ShieldCheck className='h-4 w-4 text-emerald-600' />
+              <CardTitle className='text-lg'>Initial Admin Setup</CardTitle>
             </div>
-            <CardDescription className='text-base'>
-              Create the first administrator account to configure AIKP.
+            <CardDescription className='text-sm'>
+              Create the first administrator account to configure Vector.
             </CardDescription>
           </CardHeader>
-          <CardContent className='space-y-6'>
+          <CardContent className='space-y-4'>
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onSubmit)}

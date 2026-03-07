@@ -26,7 +26,7 @@ export const sendInviteNotification = defineNotification({
 function inviteEmailTemplate(inviter: string, link: string): string {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="margin-bottom: 16px;">You have been invited to join an AIKP organization</h2>
+      <h2 style="margin-bottom: 16px;">You have been invited to join a Vector organization</h2>
       <p>${inviter} has invited you to collaborate. Click the button below to accept the invitation.</p>
       <p style="text-align: center; margin: 32px 0;">
         <a href="${link}" style="background: #000; color: #ffffff; padding: 12px 24px; border-radius: 4px; text-decoration: none;">Accept invitation</a>

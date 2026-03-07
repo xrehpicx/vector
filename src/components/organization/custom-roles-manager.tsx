@@ -43,10 +43,12 @@ export function CustomRolesManager({
     useState<Id<'orgRoles'> | null>(null);
 
   // Fetch all custom (non-system) roles for this organization
-  const allRoles = useQuery(api.roles.list, { orgSlug });
+  const allRoles = useQuery(api.roles.index.list, { orgSlug });
 
-  const assignMutation = useMutation(api.roles.assign);
-  const removeAssignmentMutation = useMutation(api.roles.removeAssignment);
+  const assignMutation = useMutation(api.roles.index.assign);
+  const removeAssignmentMutation = useMutation(
+    api.roles.index.removeAssignment
+  );
 
   const handleToggleRole = async (
     roleId: Id<'orgRoles'>,

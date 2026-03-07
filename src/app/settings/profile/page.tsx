@@ -7,13 +7,23 @@ import { useQuery } from '@/lib/convex';
 import { api } from '@/lib/convex';
 import { User } from 'lucide-react';
 
+const header = (
+  <div className='border-b'>
+    <div className='flex items-center p-1'>
+      <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
+        <User className='size-3.5' />
+        Profile
+      </span>
+    </div>
+  </div>
+);
+
 export default function ProfilePage() {
   const userQuery = useQuery(api.users.currentUser);
   const user = userQuery.data;
 
   useEffect(() => {
     if (userQuery.isError) {
-      // Handle error case
       console.error('Error loading user:', userQuery.error);
       return;
     }
@@ -25,53 +35,33 @@ export default function ProfilePage() {
 
   if (userQuery.isPending) {
     return (
-      <div className='space-y-6 p-6'>
-        <div className='space-y-1'>
-          <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-            <User className='size-5' />
-            Profile
-          </h1>
-          <p className='text-muted-foreground text-sm'>Loading...</p>
-        </div>
+      <div className='bg-background h-full'>
+        {header}
+        <div className='text-muted-foreground p-3 text-sm'>Loading...</div>
       </div>
     );
   }
 
   if (userQuery.isError) {
     return (
-      <div className='space-y-6 p-6'>
-        <div className='space-y-1'>
-          <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-            <User className='size-5' />
-            Profile
-          </h1>
-          <p className='text-destructive text-sm'>
-            Error loading profile: {userQuery.error?.message}
-          </p>
+      <div className='bg-background h-full'>
+        {header}
+        <div className='text-destructive p-3 text-sm'>
+          Error loading profile: {userQuery.error?.message}
         </div>
       </div>
     );
   }
 
   if (user === null) {
-    return null; // Redirect will handle this
+    return null;
   }
 
   return (
-    <div className='space-y-6 p-6'>
-      {/* Header */}
-      <div className='space-y-1'>
-        <h1 className='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
-          <User className='size-5' />
-          Profile
-        </h1>
-        <p className='text-muted-foreground text-sm'>
-          This is how others will see you on the site.
-        </p>
-      </div>
+    <div className='bg-background h-full'>
+      {header}
 
-      {/* Profile Form */}
-      <div className='space-y-6'>
+      <div className='p-3'>
         <ProfileForm />
       </div>
     </div>

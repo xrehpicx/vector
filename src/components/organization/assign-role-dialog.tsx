@@ -32,8 +32,9 @@ export function AssignRoleDialog({
     null
   );
 
-  const members = useQuery(api.organizations.listMembers, { orgSlug }) || [];
-  const assignMutation = useMutation(api.roles.assign);
+  const members =
+    useQuery(api.organizations.queries.listMembers, { orgSlug }) || [];
+  const assignMutation = useMutation(api.roles.index.assign);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
