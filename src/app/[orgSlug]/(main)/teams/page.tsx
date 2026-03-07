@@ -39,7 +39,7 @@ function TeamsPageWrapper({ params }: TeamsPageProps) {
   const [orgSlug, setOrgSlug] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    params.then(({ orgSlug }) => setOrgSlug(orgSlug));
+    void params.then(({ orgSlug }) => setOrgSlug(orgSlug));
   }, [params]);
 
   if (!orgSlug) {

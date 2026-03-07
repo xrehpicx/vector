@@ -153,7 +153,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
     const isEditing = !!editingState;
 
     if (isEditing) {
-      updateIssueState({
+      void updateIssueState({
         orgSlug,
         stateId: editingState._id,
         name: newStateData.name,
@@ -163,7 +163,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
         type: newStateData.type,
       });
     } else {
-      createIssueState({
+      void createIssueState({
         orgSlug,
         name: newStateData.name,
         position: newStateData.position,
@@ -181,7 +181,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
     const isEditing = !!editingStatus;
 
     if (isEditing) {
-      updateProjectStatus({
+      void updateProjectStatus({
         orgSlug,
         statusId: editingStatus._id,
         name: newStatusData.name,
@@ -191,7 +191,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
         type: newStatusData.type,
       });
     } else {
-      createProjectStatus({
+      void createProjectStatus({
         orgSlug,
         name: newStatusData.name,
         position: newStatusData.position,
@@ -212,7 +212,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
 
   const handleSavePriority = (data: Omit<Priority, '_id'>) => {
     if (priorityDialogState.editingPriority) {
-      updatePriority({
+      void updatePriority({
         orgSlug,
         priorityId: priorityDialogState.editingPriority._id,
         name: data.name,
@@ -221,7 +221,7 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
         icon: data.icon ?? undefined,
       });
     } else {
-      createPriority({
+      void createPriority({
         orgSlug,
         name: data.name,
         weight: data.weight,

@@ -56,7 +56,7 @@ export function TeamsTable({
   const updateIconMutation = useMutation(api.teams.mutations.update);
 
   const handleIconChange = (teamId: string, iconName: string | null) => {
-    updateIconMutation({
+    void updateIconMutation({
       teamId: teamId as Id<'teams'>,
       data: { icon: iconName || undefined },
     });

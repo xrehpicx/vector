@@ -201,7 +201,7 @@ export function MembersList({ orgSlug }: { orgSlug: string }) {
                                   `Remove ${member.name || member.email} from organization?`
                                 )
                               ) {
-                                removeMemberMutation({
+                                void removeMemberMutation({
                                   orgSlug,
                                   userId: member.userId,
                                 });
@@ -281,7 +281,7 @@ export function MembersList({ orgSlug }: { orgSlug: string }) {
                       <DropdownMenuContent align='end'>
                         <DropdownMenuItem
                           onClick={() => {
-                            resendInviteMutation({
+                            void resendInviteMutation({
                               token: invite._id,
                             });
                           }}
@@ -296,7 +296,7 @@ export function MembersList({ orgSlug }: { orgSlug: string }) {
                             if (
                               confirm(`Revoke invitation for ${invite.email}?`)
                             ) {
-                              revokeInviteMutation({
+                              void revokeInviteMutation({
                                 inviteId: invite._id,
                               });
                             }

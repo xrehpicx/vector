@@ -101,7 +101,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const handleTitleSave = () => {
     if (!project) return;
-    updateMutation({
+    void updateMutation({
       projectId: project._id,
       data: { name: titleValue },
     });
@@ -110,7 +110,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const handleDescriptionSave = () => {
     if (!project) return;
-    updateMutation({
+    void updateMutation({
       projectId: project._id,
       data: { description: descriptionValue },
     });
@@ -119,7 +119,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const handleStatusChange = (statusId: string) => {
     if (!project) return;
-    changeStatusMutation({
+    void changeStatusMutation({
       projectId: project._id,
       statusId: (statusId as Id<'projectStatuses'>) || null,
     });
@@ -127,7 +127,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const handleTeamChange = (teamId: string) => {
     if (!project) return;
-    changeTeamMutation({
+    void changeTeamMutation({
       projectId: project._id,
       teamId: (teamId as Id<'teams'>) || null,
     });
@@ -135,7 +135,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const handleLeadChange = (leadId: string) => {
     if (!project) return;
-    changeLeadMutation({
+    void changeLeadMutation({
       projectId: project._id,
       leadId: (leadId as Id<'users'>) || null,
     });
@@ -144,7 +144,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const handleIconChange = (iconName: string | null) => {
     if (!project) return;
     setIconValue(iconName);
-    updateMutation({
+    void updateMutation({
       projectId: project._id,
       data: { icon: iconName || undefined },
     });
@@ -153,7 +153,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const handleColorChange = (color: string) => {
     if (!project) return;
     setColorValue(color);
-    updateMutation({
+    void updateMutation({
       projectId: project._id,
       data: { color },
     });

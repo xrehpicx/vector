@@ -722,7 +722,7 @@ export default function TeamViewPage() {
                     className='h-6 w-24 font-mono text-xs'
                     autoFocus
                     onKeyDown={e => {
-                      if (e.key === 'Enter') handleKeySave();
+                      if (e.key === 'Enter') void handleKeySave();
                       if (e.key === 'Escape') {
                         setKeyValue(team?.key || '');
                         setEditingKey(false);
@@ -859,7 +859,7 @@ export default function TeamViewPage() {
                     className='h-auto border-none p-0 !text-3xl !leading-tight font-semibold shadow-none focus-visible:ring-0'
                     style={{ fontFamily: 'var(--font-title)' }}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') handleNameSave();
+                      if (e.key === 'Enter') void handleNameSave();
                       if (e.key === 'Escape') {
                         setNameValue(team?.name || '');
                         setEditingName(false);

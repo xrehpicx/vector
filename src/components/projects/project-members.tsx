@@ -82,7 +82,7 @@ export function ProjectMembersSection({
 
   const handleRemoveMember = (membershipId: Id<'projectMembers'>) => {
     if (!confirm('Remove this member from the project?')) return;
-    removeMemberMutation({ membershipId });
+    void removeMemberMutation({ membershipId });
   };
 
   if (members === undefined) {

@@ -54,7 +54,7 @@ export function PrioritiesPageContent({ orgSlug }: PrioritiesPageContentProps) {
 
   const handleSave = (data: Omit<Priority, '_id'>) => {
     if (dialogState.editingPriority) {
-      updateMutation({
+      void updateMutation({
         orgSlug,
         priorityId: dialogState.editingPriority._id,
         name: data.name,
@@ -63,7 +63,7 @@ export function PrioritiesPageContent({ orgSlug }: PrioritiesPageContentProps) {
         icon: data.icon ?? undefined,
       });
     } else {
-      createMutation({
+      void createMutation({
         orgSlug,
         name: data.name,
         weight: data.weight,

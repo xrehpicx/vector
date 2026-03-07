@@ -122,7 +122,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   // Event handlers
   const handleStatusChange = (projectId: string, statusId: string) => {
     if (statusId) {
-      changeStatusMutation({
+      void changeStatusMutation({
         projectId: projectId as Id<'projects'>,
         data: { statusId: statusId as Id<'projectStatuses'> },
       });
@@ -131,7 +131,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
 
   const handleTeamChange = (projectId: string, teamId: string) => {
     if (teamId) {
-      changeTeamMutation({
+      void changeTeamMutation({
         projectId: projectId as Id<'projects'>,
         data: { teamId: teamId as Id<'teams'> },
       });
@@ -140,7 +140,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
 
   const handleLeadChange = (projectId: string, leadId: string) => {
     if (leadId) {
-      changeLeadMutation({
+      void changeLeadMutation({
         projectId: projectId as Id<'projects'>,
         data: { leadId: leadId as Id<'users'> },
       });
@@ -148,7 +148,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   };
 
   const handleDelete = (projectId: string) => {
-    deleteMutation({
+    void deleteMutation({
       projectId: projectId as Id<'projects'>,
     });
   };

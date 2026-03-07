@@ -90,7 +90,7 @@ export default function IssuesPage() {
 
   const handlePriorityChange = (issueId: string, priorityId: string) => {
     if (!user || !priorityId) return;
-    changePriorityMutation({
+    void changePriorityMutation({
       issueId: issueId as Id<'issues'>,
       priorityId: priorityId as Id<'issuePriorities'>,
     });
@@ -114,7 +114,7 @@ export default function IssuesPage() {
 
   const handleTeamChange = (issueId: string, teamId: string) => {
     if (!user) return;
-    changeTeamMutation({
+    void changeTeamMutation({
       issueId: issueId as Id<'issues'>,
       teamId: (teamId as Id<'teams'>) || null,
     });
@@ -122,7 +122,7 @@ export default function IssuesPage() {
 
   const handleProjectChange = (issueId: string, projectId: string) => {
     if (!user) return;
-    changeProjectMutation({
+    void changeProjectMutation({
       issueId: issueId as Id<'issues'>,
       projectId: (projectId as Id<'projects'>) || null,
     });

@@ -125,7 +125,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const [currentStateId, setCurrentStateId] = useState<string>('');
 
   useEffect(() => {
-    params.then(setResolvedParams);
+    void params.then(setResolvedParams);
   }, [params]);
 
   const user = useQuery(api.users.currentUser);
@@ -286,7 +286,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
 
   const handleTeamChange = (teamId: string) => {
     if (!issue || !user) return;
-    changeTeamMutation({
+    void changeTeamMutation({
       issueId: issue._id,
       teamId: (teamId as Id<'teams'>) || null,
     });
@@ -294,7 +294,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
 
   const handleProjectChange = (projectId: string) => {
     if (!issue || !user) return;
-    changeProjectMutation({
+    void changeProjectMutation({
       issueId: issue._id,
       projectId: (projectId as Id<'projects'>) || null,
     });
@@ -303,7 +303,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const handlePriorityChange = (priorityId: string) => {
     if (!issue || !user) return;
     if (priorityId === '') return;
-    changePriorityMutation({
+    void changePriorityMutation({
       issueId: issue._id,
       priorityId: priorityId as Id<'issuePriorities'>,
     });
@@ -319,7 +319,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
 
   const handleParentIssueChange = (parentIssueId: string) => {
     if (!issue || !user) return;
-    updateIssueParentMutation({
+    void updateIssueParentMutation({
       issueId: issue._id,
       data: {
         parentIssueId: parentIssueId
@@ -406,7 +406,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                     onStateSelect={stateId => {
                       if (!issue || !user) return;
                       // Update the specific assignment state for this user
-                      changeAssignmentStateMutation({
+                      void changeAssignmentStateMutation({
                         assignmentId: currentUserAssignment._id,
                         stateId: stateId as Id<'issueStates'>,
                       });
@@ -470,7 +470,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                     className='h-auto border-none p-0 !text-3xl !leading-tight font-semibold shadow-none focus-visible:ring-0'
                     style={{ fontFamily: 'var(--font-title)' }}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') handleTitleSave();
+                      if (e.key === 'Enter') void handleTitleSave();
                       if (e.key === 'Escape') {
                         setTitleValue(issue.title);
                         setEditingTitle(false);
@@ -795,7 +795,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                                 }}
                                 onKeyDown={e => {
                                   if (e.key === 'Enter') {
-                                    handleEstimatesSave();
+                                    void handleEstimatesSave();
                                   }
                                   if (e.key === 'Escape') {
                                     setEstimatesValue(

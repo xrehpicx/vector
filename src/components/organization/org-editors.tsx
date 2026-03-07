@@ -79,7 +79,7 @@ export function OrgNameEditor({ orgSlug, initialValue }: EditorProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      save();
+      void save();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       cancel();
@@ -282,7 +282,7 @@ export function OrgSlugEditor({ orgSlug, initialValue }: EditorProps) {
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                handleSave();
+                void handleSave();
               } else if (e.key === 'Escape') {
                 e.preventDefault();
                 handleCancel();

@@ -58,7 +58,7 @@ export function TeamsPageContent({
   const deleteMutation = useMutation(api.teams.mutations.deleteTeam);
 
   const handleDelete = (teamId: string) => {
-    deleteMutation({ teamId: teamId as Id<'teams'> });
+    void deleteMutation({ teamId: teamId as Id<'teams'> });
   };
 
   // --------------------------------------------------
