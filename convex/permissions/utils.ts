@@ -1,156 +1,26 @@
-import { query, type QueryCtx, type MutationCtx } from '../_generated/server';
+import { query } from '../_generated/server';
+import { v } from 'convex/values';
+import {
+  getOrganizationBySlug,
+  getPermissionMap,
+  hasScopedPermission,
+  permissionValidator,
+} from '../authz';
 import { getAuthUserId } from '../authUtils';
-import { v, ConvexError } from 'convex/values';
-import { Id } from '../_generated/dataModel';
-import { PERMISSIONS, type Permission } from '../_shared/permissions';
+import { PERMISSION_VALUES } from '../_shared/permissions';
 
-export { PERMISSIONS, type Permission };
-
-export type VisibilityState = 'private' | 'organization' | 'public';
-
-export interface PermissionScope {
-  organizationId: Id<'organizations'>;
-  teamId?: Id<'teams'>;
-  projectId?: Id<'projects'>;
-}
-
-function permissionMatches(
-  userPermission: string,
-  requiredPermission: string,
-): boolean {
-  if (userPermission === requiredPermission) return true;
-  if (userPermission === PERMISSIONS.ALL) return true;
-  if (userPermission.endsWith(':*')) {
-    const prefix = userPermission.slice(0, -1);
-    return requiredPermission.startsWith(prefix);
-  }
-  return false;
-}
-
-function getDefaultMemberPermissions(): Permission[] {
-  return [PERMISSIONS.ISSUE_CREATE, PERMISSIONS.ISSUE_VIEW];
-}
-
-export async function hasScopedPermission(
-  ctx: QueryCtx | MutationCtx,
-  scope: PermissionScope,
-  userId: Id<'users'>,
-  requiredPermission: Permission,
-): Promise<boolean> {
-  const member = await ctx.db
-    .query('members')
-    .withIndex('by_org_user', q =>
-      q.eq('organizationId', scope.organizationId).eq('userId', userId),
-    )
-    .first();
-
-  if (!member) return false;
-  if (member.role === 'owner' || member.role === 'admin') return true;
-
-  const defaultPermissions = getDefaultMemberPermissions();
-  if (
-    defaultPermissions.some(perm => permissionMatches(perm, requiredPermission))
-  ) {
-    return true;
-  }
-
-  const orgRoleAssignments = await ctx.db
-    .query('orgRoleAssignments')
-    .withIndex('by_organization', q =>
-      q.eq('organizationId', scope.organizationId),
-    )
-    .filter(q => q.eq(q.field('userId'), userId))
-    .collect();
-
-  for (const assignment of orgRoleAssignments) {
-    const rolePermissions = await ctx.db
-      .query('orgRolePermissions')
-      .withIndex('by_role', q => q.eq('roleId', assignment.roleId))
-      .collect();
-    for (const rolePerm of rolePermissions) {
-      if (permissionMatches(rolePerm.permission, requiredPermission))
-        return true;
-    }
-  }
-
-  if (scope.teamId) {
-    const teamRoleAssignments = await ctx.db
-      .query('teamRoleAssignments')
-      .withIndex('by_team', q => q.eq('teamId', scope.teamId!))
-      .filter(q => q.eq(q.field('userId'), userId))
-      .collect();
-    for (const assignment of teamRoleAssignments) {
-      const rolePermissions = await ctx.db
-        .query('teamRolePermissions')
-        .withIndex('by_role', q => q.eq('roleId', assignment.roleId))
-        .collect();
-      for (const rolePerm of rolePermissions) {
-        if (permissionMatches(rolePerm.permission, requiredPermission))
-          return true;
-      }
-    }
-  }
-
-  if (scope.projectId) {
-    const projectRoleAssignments = await ctx.db
-      .query('projectRoleAssignments')
-      .withIndex('by_project', q => q.eq('projectId', scope.projectId!))
-      .filter(q => q.eq(q.field('userId'), userId))
-      .collect();
-    for (const assignment of projectRoleAssignments) {
-      const rolePermissions = await ctx.db
-        .query('projectRolePermissions')
-        .withIndex('by_role', q => q.eq('roleId', assignment.roleId))
-        .collect();
-      for (const rolePerm of rolePermissions) {
-        if (permissionMatches(rolePerm.permission, requiredPermission))
-          return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-export async function hasPermission(
-  ctx: QueryCtx | MutationCtx,
-  organizationId: Id<'organizations'>,
-  userId: Id<'users'>,
-  requiredPermission: Permission,
-): Promise<boolean> {
-  return hasScopedPermission(
-    ctx,
-    { organizationId },
-    userId,
-    requiredPermission,
-  );
-}
-
-export async function requirePermission(
-  ctx: QueryCtx | MutationCtx,
-  organizationId: Id<'organizations'>,
-  requiredPermission: Permission,
-) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new ConvexError('UNAUTHORIZED');
-  }
-
-  const hasAccess = await hasPermission(
-    ctx,
-    organizationId,
-    userId,
-    requiredPermission,
-  );
-  if (!hasAccess) {
-    throw new ConvexError('FORBIDDEN');
-  }
-}
+export { hasScopedPermission, requireScopedPermission } from '../authz';
+export { PERMISSIONS, type Permission } from '../_shared/permissions';
+export {
+  type PermissionScope,
+  type VisibilityState,
+  requireOrgPermission as requirePermission,
+} from '../authz';
 
 export const has = query({
   args: {
     orgSlug: v.string(),
-    permission: v.union(...Object.values(PERMISSIONS).map(p => v.literal(p))),
+    permission: permissionValidator,
     teamId: v.optional(v.id('teams')),
     projectId: v.optional(v.id('projects')),
   },
@@ -158,19 +28,18 @@ export const has = query({
     const userId = await getAuthUserId(ctx);
     if (!userId) return false;
 
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-    if (!org) return false;
+    const org = await getOrganizationBySlug(ctx, args.orgSlug);
 
-    const scope: PermissionScope = {
-      organizationId: org._id,
-      teamId: args.teamId,
-      projectId: args.projectId,
-    };
-
-    return await hasScopedPermission(ctx, scope, userId, args.permission);
+    return hasScopedPermission(
+      ctx,
+      {
+        organizationId: org._id,
+        teamId: args.teamId,
+        projectId: args.projectId,
+      },
+      userId,
+      args.permission,
+    );
   },
 });
 
@@ -178,7 +47,7 @@ export const hasMultiple = query({
   args: {
     orgSlug: v.string(),
     permissions: v.array(
-      v.union(...Object.values(PERMISSIONS).map(p => v.literal(p))),
+      v.union(...PERMISSION_VALUES.map(permission => v.literal(permission))),
     ),
     teamId: v.optional(v.id('teams')),
     projectId: v.optional(v.id('projects')),
@@ -194,33 +63,17 @@ export const hasMultiple = query({
       return results;
     }
 
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
+    const org = await getOrganizationBySlug(ctx, args.orgSlug);
 
-    if (!org) {
-      for (const permission of args.permissions) {
-        results[permission] = false;
-      }
-      return results;
-    }
-
-    const scope: PermissionScope = {
-      organizationId: org._id,
-      teamId: args.teamId,
-      projectId: args.projectId,
-    };
-
-    for (const permission of args.permissions) {
-      results[permission] = await hasScopedPermission(
-        ctx,
-        scope,
-        userId,
-        permission,
-      );
-    }
-
-    return results;
+    return getPermissionMap(
+      ctx,
+      {
+        organizationId: org._id,
+        teamId: args.teamId,
+        projectId: args.projectId,
+      },
+      userId,
+      args.permissions,
+    );
   },
 });

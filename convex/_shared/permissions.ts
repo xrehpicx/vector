@@ -47,11 +47,26 @@ export const PERMISSIONS = {
 // Helper type for permission values
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
+export const PERMISSION_VALUES = Object.values(PERMISSIONS) as Permission[];
+
 // Define wildcard permission for owner role (full access)
 const WILDCARD: Permission = PERMISSIONS.ALL;
 
 // Public type for built-in member roles (system roles)
 export type BuiltinRole = 'owner' | 'admin' | 'member';
+
+export const SYSTEM_ROLE_KEYS = {
+  ORG_OWNER: 'org:owner',
+  ORG_ADMIN: 'org:admin',
+  ORG_MEMBER: 'org:member',
+  TEAM_LEAD: 'team:lead',
+  TEAM_MEMBER: 'team:member',
+  PROJECT_LEAD: 'project:lead',
+  PROJECT_MEMBER: 'project:member',
+} as const;
+
+export type SystemRoleKey =
+  (typeof SYSTEM_ROLE_KEYS)[keyof typeof SYSTEM_ROLE_KEYS];
 
 /**
  * Static permission sets for the default organization roles.
@@ -123,3 +138,34 @@ export const BUILTIN_ROLE_PERMISSIONS: Record<BuiltinRole, Permission[]> = {
 
 // Default permissions for new admin roles (for migration purposes)
 export const DEFAULT_ADMIN_PERMISSIONS = BUILTIN_ROLE_PERMISSIONS.admin;
+
+export const TEAM_SYSTEM_ROLE_PERMISSIONS: Record<
+  typeof SYSTEM_ROLE_KEYS.TEAM_LEAD | typeof SYSTEM_ROLE_KEYS.TEAM_MEMBER,
+  Permission[]
+> = {
+  [SYSTEM_ROLE_KEYS.TEAM_LEAD]: [PERMISSIONS.TEAM_ALL, PERMISSIONS.ISSUE_ALL],
+  [SYSTEM_ROLE_KEYS.TEAM_MEMBER]: [
+    PERMISSIONS.TEAM_VIEW,
+    PERMISSIONS.ISSUE_CREATE,
+    PERMISSIONS.ISSUE_VIEW,
+    PERMISSIONS.ISSUE_EDIT,
+    PERMISSIONS.ISSUE_STATE_UPDATE,
+  ],
+};
+
+export const PROJECT_SYSTEM_ROLE_PERMISSIONS: Record<
+  typeof SYSTEM_ROLE_KEYS.PROJECT_LEAD | typeof SYSTEM_ROLE_KEYS.PROJECT_MEMBER,
+  Permission[]
+> = {
+  [SYSTEM_ROLE_KEYS.PROJECT_LEAD]: [
+    PERMISSIONS.PROJECT_ALL,
+    PERMISSIONS.ISSUE_ALL,
+  ],
+  [SYSTEM_ROLE_KEYS.PROJECT_MEMBER]: [
+    PERMISSIONS.PROJECT_VIEW,
+    PERMISSIONS.ISSUE_CREATE,
+    PERMISSIONS.ISSUE_VIEW,
+    PERMISSIONS.ISSUE_EDIT,
+    PERMISSIONS.ISSUE_STATE_UPDATE,
+  ],
+};

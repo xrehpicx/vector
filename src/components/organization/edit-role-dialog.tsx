@@ -14,13 +14,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/lib/convex';
-import type { Id } from '@/convex/_generated/dataModel';
+import type { Permission } from '@/convex/_shared/permissions';
+import type { OrganizationRoleId } from '@/lib/organization-role-types';
 
 import { ALL_PERMISSIONS_WITH_GROUP } from '@/lib/permission-groups';
 
 interface EditRoleDialogProps {
   orgSlug: string;
-  roleId: Id<'orgRoles'>;
+  roleId: OrganizationRoleId;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -33,7 +34,9 @@ export function EditRoleDialog({
 }: EditRoleDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [selectedPermissions, setSelectedPermissions] = useState<Permission[]>(
+    [],
+  );
 
   const role = useQuery(api.roles.index.get, {
     orgSlug: orgSlug,
@@ -79,7 +82,7 @@ export function EditRoleDialog({
     }
   };
 
-  const handlePermissionToggle = (permissionId: string) => {
+  const handlePermissionToggle = (permissionId: Permission) => {
     setSelectedPermissions(prev =>
       prev.includes(permissionId)
         ? prev.filter(p => p !== permissionId)
@@ -148,10 +151,12 @@ export function EditRoleDialog({
                           <Checkbox
                             id={permission.id}
                             checked={selectedPermissions.includes(
-                              permission.id,
+                              permission.id as Permission,
                             )}
                             onCheckedChange={() =>
-                              handlePermissionToggle(permission.id)
+                              handlePermissionToggle(
+                                permission.id as Permission,
+                              )
                             }
                             className='mt-0.5'
                           />

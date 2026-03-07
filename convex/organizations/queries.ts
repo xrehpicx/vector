@@ -3,6 +3,8 @@ import { v, ConvexError } from 'convex/values';
 import type { Id, Doc } from '../_generated/dataModel';
 import { getAuthUserId } from '../authUtils';
 import { canViewIssue, canViewTeam, canViewProject } from '../access';
+import { requireOrgPermission } from '../authz';
+import { PERMISSIONS } from '../_shared/permissions';
 
 /**
  * Get organization by slug
@@ -87,30 +89,71 @@ export const listMembersWithRoles = query({
       members.map(m => ctx.db.get('users', m.userId)),
     );
 
-    const roles = await ctx.db
+    const allAssignments = await ctx.db
+      .query('roleAssignments')
+      .withIndex('by_organization', q => q.eq('organizationId', org._id))
+      .collect();
+    const legacyAssignments = await ctx.db
       .query('orgRoleAssignments')
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
       .collect();
 
     const roleDefs = await Promise.all(
-      roles.map(r => ctx.db.get('orgRoles', r.roleId)),
+      allAssignments.map(r => ctx.db.get('roles', r.roleId)),
+    );
+    const legacyRoleIds = Array.from(
+      new Set(legacyAssignments.map(assignment => assignment.roleId)),
+    );
+    const legacyRoleDefs = await Promise.all(
+      legacyRoleIds.map(roleId => ctx.db.get('orgRoles', roleId)),
+    );
+    const legacyRoleMap = new Map(
+      legacyRoleDefs
+        .filter((role): role is NonNullable<typeof role> => role !== null)
+        .map(role => [role._id, role]),
+    );
+    const migratedLegacyKeys = new Set(
+      roleDefs
+        .filter((role): role is NonNullable<typeof role> => role !== null)
+        .map(role => role.key),
     );
 
     return members.map((m, i) => {
       const user = users[i];
-      const userRoles = roles.filter(r => r.userId === m.userId);
+      const userRoles = allAssignments.filter(
+        r => r.userId === m.userId && !r.teamId && !r.projectId,
+      );
       const customRoles = userRoles
         .map(ur => roleDefs.find(rd => rd?._id === ur.roleId))
-        .filter((r): r is NonNullable<typeof r> => !!r);
+        .filter((r): r is NonNullable<typeof r> => !!r && !r.system);
+      const legacyCustomRoles = legacyAssignments
+        .filter(assignment => assignment.userId === m.userId)
+        .map(assignment => legacyRoleMap.get(assignment.roleId))
+        .filter(
+          (role): role is NonNullable<typeof role> =>
+            !!role &&
+            !role.system &&
+            !migratedLegacyKeys.has(`legacy:org:${role._id}`),
+        )
+        .map(role => ({
+          _id: role._id,
+          _creationTime: role._creationTime,
+          organizationId: role.organizationId,
+          scopeType: 'organization' as const,
+          key: `legacy:org:${role._id}`,
+          name: role.name,
+          description: role.description,
+          system: role.system,
+        }));
+      const allCustomRoles = [...customRoles, ...legacyCustomRoles];
       return {
         ...m,
         name: user?.name,
         email: user?.email,
         image: user?.image,
-        roleId: userRoles[0]?.roleId ?? null,
-        roleName:
-          roleDefs.find(rd => rd?._id === userRoles[0]?.roleId)?.name ?? null,
-        customRoles,
+        roleId: allCustomRoles[0]?._id ?? null,
+        roleName: allCustomRoles[0]?.name ?? null,
+        customRoles: allCustomRoles,
       };
     });
   },
@@ -147,6 +190,8 @@ export const listInvites = query({
     if (!membership) {
       throw new ConvexError('FORBIDDEN');
     }
+
+    await requireOrgPermission(ctx, org._id, PERMISSIONS.ORG_MANAGE_MEMBERS);
 
     return await ctx.db
       .query('invitations')
@@ -267,12 +312,17 @@ export const getRecentProjects = query({
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
       .collect();
 
-    // Sort by creation time (newest first) and limit
-    const sortedProjects = projects
+    const visibleProjects = (
+      await Promise.all(
+        projects.map(async project =>
+          (await canViewProject(ctx, project)) ? project : null,
+        ),
+      )
+    ).filter((project): project is Doc<'projects'> => project !== null);
+
+    return visibleProjects
       .sort((a, b) => b._creationTime - a._creationTime)
       .slice(0, args.limit ?? 5);
-
-    return sortedProjects;
   },
 });
 
@@ -817,7 +867,7 @@ export const getFileUrlByString = query({
       const storageId = args.storageIdString as Id<'_storage'>;
       // Generate URL for the file
       return await ctx.storage.getUrl(storageId);
-    } catch (_error) {
+    } catch {
       return null;
     }
   },

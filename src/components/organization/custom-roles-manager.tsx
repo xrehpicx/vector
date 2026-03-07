@@ -17,14 +17,16 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
-import { Id, Doc } from '@/convex/_generated/dataModel';
-
-type CustomRole = Doc<'orgRoles'>;
+import { Id } from '@/convex/_generated/dataModel';
+import type {
+  OrganizationRoleId,
+  OrganizationRoleSummary,
+} from '@/lib/organization-role-types';
 
 interface CustomRolesManagerProps {
   orgSlug: string;
   userId: Id<'users'>;
-  assignedRoles: CustomRole[];
+  assignedRoles: OrganizationRoleSummary[];
   disabled?: boolean;
   className?: string;
   onRoleChange?: () => void;
@@ -40,7 +42,7 @@ export function CustomRolesManager({
 }: CustomRolesManagerProps) {
   const [open, setOpen] = useState(false);
   const [processingRoleId, setProcessingRoleId] =
-    useState<Id<'orgRoles'> | null>(null);
+    useState<OrganizationRoleId | null>(null);
 
   // Fetch all custom (non-system) roles for this organization
   const allRoles = useQuery(api.roles.index.list, { orgSlug });
@@ -51,7 +53,7 @@ export function CustomRolesManager({
   );
 
   const handleToggleRole = async (
-    roleId: Id<'orgRoles'>,
+    roleId: OrganizationRoleId,
     isAssigned: boolean,
   ) => {
     setProcessingRoleId(roleId);

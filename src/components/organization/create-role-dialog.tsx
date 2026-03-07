@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useMutation } from 'convex/react';
 import { api } from '@/lib/convex';
+import type { Permission } from '@/convex/_shared/permissions';
 
 import { ALL_PERMISSIONS_WITH_GROUP } from '@/lib/permission-groups';
 
@@ -40,7 +41,9 @@ export function CreateRoleDialog({
 }: CreateRoleDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [selectedPermissions, setSelectedPermissions] = useState<Permission[]>(
+    [],
+  );
 
   const createMutation = useMutation(api.roles.index.create);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,7 +68,7 @@ export function CreateRoleDialog({
     }
   };
 
-  const handlePermissionToggle = (permissionId: string) => {
+  const handlePermissionToggle = (permissionId: Permission) => {
     setSelectedPermissions(prev =>
       prev.includes(permissionId)
         ? prev.filter(p => p !== permissionId)
@@ -134,10 +137,12 @@ export function CreateRoleDialog({
                           <Checkbox
                             id={permission.id}
                             checked={selectedPermissions.includes(
-                              permission.id,
+                              permission.id as Permission,
                             )}
                             onCheckedChange={() =>
-                              handlePermissionToggle(permission.id)
+                              handlePermissionToggle(
+                                permission.id as Permission,
+                              )
                             }
                             className='mt-0.5'
                           />

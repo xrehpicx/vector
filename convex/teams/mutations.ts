@@ -1,12 +1,24 @@
-import { mutation } from '../_generated/server';
-import { v, ConvexError } from 'convex/values';
-import { getAuthUserId } from '../authUtils';
-import { canEditTeam, canDeleteTeam, canManageTeamMembers } from '../access';
+import { mutation, type MutationCtx } from '../_generated/server';
+import { ConvexError, v } from 'convex/values';
+import type { Id } from '../_generated/dataModel';
+import { getOrganizationBySlug, requireAuthUser } from '../authz';
+import { canDeleteTeam, canEditTeam, canManageTeamMembers } from '../access';
 import { PERMISSIONS, requirePermission } from '../permissions/utils';
+import { syncTeamRoleAssignment } from '../roles';
 
-/**
- * Create new team
- */
+async function requireTeamEditAccess(ctx: MutationCtx, teamId: Id<'teams'>) {
+  const team = await ctx.db.get('teams', teamId);
+  if (!team) {
+    throw new ConvexError('TEAM_NOT_FOUND');
+  }
+
+  if (!(await canEditTeam(ctx, team))) {
+    throw new ConvexError('FORBIDDEN');
+  }
+
+  return team;
+}
+
 export const create = mutation({
   args: {
     orgSlug: v.string(),
@@ -27,68 +39,42 @@ export const create = mutation({
     }),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
-
+    const userId = await requireAuthUser(ctx);
+    const org = await getOrganizationBySlug(ctx, args.orgSlug);
     await requirePermission(ctx, org._id, PERMISSIONS.TEAM_CREATE);
 
-    // Check if team key is unique within the organization
     const existingTeam = await ctx.db
       .query('teams')
       .withIndex('by_org_key', q =>
         q.eq('organizationId', org._id).eq('key', args.data.key),
       )
       .first();
-
     if (existingTeam) {
       throw new ConvexError('TEAM_KEY_EXISTS');
     }
 
-    // Validate lead user exists and is member of org if provided
     if (args.data.leadId) {
-      const leadId = args.data.leadId;
       const leadMembership = await ctx.db
         .query('members')
         .withIndex('by_org_user', q =>
-          q.eq('organizationId', org._id).eq('userId', leadId),
+          q.eq('organizationId', org._id).eq('userId', args.data.leadId!),
         )
         .first();
-
       if (!leadMembership) {
         throw new ConvexError('INVALID_TEAM_LEAD');
       }
     }
 
-    // Validate input
-    if (!args.data.key.trim()) {
+    if (!args.data.key.trim() || !args.data.name.trim()) {
       throw new ConvexError('INVALID_INPUT');
     }
-    if (!args.data.name.trim()) {
-      throw new ConvexError('INVALID_INPUT');
-    }
-    if (args.data.key.length > 10) {
-      throw new ConvexError('INVALID_INPUT');
-    }
-    if (args.data.name.length > 100) {
+    if (args.data.key.length > 10 || args.data.name.length > 100) {
       throw new ConvexError('INVALID_INPUT');
     }
     if (args.data.description && args.data.description.length > 500) {
       throw new ConvexError('INVALID_INPUT');
     }
 
-    // Create team
     const teamId = await ctx.db.insert('teams', {
       organizationId: org._id,
       key: args.data.key.trim(),
@@ -97,25 +83,40 @@ export const create = mutation({
       leadId: args.data.leadId,
       icon: args.data.icon,
       color: args.data.color,
-      visibility: args.data.visibility || 'organization', // Default to organization visibility
+      visibility: args.data.visibility || 'organization',
       createdBy: userId,
     });
 
-    // Automatically add the creator as a team member with "owner" role
     await ctx.db.insert('teamMembers', {
-      teamId: teamId,
-      userId: userId,
-      role: 'lead', // Using "lead" as the owner role for team members
+      teamId,
+      userId,
+      role: 'lead',
       joinedAt: Date.now(),
     });
+    await syncTeamRoleAssignment(ctx, teamId, userId, 'lead');
+
+    if (args.data.leadId && args.data.leadId !== userId) {
+      const leadMembership = await ctx.db
+        .query('teamMembers')
+        .withIndex('by_team_user', q =>
+          q.eq('teamId', teamId).eq('userId', args.data.leadId!),
+        )
+        .first();
+      if (!leadMembership) {
+        await ctx.db.insert('teamMembers', {
+          teamId,
+          userId: args.data.leadId,
+          role: 'lead',
+          joinedAt: Date.now(),
+        });
+      }
+      await syncTeamRoleAssignment(ctx, teamId, args.data.leadId, 'lead');
+    }
 
     return { teamId };
   },
 });
 
-/**
- * Update team details
- */
 export const update = mutation({
   args: {
     teamId: v.id('teams'),
@@ -128,16 +129,8 @@ export const update = mutation({
     }),
   },
   handler: async (ctx, args) => {
-    const team = await ctx.db.get('teams', args.teamId);
-    if (!team) {
-      throw new ConvexError('TEAM_NOT_FOUND');
-    }
+    const team = await requireTeamEditAccess(ctx, args.teamId);
 
-    if (!(await canEditTeam(ctx, team))) {
-      throw new ConvexError('FORBIDDEN');
-    }
-
-    // Validate lead user if provided
     if (args.data.leadId) {
       const leadMembership = await ctx.db
         .query('members')
@@ -147,7 +140,6 @@ export const update = mutation({
             .eq('userId', args.data.leadId!),
         )
         .first();
-
       if (!leadMembership) {
         throw new ConvexError('INVALID_TEAM_LEAD');
       }
@@ -155,13 +147,28 @@ export const update = mutation({
 
     await ctx.db.patch('teams', team._id, { ...args.data });
 
+    if (args.data.leadId) {
+      const existingLeadMembership = await ctx.db
+        .query('teamMembers')
+        .withIndex('by_team_user', q =>
+          q.eq('teamId', team._id).eq('userId', args.data.leadId!),
+        )
+        .first();
+      if (!existingLeadMembership) {
+        await ctx.db.insert('teamMembers', {
+          teamId: team._id,
+          userId: args.data.leadId,
+          role: 'lead',
+          joinedAt: Date.now(),
+        });
+      }
+      await syncTeamRoleAssignment(ctx, team._id, args.data.leadId, 'lead');
+    }
+
     return { success: true };
   },
 });
 
-/**
- * Add member to team
- */
 export const addMember = mutation({
   args: {
     teamId: v.id('teams'),
@@ -178,45 +185,38 @@ export const addMember = mutation({
       throw new ConvexError('FORBIDDEN');
     }
 
-    // Verify target user is member of organization
     const targetUserMembership = await ctx.db
       .query('members')
       .withIndex('by_org_user', q =>
         q.eq('organizationId', team.organizationId).eq('userId', args.userId),
       )
       .first();
-
     if (!targetUserMembership) {
       throw new ConvexError('USER_NOT_MEMBER');
     }
 
-    // Check if user is already a team member
     const existingMember = await ctx.db
       .query('teamMembers')
       .withIndex('by_team_user', q =>
         q.eq('teamId', team._id).eq('userId', args.userId),
       )
       .first();
-
     if (existingMember) {
       throw new ConvexError('USER_ALREADY_MEMBER');
     }
 
-    // Add team member
     const membershipId = await ctx.db.insert('teamMembers', {
       teamId: team._id,
       userId: args.userId,
       role: args.role,
       joinedAt: Date.now(),
     });
+    await syncTeamRoleAssignment(ctx, team._id, args.userId, args.role);
 
     return { membershipId };
   },
 });
 
-/**
- * Remove member from team
- */
 export const removeMember = mutation({
   args: {
     membershipId: v.id('teamMembers'),
@@ -236,16 +236,32 @@ export const removeMember = mutation({
       throw new ConvexError('FORBIDDEN');
     }
 
-    // Remove membership
+    const scopedAssignments = await ctx.db
+      .query('roleAssignments')
+      .withIndex('by_team_user', q =>
+        q.eq('teamId', team._id).eq('userId', membership.userId),
+      )
+      .collect();
+    for (const assignment of scopedAssignments) {
+      await ctx.db.delete('roleAssignments', assignment._id);
+    }
+
+    const legacyAssignments = await ctx.db
+      .query('teamRoleAssignments')
+      .withIndex('by_user', q => q.eq('userId', membership.userId))
+      .collect();
+    for (const assignment of legacyAssignments) {
+      if (assignment.teamId === team._id) {
+        await ctx.db.delete('teamRoleAssignments', assignment._id);
+      }
+    }
+
     await ctx.db.delete('teamMembers', args.membershipId);
 
     return { success: true };
   },
 });
 
-/**
- * Delete team
- */
 export const deleteTeam = mutation({
   args: {
     teamId: v.id('teams'),
@@ -260,18 +276,30 @@ export const deleteTeam = mutation({
       throw new ConvexError('FORBIDDEN');
     }
 
-    // Delete team and related data
-    // First delete all team members
     const teamMembers = await ctx.db
       .query('teamMembers')
       .withIndex('by_team', q => q.eq('teamId', team._id))
       .collect();
-
     for (const member of teamMembers) {
       await ctx.db.delete('teamMembers', member._id);
     }
 
-    // Finally delete the team
+    const teamAssignments = await ctx.db
+      .query('roleAssignments')
+      .withIndex('by_team_user', q => q.eq('teamId', team._id))
+      .collect();
+    for (const assignment of teamAssignments) {
+      await ctx.db.delete('roleAssignments', assignment._id);
+    }
+
+    const legacyAssignments = await ctx.db
+      .query('teamRoleAssignments')
+      .withIndex('by_team', q => q.eq('teamId', team._id))
+      .collect();
+    for (const assignment of legacyAssignments) {
+      await ctx.db.delete('teamRoleAssignments', assignment._id);
+    }
+
     await ctx.db.delete('teams', team._id);
 
     return { success: true };
@@ -288,12 +316,7 @@ export const changeVisibility = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const team = await ctx.db.get('teams', args.teamId);
-    if (!team) throw new ConvexError('TEAM_NOT_FOUND');
-
-    if (!(await canEditTeam(ctx, team))) {
-      throw new ConvexError('FORBIDDEN');
-    }
+    const team = await requireTeamEditAccess(ctx, args.teamId);
 
     await ctx.db.patch('teams', team._id, {
       visibility: args.visibility,

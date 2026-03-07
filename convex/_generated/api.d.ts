@@ -15,6 +15,7 @@ import type * as _shared_validation from "../_shared/validation.js";
 import type * as access from "../access.js";
 import type * as auth from "../auth.js";
 import type * as authUtils from "../authUtils.js";
+import type * as authz from "../authz.js";
 import type * as http from "../http.js";
 import type * as issues_mutations from "../issues/mutations.js";
 import type * as issues_queries from "../issues/queries.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   access: typeof access;
   auth: typeof auth;
   authUtils: typeof authUtils;
+  authz: typeof authz;
   http: typeof http;
   "issues/mutations": typeof issues_mutations;
   "issues/queries": typeof issues_queries;

@@ -20,7 +20,7 @@ import { AssignRoleDialog } from './assign-role-dialog';
 import { CustomRolesTable } from './custom-roles-table';
 import { useScopedPermission } from '@/hooks/use-permissions';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
-import type { Id } from '@/convex/_generated/dataModel';
+import type { OrganizationRoleId } from '@/lib/organization-role-types';
 
 interface RolesPageContentProps {
   orgSlug: string;
@@ -28,8 +28,10 @@ interface RolesPageContentProps {
 
 export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [editingRole, setEditingRole] = useState<Id<'orgRoles'> | null>(null);
-  const [assigningRole, setAssigningRole] = useState<Id<'orgRoles'> | null>(
+  const [editingRole, setEditingRole] = useState<OrganizationRoleId | null>(
+    null,
+  );
+  const [assigningRole, setAssigningRole] = useState<OrganizationRoleId | null>(
     null,
   );
 
@@ -51,28 +53,32 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
   );
 
   // Fetch members to compute real counts for system roles
-  const members =
-    useQuery(api.organizations.queries.listMembers, { orgSlug }) || [];
+  const membersQuery = useQuery(api.organizations.queries.listMembers, {
+    orgSlug,
+  });
+  const roleDocsQuery = useQuery(api.roles.index.list, { orgSlug });
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { owner: 0, admin: 0, member: 0 };
+    const members = membersQuery ?? [];
     members.forEach((m: { role: string }) => {
       if (counts[m.role] !== undefined) counts[m.role]++;
     });
     return counts;
-  }, [members]);
+  }, [membersQuery]);
 
-  // Note: Custom roles functionality has been moved to team/project scoped roles
-  // This page now focuses on organization-level role management
-  const roles: Array<{
-    _id: Id<'orgRoles'>;
-    name: string;
-    description: string | undefined;
-    permissions: string[];
-    createdAt: number;
-  }> = []; // Empty for now - custom org roles can be added later
+  const roles = useMemo(() => {
+    const roleDocs = roleDocsQuery ?? [];
+    return roleDocs.map(role => ({
+      _id: role._id,
+      name: role.name,
+      description: role.description,
+      createdAt: role._creationTime,
+      system: role.system,
+    }));
+  }, [roleDocsQuery]);
 
-  const handleDeleteRole = async (roleId: Id<'orgRoles'>) => {
+  const handleDeleteRole = async (roleId: OrganizationRoleId) => {
     if (confirm('Are you sure you want to delete this role?')) {
       try {
         // Placeholder - implement when custom org roles are added

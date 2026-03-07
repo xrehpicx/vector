@@ -1,12 +1,30 @@
-import { mutation } from '../_generated/server';
-import { v, ConvexError } from 'convex/values';
-import { getAuthUserId } from '../authUtils';
-import { requirePermission, PERMISSIONS } from '../permissions/utils';
+import { mutation, type MutationCtx } from '../_generated/server';
+import { ConvexError, v } from 'convex/values';
+import type { Id } from '../_generated/dataModel';
+import { getOrganizationBySlug, requireAuthUser } from '../authz';
 import {
-  canEditProject,
   canDeleteProject,
+  canEditProject,
   canManageProjectMembers,
 } from '../access';
+import { PERMISSIONS, requirePermission } from '../permissions/utils';
+import { syncProjectRoleAssignment } from '../roles';
+
+async function requireProjectEditAccess(
+  ctx: MutationCtx,
+  projectId: Id<'projects'>,
+) {
+  const project = await ctx.db.get('projects', projectId);
+  if (!project) {
+    throw new ConvexError('PROJECT_NOT_FOUND');
+  }
+
+  if (!(await canEditProject(ctx, project))) {
+    throw new ConvexError('FORBIDDEN');
+  }
+
+  return project;
+}
 
 export const create = mutation({
   args: {
@@ -28,19 +46,8 @@ export const create = mutation({
     }),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
+    const userId = await requireAuthUser(ctx);
+    const org = await getOrganizationBySlug(ctx, args.orgSlug);
 
     await requirePermission(ctx, org._id, PERMISSIONS.PROJECT_CREATE);
 
@@ -50,20 +57,17 @@ export const create = mutation({
         q.eq('organizationId', org._id).eq('key', args.data.key),
       )
       .first();
-
     if (existingProject) {
       throw new ConvexError('PROJECT_KEY_EXISTS');
     }
 
     if (args.data.leadId) {
-      const leadId = args.data.leadId;
       const leadMembership = await ctx.db
         .query('members')
         .withIndex('by_org_user', q =>
-          q.eq('organizationId', org._id).eq('userId', leadId),
+          q.eq('organizationId', org._id).eq('userId', args.data.leadId!),
         )
         .first();
-
       if (!leadMembership) {
         throw new ConvexError('INVALID_PROJECT_LEAD');
       }
@@ -76,16 +80,17 @@ export const create = mutation({
       }
     }
 
-    if (!args.data.key.trim()) {
+    if (args.data.statusId) {
+      const status = await ctx.db.get('projectStatuses', args.data.statusId);
+      if (!status || status.organizationId !== org._id) {
+        throw new ConvexError('INVALID_PROJECT_STATUS');
+      }
+    }
+
+    if (!args.data.key.trim() || !args.data.name.trim()) {
       throw new ConvexError('INVALID_INPUT');
     }
-    if (!args.data.name.trim()) {
-      throw new ConvexError('INVALID_INPUT');
-    }
-    if (args.data.key.length > 20) {
-      throw new ConvexError('INVALID_INPUT');
-    }
-    if (args.data.name.length > 100) {
+    if (args.data.key.length > 20 || args.data.name.length > 100) {
       throw new ConvexError('INVALID_INPUT');
     }
     if (args.data.description && args.data.description.length > 1000) {
@@ -105,11 +110,31 @@ export const create = mutation({
     });
 
     await ctx.db.insert('projectMembers', {
-      projectId: projectId,
-      userId: userId,
+      projectId,
+      userId,
       role: 'lead',
       joinedAt: Date.now(),
     });
+    await syncProjectRoleAssignment(ctx, projectId, userId, 'lead');
+
+    if (args.data.leadId && args.data.leadId !== userId) {
+      const existingLeadMembership = await ctx.db
+        .query('projectMembers')
+        .withIndex('by_project_user', q =>
+          q.eq('projectId', projectId).eq('userId', args.data.leadId!),
+        )
+        .first();
+
+      if (!existingLeadMembership) {
+        await ctx.db.insert('projectMembers', {
+          projectId,
+          userId: args.data.leadId,
+          role: 'lead',
+          joinedAt: Date.now(),
+        });
+      }
+      await syncProjectRoleAssignment(ctx, projectId, args.data.leadId, 'lead');
+    }
 
     return { projectId } as const;
   },
@@ -129,14 +154,7 @@ export const update = mutation({
     }),
   },
   handler: async (ctx, args) => {
-    const project = await ctx.db.get('projects', args.projectId);
-    if (!project) {
-      throw new ConvexError('PROJECT_NOT_FOUND');
-    }
-
-    if (!(await canEditProject(ctx, project))) {
-      throw new ConvexError('FORBIDDEN');
-    }
+    const project = await requireProjectEditAccess(ctx, args.projectId);
 
     if (args.data.leadId) {
       const leadMembership = await ctx.db
@@ -147,7 +165,6 @@ export const update = mutation({
             .eq('userId', args.data.leadId!),
         )
         .first();
-
       if (!leadMembership) {
         throw new ConvexError('INVALID_PROJECT_LEAD');
       }
@@ -160,7 +177,38 @@ export const update = mutation({
       }
     }
 
+    if (args.data.statusId) {
+      const status = await ctx.db.get('projectStatuses', args.data.statusId);
+      if (!status || status.organizationId !== project.organizationId) {
+        throw new ConvexError('INVALID_PROJECT_STATUS');
+      }
+    }
+
     await ctx.db.patch('projects', project._id, { ...args.data });
+
+    if (args.data.leadId) {
+      const existingLeadMembership = await ctx.db
+        .query('projectMembers')
+        .withIndex('by_project_user', q =>
+          q.eq('projectId', project._id).eq('userId', args.data.leadId!),
+        )
+        .first();
+      if (!existingLeadMembership) {
+        await ctx.db.insert('projectMembers', {
+          projectId: project._id,
+          userId: args.data.leadId,
+          role: 'lead',
+          joinedAt: Date.now(),
+        });
+      }
+      await syncProjectRoleAssignment(
+        ctx,
+        project._id,
+        args.data.leadId,
+        'lead',
+      );
+    }
+
     return { success: true } as const;
   },
 });
@@ -171,7 +219,16 @@ export const changeStatus = mutation({
     statusId: v.union(v.id('projectStatuses'), v.null()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch('projects', args.projectId, {
+    const project = await requireProjectEditAccess(ctx, args.projectId);
+
+    if (args.statusId) {
+      const status = await ctx.db.get('projectStatuses', args.statusId);
+      if (!status || status.organizationId !== project.organizationId) {
+        throw new ConvexError('INVALID_PROJECT_STATUS');
+      }
+    }
+
+    await ctx.db.patch('projects', project._id, {
       statusId: args.statusId ?? undefined,
     });
   },
@@ -183,7 +240,16 @@ export const changeTeam = mutation({
     teamId: v.union(v.id('teams'), v.null()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch('projects', args.projectId, {
+    const project = await requireProjectEditAccess(ctx, args.projectId);
+
+    if (args.teamId) {
+      const team = await ctx.db.get('teams', args.teamId);
+      if (!team || team.organizationId !== project.organizationId) {
+        throw new ConvexError('INVALID_TEAM');
+      }
+    }
+
+    await ctx.db.patch('projects', project._id, {
       teamId: args.teamId ?? undefined,
     });
   },
@@ -195,7 +261,40 @@ export const changeLead = mutation({
     leadId: v.union(v.id('users'), v.null()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch('projects', args.projectId, {
+    const project = await requireProjectEditAccess(ctx, args.projectId);
+
+    if (args.leadId) {
+      const leadMembership = await ctx.db
+        .query('members')
+        .withIndex('by_org_user', q =>
+          q
+            .eq('organizationId', project.organizationId)
+            .eq('userId', args.leadId!),
+        )
+        .first();
+      if (!leadMembership) {
+        throw new ConvexError('INVALID_PROJECT_LEAD');
+      }
+
+      const projectMembership = await ctx.db
+        .query('projectMembers')
+        .withIndex('by_project_user', q =>
+          q.eq('projectId', project._id).eq('userId', args.leadId!),
+        )
+        .first();
+      if (!projectMembership) {
+        await ctx.db.insert('projectMembers', {
+          projectId: project._id,
+          userId: args.leadId,
+          role: 'lead',
+          joinedAt: Date.now(),
+        });
+      }
+
+      await syncProjectRoleAssignment(ctx, project._id, args.leadId, 'lead');
+    }
+
+    await ctx.db.patch('projects', project._id, {
       leadId: args.leadId ?? undefined,
     });
   },
@@ -225,7 +324,6 @@ export const addMember = mutation({
           .eq('userId', args.userId),
       )
       .first();
-
     if (!targetUserMembership) {
       throw new ConvexError('USER_NOT_MEMBER');
     }
@@ -236,7 +334,6 @@ export const addMember = mutation({
         q.eq('projectId', project._id).eq('userId', args.userId),
       )
       .first();
-
     if (existingMember) {
       throw new ConvexError('USER_ALREADY_MEMBER');
     }
@@ -247,6 +344,7 @@ export const addMember = mutation({
       role: args.role,
       joinedAt: Date.now(),
     });
+    await syncProjectRoleAssignment(ctx, project._id, args.userId, args.role);
 
     return { membershipId } as const;
   },
@@ -269,6 +367,26 @@ export const removeMember = mutation({
 
     if (!(await canManageProjectMembers(ctx, project, 'remove'))) {
       throw new ConvexError('FORBIDDEN');
+    }
+
+    const scopedAssignments = await ctx.db
+      .query('roleAssignments')
+      .withIndex('by_project_user', q =>
+        q.eq('projectId', project._id).eq('userId', membership.userId),
+      )
+      .collect();
+    for (const assignment of scopedAssignments) {
+      await ctx.db.delete('roleAssignments', assignment._id);
+    }
+
+    const legacyAssignments = await ctx.db
+      .query('projectRoleAssignments')
+      .withIndex('by_user', q => q.eq('userId', membership.userId))
+      .collect();
+    for (const assignment of legacyAssignments) {
+      if (assignment.projectId === project._id) {
+        await ctx.db.delete('projectRoleAssignments', assignment._id);
+      }
     }
 
     await ctx.db.delete('projectMembers', args.membershipId);
@@ -298,6 +416,22 @@ export const deleteProject = mutation({
       await ctx.db.delete('projectMembers', member._id);
     }
 
+    const projectAssignments = await ctx.db
+      .query('roleAssignments')
+      .withIndex('by_project_user', q => q.eq('projectId', project._id))
+      .collect();
+    for (const assignment of projectAssignments) {
+      await ctx.db.delete('roleAssignments', assignment._id);
+    }
+
+    const legacyAssignments = await ctx.db
+      .query('projectRoleAssignments')
+      .withIndex('by_project', q => q.eq('projectId', project._id))
+      .collect();
+    for (const assignment of legacyAssignments) {
+      await ctx.db.delete('projectRoleAssignments', assignment._id);
+    }
+
     const projectTeams = await ctx.db
       .query('projectTeams')
       .withIndex('by_project', q => q.eq('projectId', project._id))
@@ -321,12 +455,7 @@ export const changeVisibility = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const project = await ctx.db.get('projects', args.projectId);
-    if (!project) throw new ConvexError('PROJECT_NOT_FOUND');
-
-    if (!(await canEditProject(ctx, project))) {
-      throw new ConvexError('FORBIDDEN');
-    }
+    const project = await requireProjectEditAccess(ctx, args.projectId);
 
     await ctx.db.patch('projects', project._id, {
       visibility: args.visibility,

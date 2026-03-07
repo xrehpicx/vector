@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { PERMISSIONS } from './permissions';
+import { BUILTIN_ROLE_PERMISSIONS, PERMISSIONS } from './permissions';
 
 // Mock the convex client
 vi.mock('@/lib/convex', () => ({
@@ -108,23 +108,23 @@ describe('Permission System', () => {
   });
 
   describe('Default Member Permissions', () => {
-    const defaultMemberPermissions = [
-      PERMISSIONS.ISSUE_CREATE,
-      PERMISSIONS.ISSUE_VIEW,
-    ];
+    const defaultMemberPermissions = BUILTIN_ROLE_PERMISSIONS.member;
 
     it('should include basic issue permissions for all members', () => {
       expect(defaultMemberPermissions).toContain(PERMISSIONS.ISSUE_CREATE);
       expect(defaultMemberPermissions).toContain(PERMISSIONS.ISSUE_VIEW);
+      expect(defaultMemberPermissions).toContain(PERMISSIONS.TEAM_VIEW);
+      expect(defaultMemberPermissions).toContain(PERMISSIONS.PROJECT_VIEW);
     });
 
-    it('should not include advanced permissions by default', () => {
+    it('should not include administrative permissions by default', () => {
       expect(defaultMemberPermissions).not.toContain(
         PERMISSIONS.ORG_MANAGE_SETTINGS,
       );
       expect(defaultMemberPermissions).not.toContain(
         PERMISSIONS.ORG_MANAGE_MEMBERS,
       );
+      expect(defaultMemberPermissions).not.toContain(PERMISSIONS.ISSUE_DELETE);
     });
   });
 

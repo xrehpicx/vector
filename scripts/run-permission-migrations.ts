@@ -3,12 +3,11 @@
 /**
  * Script to run permission system migrations
  *
- * This script should be run after deploying the new permission system
- * to set up default roles for existing teams and projects.
+ * This script should be run after deploying the unified permission system
+ * to backfill system roles, scoped role assignments, and legacy custom roles.
  */
 
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../convex/_generated/api';
+import { spawn } from 'node:child_process';
 
 // You'll need to set this to your Convex deployment URL
 const CONVEX_URL = process.env.CONVEX_URL || 'http://localhost:8000';
@@ -16,38 +15,51 @@ const CONVEX_URL = process.env.CONVEX_URL || 'http://localhost:8000';
 async function runMigrations() {
   console.log('🚀 Starting permission system migrations...');
 
-  const client = new ConvexHttpClient(CONVEX_URL);
+  const adminKey = process.env.CONVEX_ADMIN_KEY;
+
+  if (!adminKey) {
+    throw new Error('CONVEX_ADMIN_KEY is required to run internal migrations');
+  }
 
   try {
-    // Step 1: Create default roles for existing teams and projects
     console.log(
-      '📋 Step 1: Creating default roles for existing teams and projects...'
+      '📋 Migrating unified roles, assignments, and legacy custom roles...',
     );
-    const defaultRolesResult = await client.mutation(
-      api.migrations.index.migrateDefaultRoles,
-      {}
-    );
-    console.log('✅ Default roles created:', defaultRolesResult.message);
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(
+        'pnpm',
+        [
+          'convex',
+          'run',
+          'internal.migrations.index.migrateUnifiedRoles',
+          '{}',
+          '--url',
+          CONVEX_URL,
+          '--admin-key',
+          adminKey,
+          '--typecheck',
+          'disable',
+          '--codegen',
+          'disable',
+        ],
+        {
+          stdio: 'inherit',
+          env: process.env,
+        },
+      );
 
-    // Step 2: Assign existing team members to Member roles
-    console.log(
-      '👥 Step 2: Assigning existing team members to Member roles...'
-    );
-    const teamMembersResult = await client.mutation(
-      api.migrations.index.migrateTeamMembers,
-      {}
-    );
-    console.log('✅ Team members assigned:', teamMembersResult.message);
-
-    // Step 3: Assign existing project members to Member roles
-    console.log(
-      '👥 Step 3: Assigning existing project members to Member roles...'
-    );
-    const projectMembersResult = await client.mutation(
-      api.migrations.index.migrateProjectMembers,
-      {}
-    );
-    console.log('✅ Project members assigned:', projectMembersResult.message);
+      child.on('error', reject);
+      child.on('exit', code => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(
+          new Error(`Migration command failed with exit code ${code ?? 1}`),
+        );
+      });
+    });
+    console.log('✅ Migration finished successfully');
 
     console.log('🎉 All migrations completed successfully!');
   } catch (error) {
@@ -58,7 +70,10 @@ async function runMigrations() {
 
 // Run migrations if this script is executed directly
 if (require.main === module) {
-  runMigrations();
+  runMigrations().catch(error => {
+    console.error('❌ Migration failed:', error);
+    process.exit(1);
+  });
 }
 
 export { runMigrations };

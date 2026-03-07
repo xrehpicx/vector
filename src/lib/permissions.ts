@@ -1,4 +1,4 @@
-export * from '@/convex/_shared/permissions';
+export * from '../../convex/_shared/permissions';
 
 /**
  * Utility function to check if a user permission matches a required permission

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/lib/convex';
 import type { Id } from '@/convex/_generated/dataModel';
+import type { OrganizationRoleId } from '@/lib/organization-role-types';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import {
@@ -34,7 +35,7 @@ export function CustomRoleAssigner({
   const assignMutation = useMutation(api.roles.index.assign);
   const [isAssigning, setIsAssigning] = useState(false);
 
-  const handleAssign = async (roleId: Id<'orgRoles'>) => {
+  const handleAssign = async (roleId: OrganizationRoleId) => {
     setIsAssigning(true);
     try {
       await assignMutation({ orgSlug, roleId, userId });

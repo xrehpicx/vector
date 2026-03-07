@@ -14,10 +14,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/lib/convex';
 import type { Id } from '@/convex/_generated/dataModel';
+import type { OrganizationRoleId } from '@/lib/organization-role-types';
 
 interface AssignRoleDialogProps {
   orgSlug: string;
-  roleId: Id<'orgRoles'> | null;
+  roleId: OrganizationRoleId | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -46,7 +47,7 @@ export function AssignRoleDialog({
     try {
       await assignMutation({
         orgSlug,
-        roleId: roleId as Id<'orgRoles'>,
+        roleId: roleId as OrganizationRoleId,
         userId: selectedUserId,
       });
       onSuccess();

@@ -4,14 +4,13 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Button } from '@/components/ui/button';
 import { Shield, Edit, Trash2, Users } from 'lucide-react';
 import { formatDateHuman } from '@/lib/date';
-import type { Id } from '@/convex/_generated/dataModel';
+import type {
+  OrganizationRoleId,
+  OrganizationRoleSummary,
+} from '@/lib/organization-role-types';
 
-export interface CustomRoleRow {
-  _id: Id<'orgRoles'>;
-  name: string;
-  description: string | undefined;
+export interface CustomRoleRow extends OrganizationRoleSummary {
   createdAt: number;
-  system?: boolean;
 }
 
 interface CustomRolesTableProps {
@@ -19,9 +18,9 @@ interface CustomRolesTableProps {
   canAssign: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  onAssign: (roleId: Id<'orgRoles'>) => void;
-  onEdit: (roleId: Id<'orgRoles'>) => void;
-  onDelete: (roleId: Id<'orgRoles'>) => void;
+  onAssign: (roleId: OrganizationRoleId) => void;
+  onEdit: (roleId: OrganizationRoleId) => void;
+  onDelete: (roleId: OrganizationRoleId) => void;
 }
 
 export function CustomRolesTable({

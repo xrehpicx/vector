@@ -1,10 +1,20 @@
 {
   "version": 1,
   "skills": {
+    "betterauth-tanstack-convex": {
+      "source": "sstobo/convex-skills",
+      "sourceType": "github",
+      "computedHash": "08c747b776e0812e8838039bda3cdbbd57237dce5e438db72eed7b2d7acf3c4c"
+    },
     "convex": {
       "source": "waynesutton/convexskills",
       "sourceType": "github",
       "computedHash": "de7a20d081cd19bf8bce4038bd62d038a0a88f218f85afb35320d09b052fb534"
+    },
+    "convex-agents": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "computedHash": "3054123dedc1b7ded9b6404c6c641023683fe509103fe7dc148acda831d53d36"
     },
     "convex-best-practices": {
       "source": "waynesutton/convexskills",
@@ -20,6 +30,11 @@
       "source": "waynesutton/convexskills",
       "sourceType": "github",
       "computedHash": "a08fd9695ad0558ec12a312136d6a1483df04fcb5548207a99ce7d14c0df251a"
+    },
+    "convex-helpers-patterns": {
+      "source": "fluid-tools/claude-skills",
+      "sourceType": "github",
+      "computedHash": "4e118cf0ef7f27e5fc42b1c2ea22c589c9157161a91f1538072db9274a951b7c"
     },
     "convex-http-actions": {
       "source": "waynesutton/convexskills",

@@ -1,5 +1,20 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { PERMISSION_VALUES, SYSTEM_ROLE_KEYS } from './_shared/permissions';
+
+const permissionValidator = v.union(
+  ...PERMISSION_VALUES.map(permission => v.literal(permission)),
+);
+
+const roleScopeTypeValidator = v.union(
+  v.literal('organization'),
+  v.literal('team'),
+  v.literal('project'),
+);
+
+const systemRoleKeyValidator = v.union(
+  ...Object.values(SYSTEM_ROLE_KEYS).map(key => v.literal(key)),
+);
 
 export default defineSchema({
   users: defineTable({
@@ -59,6 +74,49 @@ export default defineSchema({
     .index('by_email', ['email'])
     .index('by_status', ['status']),
 
+  // Unified scoped roles for organization, team, and project authorization
+  roles: defineTable({
+    organizationId: v.id('organizations'),
+    scopeType: roleScopeTypeValidator,
+    teamId: v.optional(v.id('teams')),
+    projectId: v.optional(v.id('projects')),
+    key: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    system: v.boolean(),
+    systemKey: v.optional(systemRoleKeyValidator),
+  })
+    .index('by_organization', ['organizationId'])
+    .index('by_org_key', ['organizationId', 'key'])
+    .index('by_org_scope', ['organizationId', 'scopeType'])
+    .index('by_team', ['teamId'])
+    .index('by_project', ['projectId'])
+    .index('by_team_key', ['teamId', 'key'])
+    .index('by_project_key', ['projectId', 'key']),
+
+  rolePermissions: defineTable({
+    roleId: v.id('roles'),
+    permission: permissionValidator,
+  })
+    .index('by_role', ['roleId'])
+    .index('by_role_permission', ['roleId', 'permission']),
+
+  roleAssignments: defineTable({
+    roleId: v.id('roles'),
+    userId: v.id('users'),
+    organizationId: v.id('organizations'),
+    teamId: v.optional(v.id('teams')),
+    projectId: v.optional(v.id('projects')),
+    assignedAt: v.number(),
+  })
+    .index('by_role', ['roleId'])
+    .index('by_user', ['userId'])
+    .index('by_organization', ['organizationId'])
+    .index('by_org_user', ['organizationId', 'userId'])
+    .index('by_role_user', ['roleId', 'userId'])
+    .index('by_team_user', ['teamId', 'userId'])
+    .index('by_project_user', ['projectId', 'userId']),
+
   // Custom organization roles (equivalent to Drizzle 'orgRole' table)
   orgRoles: defineTable({
     organizationId: v.id('organizations'),
@@ -72,7 +130,7 @@ export default defineSchema({
   // Role permissions (equivalent to Drizzle 'orgRolePermission' table)
   orgRolePermissions: defineTable({
     roleId: v.id('orgRoles'),
-    permission: v.string(),
+    permission: permissionValidator,
   })
     .index('by_role', ['roleId'])
     .index('by_role_permission', ['roleId', 'permission']),
@@ -102,7 +160,7 @@ export default defineSchema({
   // Team role permissions
   teamRolePermissions: defineTable({
     roleId: v.id('teamRoles'),
-    permission: v.string(),
+    permission: permissionValidator,
   })
     .index('by_role', ['roleId'])
     .index('by_role_permission', ['roleId', 'permission']),
@@ -132,7 +190,7 @@ export default defineSchema({
   // Project role permissions
   projectRolePermissions: defineTable({
     roleId: v.id('projectRoles'),
-    permission: v.string(),
+    permission: permissionValidator,
   })
     .index('by_role', ['roleId'])
     .index('by_role_permission', ['roleId', 'permission']),

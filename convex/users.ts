@@ -48,12 +48,12 @@ export const updateProfile = mutation({
 export const adminExists = query({
   args: {},
   handler: async ctx => {
-    const adminUser = await ctx.db
-      .query('users')
-      .filter(q => q.eq(q.field('role'), 'admin'))
+    const existingOwner = await ctx.db
+      .query('members')
+      .filter(q => q.eq(q.field('role'), 'owner'))
       .first();
 
-    return adminUser !== null;
+    return existingOwner !== null;
   },
 });
 

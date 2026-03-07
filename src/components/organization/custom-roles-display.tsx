@@ -4,12 +4,16 @@ import { X } from 'lucide-react';
 import { useMutation } from 'convex/react';
 import { api } from '@/lib/convex';
 import { useState } from 'react';
-import type { Id, Doc } from '@/convex/_generated/dataModel';
+import type { Id } from '@/convex/_generated/dataModel';
+import type {
+  OrganizationRoleId,
+  OrganizationRoleSummary,
+} from '@/lib/organization-role-types';
 
 interface CustomRolesDisplayProps {
   orgSlug: string;
   userId: Id<'users'>;
-  roles: Doc<'orgRoles'>[];
+  roles: OrganizationRoleSummary[];
   isAdmin: boolean;
   onRoleRemoved?: () => void;
 }
@@ -21,13 +25,12 @@ export function CustomRolesDisplay({
   isAdmin,
   onRoleRemoved,
 }: CustomRolesDisplayProps) {
-  const [removingRoleId, setRemovingRoleId] = useState<Id<'orgRoles'> | null>(
-    null,
-  );
+  const [removingRoleId, setRemovingRoleId] =
+    useState<OrganizationRoleId | null>(null);
 
   const removeRoleMutation = useMutation(api.roles.index.removeAssignment);
 
-  const handleRemoveRole = async (roleId: Id<'orgRoles'>) => {
+  const handleRemoveRole = async (roleId: OrganizationRoleId) => {
     setRemovingRoleId(roleId);
     try {
       await removeRoleMutation({ orgSlug, roleId, userId });

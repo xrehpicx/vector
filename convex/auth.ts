@@ -141,10 +141,6 @@ export const setBootstrapAdminRole = internalMutation({
 
     const userId = authUser.userId as Id<'users'>;
 
-    await ctx.db.patch('users', userId, {
-      role: 'admin',
-    });
-
     return userId;
   },
 });
