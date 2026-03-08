@@ -70,6 +70,7 @@ import {
   VisibilitySelector,
   type VisibilityState,
 } from '@/components/ui/visibility-selector';
+import { useOptimisticValue } from '@/hooks/use-optimistic';
 
 import { Id } from '@/convex/_generated/dataModel';
 import { FunctionReturnType } from 'convex/server';
@@ -340,6 +341,10 @@ export default function TeamViewPage() {
     teamKey,
   });
   const team = teamQuery.data;
+  const [displayName, setOptimisticName] = useOptimisticValue(team?.name ?? '');
+  const [displayDescription, setOptimisticDescription] = useOptimisticValue(
+    team?.description ?? '',
+  );
 
   // Fetch team members
   const teamMembersQuery = useQuery(
@@ -553,24 +558,30 @@ export default function TeamViewPage() {
 
   const handleNameSave = async () => {
     if (!nameValue.trim() || !team) return;
+    const nextName = nameValue.trim();
     setIsUpdating(true);
+    setOptimisticName(nextName);
+    setNameValue(nextName);
+    setEditingName(false);
     await updateTeamMutation({
       teamId: team._id,
-      data: { name: nameValue.trim() },
+      data: { name: nextName },
     });
     setIsUpdating(false);
-    setEditingName(false);
   };
 
   const handleDescriptionSave = async () => {
     if (!team) return;
+    const nextDescription = descriptionValue.trim();
     setIsUpdating(true);
+    setOptimisticDescription(nextDescription);
+    setDescriptionValue(nextDescription);
+    setEditingDescription(false);
     await updateTeamMutation({
       teamId: team._id,
-      data: { description: descriptionValue.trim() || undefined },
+      data: { description: nextDescription || undefined },
     });
     setIsUpdating(false);
-    setEditingDescription(false);
   };
 
   const handleKeySave = async () => {
@@ -928,7 +939,7 @@ export default function TeamViewPage() {
                     onKeyDown={e => {
                       if (e.key === 'Enter') void handleNameSave();
                       if (e.key === 'Escape') {
-                        setNameValue(team?.name || '');
+                        setNameValue(displayName);
                         setEditingName(false);
                       }
                     }}
@@ -946,7 +957,7 @@ export default function TeamViewPage() {
                       size='sm'
                       variant='ghost'
                       onClick={() => {
-                        setNameValue(team?.name || '');
+                        setNameValue(displayName);
                         setEditingName(false);
                       }}
                     >
@@ -1036,9 +1047,13 @@ export default function TeamViewPage() {
                       'transition-colors',
                       canEdit && 'hover:text-muted-foreground cursor-pointer',
                     )}
-                    onClick={() => canEdit && setEditingName(true)}
+                    onClick={() => {
+                      if (!canEdit) return;
+                      setNameValue(displayName);
+                      setEditingName(true);
+                    }}
                   >
-                    {team?.name}
+                    {displayName}
                   </span>
                 </h1>
               )}
@@ -1065,7 +1080,7 @@ export default function TeamViewPage() {
                     <Button
                       variant='outline'
                       onClick={() => {
-                        setDescriptionValue(team?.description || '');
+                        setDescriptionValue(displayDescription);
                         setEditingDescription(false);
                       }}
                     >
@@ -1075,16 +1090,20 @@ export default function TeamViewPage() {
                 </div>
               ) : (
                 <div>
-                  {team?.description ? (
+                  {displayDescription ? (
                     <div
                       className={cn(
                         'prose prose-sm text-muted-foreground max-w-none transition-colors',
                         canEdit && 'hover:text-foreground cursor-pointer',
                       )}
-                      onClick={() => canEdit && setEditingDescription(true)}
+                      onClick={() => {
+                        if (!canEdit) return;
+                        setDescriptionValue(displayDescription);
+                        setEditingDescription(true);
+                      }}
                     >
                       <RichEditor
-                        value={team.description}
+                        value={displayDescription}
                         onChange={() => {}}
                         mode='compact'
                         disabled={true}
@@ -1093,7 +1112,10 @@ export default function TeamViewPage() {
                   ) : canEdit ? (
                     <button
                       className='text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base'
-                      onClick={() => setEditingDescription(true)}
+                      onClick={() => {
+                        setDescriptionValue(displayDescription);
+                        setEditingDescription(true);
+                      }}
                     >
                       Add a description...
                     </button>

@@ -36,6 +36,7 @@ import {
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { IssueActivityFeed } from '@/components/activity/issue-activity-feed';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
+import { useOptimisticValue } from '@/hooks/use-optimistic';
 
 interface IssueViewPageProps {
   params: Promise<{ orgSlug: string; issueKey: string }>;
@@ -143,6 +144,12 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
       ? { orgSlug: resolvedParams.orgSlug, issueKey: resolvedParams.issueKey }
       : 'skip',
   );
+  const [displayTitle, setOptimisticTitle] = useOptimisticValue(
+    issue?.title ?? '',
+  );
+  const [displayDescription, setOptimisticDescription] = useOptimisticValue(
+    issue?.description ?? '',
+  );
 
   const states = useQuery(
     api.organizations.queries.listIssueStates,
@@ -246,13 +253,17 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
 
   const handleTitleSave = async () => {
     if (!user) return;
+    const nextTitle = titleValue.trim();
+    if (!nextTitle) return;
     setIsUpdatingTitle(true);
+    setOptimisticTitle(nextTitle);
+    setTitleValue(nextTitle);
+    setEditingTitle(false);
     try {
       await updateTitleMutation({
         issueId: issue._id,
-        title: titleValue.trim(),
+        title: nextTitle,
       });
-      setEditingTitle(false);
     } finally {
       setIsUpdatingTitle(false);
     }
@@ -260,13 +271,16 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
 
   const handleDescriptionSave = async () => {
     if (!user) return;
+    const nextDescription = descriptionValue.trim();
     setIsUpdatingDescription(true);
+    setOptimisticDescription(nextDescription);
+    setDescriptionValue(nextDescription);
+    setEditingDescription(false);
     try {
       await updateDescriptionMutation({
         issueId: issue._id,
-        description: descriptionValue.trim() || null,
+        description: nextDescription || null,
       });
-      setEditingDescription(false);
     } finally {
       setIsUpdatingDescription(false);
     }
@@ -478,7 +492,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                     onKeyDown={e => {
                       if (e.key === 'Enter') void handleTitleSave();
                       if (e.key === 'Escape') {
-                        setTitleValue(issue.title);
+                        setTitleValue(displayTitle);
                         setEditingTitle(false);
                       }
                     }}
@@ -496,7 +510,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                       size='sm'
                       variant='ghost'
                       onClick={() => {
-                        setTitleValue(issue.title);
+                        setTitleValue(displayTitle);
                         setEditingTitle(false);
                       }}
                     >
@@ -517,10 +531,15 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                         : 'text-2xl leading-tight font-semibold sm:text-3xl',
                     )}
                     onClick={
-                      canEditIssue ? () => setEditingTitle(true) : undefined
+                      canEditIssue
+                        ? () => {
+                            setTitleValue(displayTitle);
+                            setEditingTitle(true);
+                          }
+                        : undefined
                     }
                   >
-                    {issue.title}
+                    {displayTitle}
                   </h1>
                 </PermissionAwareWrapper>
               )}
@@ -578,7 +597,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                     <Button
                       variant='outline'
                       onClick={() => {
-                        setDescriptionValue(issue.description || '');
+                        setDescriptionValue(displayDescription);
                         setEditingDescription(false);
                       }}
                     >
@@ -593,7 +612,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                   fallbackMessage="You don't have permission to edit issue description"
                 >
                   <div>
-                    {issue.description ? (
+                    {displayDescription ? (
                       <div
                         className={cn(
                           canEditIssue
@@ -602,12 +621,15 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                         )}
                         onClick={
                           canEditIssue
-                            ? () => setEditingDescription(true)
+                            ? () => {
+                                setDescriptionValue(displayDescription);
+                                setEditingDescription(true);
+                              }
                             : undefined
                         }
                       >
                         <RichEditor
-                          value={issue.description}
+                          value={displayDescription}
                           onChange={() => {}}
                           mode='compact'
                           disabled={true}
@@ -623,7 +645,10 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                         )}
                         onClick={
                           canEditIssue
-                            ? () => setEditingDescription(true)
+                            ? () => {
+                                setDescriptionValue(displayDescription);
+                                setEditingDescription(true);
+                              }
                             : undefined
                         }
                         disabled={!canEditIssue}

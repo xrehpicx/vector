@@ -100,6 +100,12 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   });
 
   const projectId = project?._id;
+  const [displayTitle, setOptimisticTitle] = useOptimisticValue(
+    project?.name ?? '',
+  );
+  const [displayDescription, setOptimisticDescription] = useOptimisticValue(
+    project?.description ?? '',
+  );
   const [displayIcon, setOptimisticIcon] = useOptimisticValue(
     project?.icon ?? '',
   );
@@ -171,18 +177,25 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const handleTitleSave = () => {
     if (!project) return;
+    const nextTitle = titleValue.trim();
+    if (!nextTitle) return;
+    setOptimisticTitle(nextTitle);
+    setTitleValue(nextTitle);
     void updateMutation({
       projectId: project._id,
-      data: { name: titleValue },
+      data: { name: nextTitle },
     });
     setEditingTitle(false);
   };
 
   const handleDescriptionSave = () => {
     if (!project) return;
+    const nextDescription = descriptionValue.trim();
+    setOptimisticDescription(nextDescription);
+    setDescriptionValue(nextDescription);
     void updateMutation({
       projectId: project._id,
-      data: { description: descriptionValue },
+      data: { description: nextDescription || undefined },
     });
     setEditingDescription(false);
   };
@@ -439,7 +452,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                   onKeyDown={e => {
                     if (e.key === 'Enter') handleTitleSave();
                     if (e.key === 'Escape') {
-                      setTitleValue(project.name);
+                      setTitleValue(displayTitle);
                       setEditingTitle(false);
                     }
                   }}
@@ -453,7 +466,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                     size='sm'
                     variant='ghost'
                     onClick={() => {
-                      setTitleValue(project.name);
+                      setTitleValue(displayTitle);
                       setEditingTitle(false);
                     }}
                   >
@@ -545,11 +558,11 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                   )}
                   onClick={() => {
                     if (!canEdit) return;
-                    setTitleValue(project.name);
+                    setTitleValue(displayTitle);
                     setEditingTitle(true);
                   }}
                 >
-                  {project.name}
+                  {displayTitle}
                 </span>
               </h1>
             )}
@@ -573,7 +586,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                   <Button
                     variant='outline'
                     onClick={() => {
-                      setDescriptionValue(project.description || '');
+                      setDescriptionValue(displayDescription);
                       setEditingDescription(false);
                     }}
                   >
@@ -583,7 +596,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
               </div>
             ) : (
               <div>
-                {project.description ? (
+                {displayDescription ? (
                   <div
                     className={cn(
                       'prose prose-sm text-muted-foreground max-w-none transition-colors',
@@ -591,12 +604,12 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                     )}
                     onClick={() => {
                       if (!canEdit) return;
-                      setDescriptionValue(project.description || '');
+                      setDescriptionValue(displayDescription);
                       setEditingDescription(true);
                     }}
                   >
                     <RichEditor
-                      value={project.description}
+                      value={displayDescription}
                       onChange={() => {}}
                       mode='compact'
                       disabled={true}
@@ -606,7 +619,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                   <button
                     className='text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base'
                     onClick={() => {
-                      setDescriptionValue(project.description || '');
+                      setDescriptionValue(displayDescription);
                       setEditingDescription(true);
                     }}
                   >
