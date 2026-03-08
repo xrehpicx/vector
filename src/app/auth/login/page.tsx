@@ -60,9 +60,8 @@ function LoginForm() {
         throw result.error;
       }
 
-      router.push(
-        `/auth/signing-in?redirectTo=${encodeURIComponent(redirectTo)}`,
-      );
+      // Full reload to pick up new session cookies
+      window.location.href = `/auth/signing-in?redirectTo=${encodeURIComponent(redirectTo)}`;
     } catch (error) {
       const message = extractAuthErrorMessage(error);
       toast.error(message);

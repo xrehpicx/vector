@@ -112,18 +112,14 @@ function ForgotPasswordForm() {
 
       toast.success('Password reset successful. Signing you in...');
 
-      const signIn = await authClient.signIn.email({
+      // resetPassword may already establish a session; try explicit sign-in as well
+      await authClient.signIn.email({
         email,
         password: values.password,
       });
 
-      if (signIn.error) {
-        toast.success('Password reset. Please sign in with your new password.');
-        router.push('/auth/login');
-        return;
-      }
-
-      router.push('/auth/signing-in');
+      // Full page reload so the browser picks up new session cookies
+      window.location.href = '/auth/signing-in';
     } catch (error) {
       toast.error(extractAuthErrorMessage(error));
     } finally {

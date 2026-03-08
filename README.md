@@ -108,21 +108,22 @@ Copy `sample.env` to `.env.local` and update the values. For local development, 
 
 ### Set In Convex Environment
 
-| Variable                      | Why it belongs here                                              |
-| ----------------------------- | ---------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`          | Read in `convex/auth.ts` to sign Better Auth tokens.             |
-| `AUTH_SECRET`                 | Optional fallback for `BETTER_AUTH_SECRET` in `convex/auth.ts`.  |
-| `NEXT_PUBLIC_APP_URL`         | Read in `convex/auth.ts` as the Better Auth base URL.            |
-| `NEXT_PUBLIC_SITE_URL`        | Optional fallback for `NEXT_PUBLIC_APP_URL` in `convex/auth.ts`. |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | Read in `convex/auth.ts` for the auth callback allowlist.        |
-| `SMTP_HOST`                   | Read in `convex/notifications/actions.ts` for email delivery.    |
-| `SMTP_PORT`                   | Read in `convex/notifications/actions.ts` for email delivery.    |
-| `SMTP_USER`                   | Read in `convex/notifications/actions.ts` for email delivery.    |
-| `SMTP_PASS`                   | Read in `convex/notifications/actions.ts` for email delivery.    |
-| `SMTP_FROM`                   | Read in `convex/notifications/actions.ts` for email delivery.    |
-| `VAPID_PUBLIC_KEY`            | Read in `convex/notifications/actions.ts` for push delivery.     |
-| `VAPID_PRIVATE_KEY`           | Read in `convex/notifications/actions.ts` for push delivery.     |
-| `VAPID_SUBJECT`               | Read in `convex/notifications/actions.ts` for push delivery.     |
+| Variable                      | Why it belongs here                                                                                                                                                                      |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`          | Read in `convex/auth.ts` to sign Better Auth tokens and encrypt JWKS private keys.                                                                                                       |
+| `AUTH_SECRET`                 | Optional fallback for `BETTER_AUTH_SECRET` in `convex/auth.ts`.                                                                                                                          |
+| `JWKS`                        | JSON Web Key Set used by Better Auth. Set to `{}` to auto-generate. Must match the current `BETTER_AUTH_SECRET` — if you rotate the secret, clear this to `{}` so keys are re-generated. |
+| `NEXT_PUBLIC_APP_URL`         | Read in `convex/auth.ts` as the Better Auth base URL.                                                                                                                                    |
+| `NEXT_PUBLIC_SITE_URL`        | Optional fallback for `NEXT_PUBLIC_APP_URL` in `convex/auth.ts`.                                                                                                                         |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | Read in `convex/auth.ts` for the auth callback allowlist.                                                                                                                                |
+| `SMTP_HOST`                   | SMTP server hostname for sending emails (OTP codes and notifications).                                                                                                                   |
+| `SMTP_PORT`                   | SMTP port (default `587`, use `465` for SSL).                                                                                                                                            |
+| `SMTP_USER`                   | SMTP username for authentication.                                                                                                                                                        |
+| `SMTP_PASS`                   | SMTP password for authentication.                                                                                                                                                        |
+| `SMTP_FROM`                   | Sender address for outgoing emails, e.g. `Vector <noreply@yourdomain.com>`. Falls back to `SMTP_USER` if not set. Must be a valid email or `Name <email>` format.                        |
+| `VAPID_PUBLIC_KEY`            | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                                             |
+| `VAPID_PRIVATE_KEY`           | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                                             |
+| `VAPID_SUBJECT`               | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                                             |
 
 `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL` have a public-looking prefix, but they are currently consumed by Convex auth code rather than browser code.
 
