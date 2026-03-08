@@ -1,27 +1,37 @@
-# Database Setup
+# Data Model and Local Backend
 
-The development environment uses a PostgreSQL database running in a Docker container. The configuration is defined in the `docker-compose.dev.yml` file.
+Vector no longer uses a separate local PostgreSQL container for day-to-day development. The application stores operational data in Convex.
 
-## Starting the Database
+## Local Development Flow
 
-To start the database container, run the following command from the root of the project:
+1. Start the local Convex backend:
 
-```bash
-pnpm dlx --yes docker compose -f docker-compose.dev.yml up -d
-```
+   ```bash
+   pnpm run convex:dev
+   ```
 
-This command will download the `postgres:17` image if you don't have it locally, and start a container in detached mode (`-d`).
+2. Keep it running while working on schema or function changes.
 
-## Database Credentials
+3. Use the generated types in `convex/_generated/*` from the app and Convex functions instead of maintaining duplicate data-model types by hand.
 
-The default credentials for the local database are:
+## Schema Source of Truth
 
-| User      | Password  | Database | Port |
-| --------- | --------- | -------- | ---- |
-| `devuser` | `devpass` | `devdb`  | 5432 |
+- Main schema: `convex/schema.ts`
+- Domain functions: `convex/issues/*`, `convex/projects/*`, `convex/teams/*`, `convex/organizations/*`, `convex/documents/*`
+- Shared permission and validation helpers: `convex/_shared/*`
 
-These values are configured in the `docker-compose.dev.yml` file and are referenced in the `sample.env` file for the `DATABASE_URL` environment variable.
+## Schema Changes
 
-## Migrations
+When you change the Convex schema or backend functions:
 
-Database schema changes are managed by Drizzle ORM. See the [Database Changes](../development/02-database-changes.md) guide for more information on how to create and apply migrations.
+1. Update `convex/schema.ts` or the relevant domain module.
+2. Keep `pnpm run convex:dev` running so code generation stays current.
+3. Run:
+
+   ```bash
+   pnpm convex typecheck
+   ```
+
+4. Update docs if the change affects setup, permissions, or public behavior.
+
+For more detail, see [Database Changes](../development/02-database-changes.md).

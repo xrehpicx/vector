@@ -1,16 +1,21 @@
 # Vector
 
-Vector is an open source project management platform built with Next.js, Convex, and Better Auth. It is designed for teams that want projects, issues, permissions, and organization-level workflows in one codebase.
+Open source project management platform built with Next.js, Convex, and Better Auth.
+
+Vector is designed for teams that want issues, projects, teams, permissions, documents, and organization-level workflows in one codebase.
+
+Quick links: [Features](#features) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [Environment Variables](#environment-variables) · [Development](#development) · [Documentation](#documentation) · [Contributing](#contributing)
 
 ![Issues Kanban Board](public/screenshots/issues-kanban.png)
 
 ## Features
 
-- Multi-tenant organizations and workspaces
+- Multi-tenant organizations
 - Projects, issues, teams, and role-based permissions
 - Kanban and table views for issue tracking
 - Rich document editor with markdown, mentions, and slash commands
 - Real-time data updates with Convex
+- Optional email and web-push notification delivery
 - Better Auth integration with Convex-backed user data
 - Type-safe frontend and backend with TypeScript
 
@@ -49,7 +54,7 @@ Vector is an open source project management platform built with Next.js, Convex,
 - Next.js 16 and React 19
 - Convex for database, functions, realtime, and storage
 - Better Auth with the Convex adapter
-- Tailwind CSS v4, Radix UI, and shadcn/ui
+- Tailwind CSS v4, Base UI/Radix primitives, and shadcn/ui
 - ESLint, Prettier, Husky, and pnpm
 
 ## Project Status
@@ -57,6 +62,14 @@ Vector is an open source project management platform built with Next.js, Convex,
 Vector is under active development. The top-level docs in this repository reflect the current contributor workflow. Some files under `docs/migration/` remain as historical implementation notes from earlier architecture work and should not be treated as onboarding documentation.
 
 ## Quick Start
+
+### Requirements
+
+- Node.js `>=20.19.0`
+- `pnpm`
+- A local Convex dev deployment
+
+### Local Setup
 
 1. Install dependencies.
 
@@ -72,10 +85,16 @@ Vector is under active development. The top-level docs in this repository reflec
 
 3. Update `.env.local` with your local values.
 
-   Minimum local setup usually includes:
+   Minimum app setup usually includes:
    - `NEXT_PUBLIC_APP_URL=http://localhost:3000`
+   - `NEXT_PUBLIC_SITE_URL=http://localhost:3000`
+   - `BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000`
    - `BETTER_AUTH_SECRET=<your-secret>`
    - `NEXT_PUBLIC_CONVEX_URL=<your-local-convex-url>`
+   - `CONVEX_SITE_URL=http://127.0.0.1:3211`
+   - `NEXT_PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3211`
+
+   `NEXT_PUBLIC_CONVEX_URL` alone is not enough for local auth helpers. The Next.js server also uses `CONVEX_SITE_URL` or `NEXT_PUBLIC_CONVEX_SITE_URL`.
 
 4. Start Convex in one terminal.
 
@@ -95,7 +114,30 @@ Vector is under active development. The top-level docs in this repository reflec
 
 ## Environment Variables
 
-Copy `sample.env` to `.env.local` and update the values. For local development, both Next.js and Convex read from the same root env files, so one `.env.local` is enough. For production, split variables by the runtime that actually reads them.
+Copy `sample.env` to `.env.local` and update the values.
+
+For local development, Next.js and Convex can both read from the same root env file, so a single `.env.local` is enough. For production, split variables by the runtime that actually reads them.
+
+### Minimum Local Setup
+
+If you only want the app running locally, start with these:
+
+```env
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000
+BETTER_AUTH_SECRET=<your-secret>
+NEXT_PUBLIC_CONVEX_URL=<your-local-convex-url>
+CONVEX_SITE_URL=http://127.0.0.1:3211
+NEXT_PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3211
+```
+
+Optional for local development:
+
+- `AUTH_SECRET` as a fallback for older auth paths
+- SMTP variables if you want real email delivery instead of local logging
+- VAPID variables if you want browser push notifications
+- `CONVEX_URL` / `CONVEX_ADMIN_KEY` for migration scripts and CLI-only workflows
 
 ### Set In Next.js Environment (`.env.local`, Vercel)
 
@@ -108,24 +150,25 @@ Copy `sample.env` to `.env.local` and update the values. For local development, 
 
 ### Set In Convex Environment
 
-| Variable                      | Why it belongs here                                                                                                                                                                      |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`          | Read in `convex/auth.ts` to sign Better Auth tokens and encrypt JWKS private keys.                                                                                                       |
-| `AUTH_SECRET`                 | Optional fallback for `BETTER_AUTH_SECRET` in `convex/auth.ts`.                                                                                                                          |
-| `JWKS`                        | JSON Web Key Set used by Better Auth. Set to `{}` to auto-generate. Must match the current `BETTER_AUTH_SECRET` — if you rotate the secret, clear this to `{}` so keys are re-generated. |
-| `NEXT_PUBLIC_APP_URL`         | Read in `convex/auth.ts` as the Better Auth base URL.                                                                                                                                    |
-| `NEXT_PUBLIC_SITE_URL`        | Optional fallback for `NEXT_PUBLIC_APP_URL` in `convex/auth.ts`.                                                                                                                         |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | Read in `convex/auth.ts` for the auth callback allowlist.                                                                                                                                |
-| `SMTP_HOST`                   | SMTP server hostname for sending emails (OTP codes and notifications).                                                                                                                   |
-| `SMTP_PORT`                   | SMTP port (default `587`, use `465` for SSL).                                                                                                                                            |
-| `SMTP_USER`                   | SMTP username for authentication.                                                                                                                                                        |
-| `SMTP_PASS`                   | SMTP password for authentication.                                                                                                                                                        |
-| `SMTP_FROM`                   | Sender address for outgoing emails, e.g. `Vector <noreply@yourdomain.com>`. Falls back to `SMTP_USER` if not set. Must be a valid email or `Name <email>` format.                        |
-| `VAPID_PUBLIC_KEY`            | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                                             |
-| `VAPID_PRIVATE_KEY`           | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                                             |
-| `VAPID_SUBJECT`               | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                                             |
+| Variable                      | Why it belongs here                                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`          | Read in `convex/auth.ts` to sign Better Auth tokens and encrypt JWKS private keys.                                                                                |
+| `AUTH_SECRET`                 | Optional fallback for `BETTER_AUTH_SECRET` in `convex/auth.ts`.                                                                                                   |
+| `NEXT_PUBLIC_APP_URL`         | Read in `convex/auth.ts` as the Better Auth base URL.                                                                                                             |
+| `NEXT_PUBLIC_SITE_URL`        | Optional fallback for `NEXT_PUBLIC_APP_URL` in `convex/auth.ts`.                                                                                                  |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | Read in `convex/auth.ts` for the auth callback allowlist.                                                                                                         |
+| `SMTP_HOST`                   | SMTP server hostname for sending emails (OTP codes and notifications).                                                                                            |
+| `SMTP_PORT`                   | SMTP port (default `587`, use `465` for SSL).                                                                                                                     |
+| `SMTP_USER`                   | SMTP username for authentication.                                                                                                                                 |
+| `SMTP_PASS`                   | SMTP password for authentication.                                                                                                                                 |
+| `SMTP_FROM`                   | Sender address for outgoing emails, e.g. `Vector <noreply@yourdomain.com>`. Falls back to `SMTP_USER` if not set. Must be a valid email or `Name <email>` format. |
+| `VAPID_PUBLIC_KEY`            | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                      |
+| `VAPID_PRIVATE_KEY`           | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                      |
+| `VAPID_SUBJECT`               | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                      |
 
-`NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL` have a public-looking prefix, but they are currently consumed by Convex auth code rather than browser code.
+`NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL` have a public-looking prefix, but the current code reads them from Convex auth code rather than browser code.
+
+SMTP and VAPID settings are optional. If you leave them unset locally, the core app still runs.
 
 ### Local CLI / Convex Tooling Only
 
@@ -137,13 +180,18 @@ Copy `sample.env` to `.env.local` and update the values. For local development, 
 
 ## Development
 
-- `pnpm run dev` starts the Next.js development server
-- `pnpm run convex:dev` runs the local Convex backend and code generation
-- `pnpm run lint` runs ESLint
-- `pnpm run build` builds the production app
-- `pnpm run format` formats the repository with Prettier
+| Command                  | Purpose                                                   |
+| ------------------------ | --------------------------------------------------------- |
+| `pnpm run dev`           | Start the Next.js development server                      |
+| `pnpm run convex:dev`    | Run the local Convex backend and code generation          |
+| `pnpm run lint`          | Run ESLint                                                |
+| `pnpm run build`         | Build the production app                                  |
+| `pnpm run format`        | Format the repository with Prettier                       |
+| `pnpm run project:setup` | Install dependencies, prepare hooks, and print next steps |
 
 ## Documentation
+
+Start with:
 
 - Contributor docs: [docs/index.md](docs/index.md)
 - Local setup: [docs/getting-started/01-local-setup.md](docs/getting-started/01-local-setup.md)

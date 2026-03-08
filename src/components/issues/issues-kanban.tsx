@@ -2,9 +2,16 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Circle } from 'lucide-react';
+import {
+  Check,
+  Circle,
+  ExternalLink,
+  FolderOpen,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { DynamicIcon } from '@/lib/dynamic-icons';
+import { DynamicIcon, getDynamicIcon } from '@/lib/dynamic-icons';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { formatDateHuman } from '@/lib/date';
 import {
@@ -19,7 +26,6 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 
-import { Plus } from 'lucide-react';
 import type {
   State,
   Priority,
@@ -32,6 +38,16 @@ import {
 } from '@/components/issues/issue-selectors';
 import type { IssueRowData } from './issues-table';
 import { CreateIssueDialog } from './create-issue-dialog';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 export interface IssuesKanbanProps {
   orgSlug: string;
@@ -49,6 +65,10 @@ export interface IssuesKanbanProps {
   ) => void;
   onPriorityChange?: (issueId: string, priorityId: string) => void;
   onAssigneesChange?: (issueId: string, assigneeIds: string[]) => void;
+  onTeamChange?: (issueId: string, teamId: string) => void;
+  onProjectChange?: (issueId: string, projectId: string) => void;
+  onDelete?: (issueId: string) => void;
+  deletePending?: boolean;
   /** Extra defaults passed to the create-issue dialog (e.g. projectId) */
   createDefaults?: Record<string, unknown>;
 }
@@ -61,6 +81,8 @@ interface GroupedIssue {
   priorityIcon: string | null;
   priorityColor: string | null;
   priorityName: string | null;
+  teamId: string | null;
+  projectId: string | null;
   assignees: Array<{
     id: string;
     name: string | null;
@@ -100,10 +122,16 @@ export function IssuesKanban({
   issues,
   states,
   priorities,
+  teams,
+  projects,
   currentUserId,
   onStateChange,
   onPriorityChange,
   onAssigneesChange,
+  onTeamChange,
+  onProjectChange,
+  onDelete,
+  deletePending = false,
   createDefaults,
 }: IssuesKanbanProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -111,10 +139,13 @@ export function IssuesKanban({
   const [optimisticMoves, setOptimisticMoves] = useState<Map<string, string>>(
     new Map(),
   );
+  const [optimisticPriorityIds, setOptimisticPriorityIds] = useState<
+    Map<string, string | null>
+  >(new Map());
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
+      activationConstraint: { distance: 5 },
     }),
   );
 
@@ -165,6 +196,8 @@ export function IssuesKanban({
           priorityIcon: row.priorityIcon ?? null,
           priorityColor: row.priorityColor ?? null,
           priorityName: row.priorityName ?? null,
+          teamId: row.teamId ?? null,
+          projectId: row.projectId ?? null,
           assignees: row.assigneeId
             ? [
                 {
@@ -186,6 +219,14 @@ export function IssuesKanban({
     return [...map.values()];
   }, [issues, currentUserId]);
 
+  const prioritiesById = React.useMemo(
+    () =>
+      new Map<string, Priority>(
+        priorities.map(priority => [priority._id, priority]),
+      ),
+    [priorities],
+  );
+
   // Clear optimistic moves when server data catches up
   React.useEffect(() => {
     if (optimisticMoves.size === 0) return;
@@ -201,17 +242,53 @@ export function IssuesKanban({
     });
   }, [groupedIssues, optimisticMoves]);
 
+  React.useEffect(() => {
+    if (optimisticPriorityIds.size === 0) return;
+    setOptimisticPriorityIds(prev => {
+      const next = new Map(prev);
+      for (const [issueId, targetPriorityId] of prev) {
+        const issue = groupedIssues.find(item => item.id === issueId);
+        if (issue && issue.priorityId === targetPriorityId) {
+          next.delete(issueId);
+        }
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [groupedIssues, optimisticPriorityIds]);
+
   // Apply optimistic overrides
   const displayIssues = React.useMemo(() => {
-    if (optimisticMoves.size === 0) return groupedIssues;
+    if (optimisticMoves.size === 0 && optimisticPriorityIds.size === 0) {
+      return groupedIssues;
+    }
     return groupedIssues.map(issue => {
       const override = optimisticMoves.get(issue.id);
+      const priorityOverride = optimisticPriorityIds.get(issue.id);
+      let nextIssue = issue;
+
       if (override && override !== issue.stateType) {
-        return { ...issue, stateType: override };
+        nextIssue = { ...nextIssue, stateType: override };
       }
-      return issue;
+
+      if (
+        priorityOverride !== undefined &&
+        priorityOverride !== issue.priorityId
+      ) {
+        const optimisticPriority = priorityOverride
+          ? prioritiesById.get(priorityOverride)
+          : null;
+        nextIssue = {
+          ...nextIssue,
+          priorityId: priorityOverride,
+          priorityName: optimisticPriority?.name ?? null,
+          priorityIcon: optimisticPriority?.icon ?? null,
+          priorityColor: optimisticPriority?.color ?? null,
+        };
+      }
+
+      return nextIssue;
     });
-  }, [groupedIssues, optimisticMoves]);
+  }, [groupedIssues, optimisticMoves, optimisticPriorityIds, prioritiesById]);
 
   // Sort states by position
   const sortedStates = React.useMemo(
@@ -269,11 +346,20 @@ export function IssuesKanban({
             issues={columnIssues}
             orgSlug={orgSlug}
             activeId={activeId}
+            states={sortedStates}
             priorities={priorities}
+            teams={teams}
+            projects={projects}
             currentUserId={currentUserId}
+            onStateChange={onStateChange}
             onPriorityChange={onPriorityChange}
             onAssigneesChange={onAssigneesChange}
+            onTeamChange={onTeamChange}
+            onProjectChange={onProjectChange}
+            onDelete={onDelete}
+            deletePending={deletePending}
             createDefaults={createDefaults}
+            setOptimisticPriority={setOptimisticPriorityIds}
           />
         ))}
       </div>
@@ -303,21 +389,45 @@ function KanbanColumn({
   issues,
   orgSlug,
   activeId,
+  states,
   priorities,
+  teams,
+  projects,
   currentUserId,
+  onStateChange,
   onPriorityChange,
   onAssigneesChange,
+  onTeamChange,
+  onProjectChange,
+  onDelete,
+  deletePending,
   createDefaults,
+  setOptimisticPriority,
 }: {
   state: State;
   issues: GroupedIssue[];
   orgSlug: string;
   activeId: string | null;
+  states: ReadonlyArray<State>;
   priorities: ReadonlyArray<Priority>;
+  teams?: ReadonlyArray<Team>;
+  projects?: ReadonlyArray<Project>;
   currentUserId: string;
+  onStateChange?: (
+    issueId: string,
+    assignmentId: string,
+    newStateId: string,
+  ) => void;
   onPriorityChange?: (issueId: string, priorityId: string) => void;
   onAssigneesChange?: (issueId: string, assigneeIds: string[]) => void;
+  onTeamChange?: (issueId: string, teamId: string) => void;
+  onProjectChange?: (issueId: string, projectId: string) => void;
+  onDelete?: (issueId: string) => void;
+  deletePending?: boolean;
   createDefaults?: Record<string, unknown>;
+  setOptimisticPriority: React.Dispatch<
+    React.SetStateAction<Map<string, string | null>>
+  >;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: state._id });
   const count = issues.length;
@@ -360,10 +470,19 @@ function KanbanColumn({
               issue={issue}
               orgSlug={orgSlug}
               isHidden={issue.id === activeId}
+              states={states}
               priorities={priorities}
+              teams={teams}
+              projects={projects}
               currentUserId={currentUserId}
+              onStateChange={onStateChange}
               onPriorityChange={onPriorityChange}
               onAssigneesChange={onAssigneesChange}
+              onTeamChange={onTeamChange}
+              onProjectChange={onProjectChange}
+              onDelete={onDelete}
+              deletePending={deletePending}
+              setOptimisticPriority={setOptimisticPriority}
             />
           ))
         )}
@@ -384,43 +503,293 @@ function KanbanCard({
   issue,
   orgSlug,
   isHidden,
+  states,
   priorities,
+  teams,
+  projects,
   currentUserId,
+  onStateChange,
   onPriorityChange,
   onAssigneesChange,
+  onTeamChange,
+  onProjectChange,
+  onDelete,
+  deletePending,
+  setOptimisticPriority,
 }: {
   issue: GroupedIssue;
   orgSlug: string;
   isHidden?: boolean;
+  states: ReadonlyArray<State>;
   priorities: ReadonlyArray<Priority>;
+  teams?: ReadonlyArray<Team>;
+  projects?: ReadonlyArray<Project>;
   currentUserId: string;
+  onStateChange?: (
+    issueId: string,
+    assignmentId: string,
+    newStateId: string,
+  ) => void;
   onPriorityChange?: (issueId: string, priorityId: string) => void;
   onAssigneesChange?: (issueId: string, assigneeIds: string[]) => void;
+  onTeamChange?: (issueId: string, teamId: string) => void;
+  onProjectChange?: (issueId: string, projectId: string) => void;
+  onDelete?: (issueId: string) => void;
+  deletePending?: boolean;
+  setOptimisticPriority: React.Dispatch<
+    React.SetStateAction<Map<string, string | null>>
+  >;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: issue.id,
   });
 
   return (
-    <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      className={cn(
-        'transition-all duration-200',
-        isHidden && 'scale-95 opacity-30',
-      )}
-    >
-      <KanbanCardContent
+    <ContextMenu>
+      <ContextMenuTrigger
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        className={cn('block', isHidden && 'scale-95 opacity-30')}
+      >
+        <KanbanCardContent
+          issue={issue}
+          orgSlug={orgSlug}
+          isDragging={isDragging}
+          priorities={priorities}
+          currentUserId={currentUserId}
+          onPriorityChange={onPriorityChange}
+          onAssigneesChange={onAssigneesChange}
+        />
+      </ContextMenuTrigger>
+      <KanbanCardMenu
         issue={issue}
         orgSlug={orgSlug}
-        isDragging={isDragging}
+        states={states}
         priorities={priorities}
-        currentUserId={currentUserId}
+        teams={teams}
+        projects={projects}
+        onStateChange={onStateChange}
         onPriorityChange={onPriorityChange}
-        onAssigneesChange={onAssigneesChange}
+        onTeamChange={onTeamChange}
+        onProjectChange={onProjectChange}
+        onDelete={onDelete}
+        deletePending={deletePending}
+        setOptimisticPriority={setOptimisticPriority}
       />
-    </div>
+    </ContextMenu>
+  );
+}
+
+function KanbanCardMenu({
+  issue,
+  orgSlug,
+  states,
+  priorities,
+  teams,
+  projects,
+  onStateChange,
+  onPriorityChange,
+  onTeamChange,
+  onProjectChange,
+  onDelete,
+  deletePending,
+  setOptimisticPriority,
+}: {
+  issue: GroupedIssue;
+  orgSlug: string;
+  states: ReadonlyArray<State>;
+  priorities: ReadonlyArray<Priority>;
+  teams?: ReadonlyArray<Team>;
+  projects?: ReadonlyArray<Project>;
+  onStateChange?: (
+    issueId: string,
+    assignmentId: string,
+    newStateId: string,
+  ) => void;
+  onPriorityChange?: (issueId: string, priorityId: string) => void;
+  onTeamChange?: (issueId: string, teamId: string) => void;
+  onProjectChange?: (issueId: string, projectId: string) => void;
+  onDelete?: (issueId: string) => void;
+  deletePending?: boolean;
+  setOptimisticPriority: React.Dispatch<
+    React.SetStateAction<Map<string, string | null>>
+  >;
+}) {
+  return (
+    <ContextMenuContent className='w-56'>
+      <ContextMenuItem asChild>
+        <Link href={`/${orgSlug}/issues/${issue.key}`}>
+          <ExternalLink className='size-4' />
+          Open issue
+        </Link>
+      </ContextMenuItem>
+
+      {issue.assignmentId && onStateChange ? (
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Circle className='size-4' />
+            Move to
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {states.map(state => {
+              const StateIcon = state.icon
+                ? getDynamicIcon(state.icon) || Circle
+                : Circle;
+              const isSelected = issue.stateType === state.type;
+              return (
+                <ContextMenuItem
+                  key={state._id}
+                  onClick={() =>
+                    onStateChange(issue.id, issue.assignmentId!, state._id)
+                  }
+                >
+                  <span className='flex size-4 items-center justify-center'>
+                    {isSelected ? <Check className='size-3.5' /> : null}
+                  </span>
+                  <StateIcon
+                    className='size-4'
+                    style={{ color: state.color || '#94a3b8' }}
+                  />
+                  <span className='min-w-0 flex-1 truncate'>{state.name}</span>
+                </ContextMenuItem>
+              );
+            })}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      ) : null}
+
+      {onPriorityChange ? (
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Circle className='size-4' />
+            Priority
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {priorities.map(priority => {
+              const PriorityIcon = priority.icon
+                ? getDynamicIcon(priority.icon) || Circle
+                : Circle;
+              const isSelected = issue.priorityId === priority._id;
+              return (
+                <ContextMenuItem
+                  key={priority._id}
+                  onClick={() => {
+                    setOptimisticPriority(prev =>
+                      new Map(prev).set(issue.id, priority._id),
+                    );
+                    onPriorityChange(issue.id, priority._id);
+                  }}
+                >
+                  <span className='flex size-4 items-center justify-center'>
+                    {isSelected ? <Check className='size-3.5' /> : null}
+                  </span>
+                  <PriorityIcon
+                    className='size-4'
+                    style={{ color: priority.color || '#94a3b8' }}
+                  />
+                  <span className='min-w-0 flex-1 truncate'>
+                    {priority.name}
+                  </span>
+                </ContextMenuItem>
+              );
+            })}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      ) : null}
+
+      {teams && teams.length > 0 && onTeamChange ? (
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Users className='size-4' />
+            Team
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem onClick={() => onTeamChange(issue.id, '')}>
+              <span className='flex size-4 items-center justify-center'>
+                {!issue.teamId ? <Check className='size-3.5' /> : null}
+              </span>
+              <span className='min-w-0 flex-1 truncate'>No team</span>
+            </ContextMenuItem>
+            {teams.map(team => {
+              const TeamIcon = team.icon
+                ? getDynamicIcon(team.icon) || Users
+                : Users;
+              const isSelected = issue.teamId === team._id;
+              return (
+                <ContextMenuItem
+                  key={team._id}
+                  onClick={() => onTeamChange(issue.id, team._id)}
+                >
+                  <span className='flex size-4 items-center justify-center'>
+                    {isSelected ? <Check className='size-3.5' /> : null}
+                  </span>
+                  <TeamIcon
+                    className='size-4'
+                    style={{ color: team.color || '#94a3b8' }}
+                  />
+                  <span className='min-w-0 flex-1 truncate'>{team.name}</span>
+                </ContextMenuItem>
+              );
+            })}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      ) : null}
+
+      {projects && projects.length > 0 && onProjectChange ? (
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <FolderOpen className='size-4' />
+            Project
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem onClick={() => onProjectChange(issue.id, '')}>
+              <span className='flex size-4 items-center justify-center'>
+                {!issue.projectId ? <Check className='size-3.5' /> : null}
+              </span>
+              <span className='min-w-0 flex-1 truncate'>No project</span>
+            </ContextMenuItem>
+            {projects.map(project => {
+              const ProjectIcon = project.icon
+                ? getDynamicIcon(project.icon) || FolderOpen
+                : FolderOpen;
+              const isSelected = issue.projectId === project._id;
+              return (
+                <ContextMenuItem
+                  key={project._id}
+                  onClick={() => onProjectChange(issue.id, project._id)}
+                >
+                  <span className='flex size-4 items-center justify-center'>
+                    {isSelected ? <Check className='size-3.5' /> : null}
+                  </span>
+                  <ProjectIcon
+                    className='size-4'
+                    style={{ color: project.color || '#94a3b8' }}
+                  />
+                  <span className='min-w-0 flex-1 truncate'>
+                    {project.name}
+                  </span>
+                </ContextMenuItem>
+              );
+            })}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      ) : null}
+
+      {onDelete ? (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant='destructive'
+            disabled={deletePending}
+            onClick={() => onDelete(issue.id)}
+          >
+            <Trash2 className='size-4' />
+            Delete issue
+          </ContextMenuItem>
+        </>
+      ) : null}
+    </ContextMenuContent>
   );
 }
 

@@ -4,10 +4,12 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { LayoutList, Columns3 } from 'lucide-react';
+import { LayoutList, Columns3, Search, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { IssuesKanban } from '@/components/issues/issues-kanban';
 import { PageSkeleton } from '@/components/ui/table-skeleton';
@@ -50,23 +52,32 @@ const filterTabs = [
 export default function IssuesPage() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const orgSlug = params.orgSlug as string;
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
 
   const viewParam = searchParams.get('view');
-  const viewMode: ViewMode = viewParam === 'table' ? 'table' : 'kanban';
+  const [viewMode, setViewModeState] = useState<ViewMode>(
+    viewParam === 'table' ? 'table' : 'kanban',
+  );
   const setViewMode = (mode: ViewMode) => {
-    const sp = new URLSearchParams(searchParams.toString());
+    setViewModeState(mode);
+    const sp = new URLSearchParams(window.location.search);
     if (mode === 'kanban') {
       sp.delete('view');
     } else {
       sp.set('view', mode);
     }
-    router.replace(`?${sp.toString()}`, { scroll: false });
+    const qs = sp.toString();
+    window.history.replaceState(
+      null,
+      '',
+      qs ? `?${qs}` : window.location.pathname,
+    );
   };
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [selectedTeam, setSelectedTeam] = useState<string>('');
+  const [searchText, setSearchText] = useState('');
+  const deferredSearch = useDeferredValue(searchText);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
 
@@ -106,12 +117,31 @@ export default function IssuesPage() {
     orgSlug,
     projectId: selectedProject || undefined,
     teamId: selectedTeam || undefined,
+    searchQuery: deferredSearch || undefined,
   });
-  const { issues, total, counts } = issuesData ?? {
+  const {
+    issues: allIssues,
+    total,
+    counts,
+  } = issuesData ?? {
     issues: [],
     total: 0,
     counts: {},
   };
+
+  // Paginate issues for table view
+  const paginatedIssues = useMemo(
+    () => allIssues.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [allIssues, page, PAGE_SIZE],
+  );
+
+  // Use all issues for kanban (no pagination), paginated for table
+  const issues = viewMode === 'table' ? paginatedIssues : allIssues;
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, selectedProject, selectedTeam, activeFilter]);
 
   const handlePriorityChange = (issueId: string, priorityId: string) => {
     if (!user || !priorityId) return;
@@ -242,6 +272,20 @@ export default function IssuesPage() {
 
           {/* View switcher + filters + create */}
           <div className='flex shrink-0 items-center gap-1'>
+            {/* Search */}
+            <div className='relative'>
+              {deferredSearch !== searchText ? (
+                <Loader2 className='text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 animate-spin' />
+              ) : (
+                <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2' />
+              )}
+              <Input
+                placeholder='Search issues...'
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                className='h-6 w-40 pl-7 text-xs'
+              />
+            </div>
             {/* View mode toggle */}
             <div className='border-border flex items-center rounded-md border'>
               <Button
@@ -302,76 +346,98 @@ export default function IssuesPage() {
       </div>
 
       {/* Issues content */}
-      {viewMode === 'table' ? (
-        <>
-          <div className='flex-1'>
-            <IssuesTable
+      <AnimatePresence mode='wait' initial={false}>
+        {viewMode === 'table' ? (
+          <motion.div
+            key='table'
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className='flex flex-1 flex-col'
+          >
+            <div className='flex-1'>
+              <IssuesTable
+                orgSlug={orgSlug}
+                issues={issues}
+                states={states ?? []}
+                priorities={priorities ?? []}
+                teams={teams ?? []}
+                projects={projects ?? []}
+                onPriorityChange={handlePriorityChange}
+                onAssigneesChange={handleAssigneesChange}
+                onTeamChange={handleTeamChange}
+                onProjectChange={handleProjectChange}
+                onDelete={handleDelete}
+                deletePending={isDeleting}
+                isUpdatingAssignees={isUpdatingAssignees}
+                onAssignmentStateChange={handleAssignmentStateChange}
+                isUpdatingAssignmentStates={isUpdatingAssignmentStates}
+                currentUserId={currentUserId}
+                canChangeAll={canChangeAll}
+                activeFilter={activeFilter}
+              />
+            </div>
+
+            {/* Pagination controls */}
+            <div className='text-muted-foreground flex items-center justify-between border-t px-3 py-1.5 text-xs'>
+              <span>
+                Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}
+              </span>
+              <div className='flex gap-1'>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='h-6 px-2 text-xs'
+                  disabled={page === 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='h-6 px-2 text-xs'
+                  disabled={page * PAGE_SIZE >= total}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key='kanban'
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className='flex-1 overflow-hidden'
+          >
+            <IssuesKanban
               orgSlug={orgSlug}
               issues={issues}
               states={states ?? []}
               priorities={priorities ?? []}
               teams={teams ?? []}
               projects={projects ?? []}
+              currentUserId={currentUserId}
+              onStateChange={(_issueId, assignmentId, stateId) => {
+                void handleAssignmentStateChange(assignmentId, stateId);
+              }}
               onPriorityChange={handlePriorityChange}
-              onAssigneesChange={handleAssigneesChange}
+              onAssigneesChange={(issueId, ids) => {
+                void handleAssigneesChange(issueId, ids);
+              }}
               onTeamChange={handleTeamChange}
               onProjectChange={handleProjectChange}
               onDelete={handleDelete}
               deletePending={isDeleting}
-              isUpdatingAssignees={isUpdatingAssignees}
-              onAssignmentStateChange={handleAssignmentStateChange}
-              isUpdatingAssignmentStates={isUpdatingAssignmentStates}
-              currentUserId={currentUserId}
-              canChangeAll={canChangeAll}
-              activeFilter={activeFilter}
             />
-          </div>
-
-          {/* Pagination controls */}
-          <div className='text-muted-foreground flex items-center justify-between border-t px-3 py-1.5 text-xs'>
-            <span>
-              Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}
-            </span>
-            <div className='flex gap-1'>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='h-6 px-2 text-xs'
-                disabled={page === 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-              >
-                Prev
-              </Button>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='h-6 px-2 text-xs'
-                disabled={page * PAGE_SIZE >= total}
-                onClick={() => setPage(p => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className='flex-1 overflow-hidden'>
-          <IssuesKanban
-            orgSlug={orgSlug}
-            issues={issues}
-            states={states ?? []}
-            priorities={priorities ?? []}
-            currentUserId={currentUserId}
-            onStateChange={(_issueId, assignmentId, stateId) => {
-              void handleAssignmentStateChange(assignmentId, stateId);
-            }}
-            onPriorityChange={handlePriorityChange}
-            onAssigneesChange={(issueId, ids) => {
-              void handleAssigneesChange(issueId, ids);
-            }}
-          />
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <ConfirmDialog />
     </div>
   );

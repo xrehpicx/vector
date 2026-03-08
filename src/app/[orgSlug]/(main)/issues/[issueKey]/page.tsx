@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Circle, Save, X, Pencil } from 'lucide-react';
+import { ArrowLeft, Circle, Save, X, Pencil, Trash2 } from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -37,6 +38,7 @@ import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { IssueActivityFeed } from '@/components/activity/issue-activity-feed';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { useOptimisticValue } from '@/hooks/use-optimistic';
+import { useConfirm } from '@/hooks/use-confirm';
 
 interface IssueViewPageProps {
   params: Promise<{ orgSlug: string; issueKey: string }>;
@@ -112,6 +114,7 @@ function IssueLoadingSkeleton() {
 }
 
 export default function IssueViewPage({ params }: IssueViewPageProps) {
+  const router = useRouter();
   const [resolvedParams, setResolvedParams] = useState<{
     orgSlug: string;
     issueKey: string;
@@ -137,6 +140,8 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
   const [isUpdatingDescription, setIsUpdatingDescription] = useState(false);
   const [isUpdatingEstimates, setIsUpdatingEstimates] = useState(false);
+  const [isDeletingIssue, setIsDeletingIssue] = useState(false);
+  const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
 
   const issue = useQuery(
     api.issues.queries.getByKey,
@@ -179,6 +184,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const updateEstimatesMutation = useMutation(
     api.issues.mutations.updateEstimatedTimes,
   );
+  const deleteIssueMutation = useMutation(api.issues.mutations.deleteIssue);
   const changeTeamMutation = useMutation(api.issues.mutations.changeTeam);
   const changeProjectMutation = useMutation(api.issues.mutations.changeProject);
   const changePriorityMutation = useMutation(
@@ -223,6 +229,10 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const { isAllowed: canChangeProject } = usePermissionCheck(
     resolvedParams?.orgSlug || '',
     PERMISSIONS.ISSUE_RELATION_UPDATE,
+  );
+  const { isAllowed: canDeleteIssue } = usePermissionCheck(
+    resolvedParams?.orgSlug || '',
+    PERMISSIONS.ISSUE_DELETE,
   );
 
   useEffect(() => {
@@ -346,6 +356,25 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     });
   };
 
+  const handleDeleteIssue = async () => {
+    if (!issue || !resolvedParams || !canDeleteIssue) return;
+    const ok = await confirmDelete({
+      title: 'Delete issue',
+      description:
+        'This will permanently delete the issue and cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    setIsDeletingIssue(true);
+    try {
+      await deleteIssueMutation({ issueId: issue._id });
+      router.push(`/${resolvedParams.orgSlug}/issues`);
+    } finally {
+      setIsDeletingIssue(false);
+    }
+  };
+
   return (
     <div className='bg-background h-full overflow-y-auto'>
       {/* Page Grid: main area + sidebar */}
@@ -465,6 +494,23 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                   displayMode='iconWhenUnselected'
                   className='border-none bg-transparent shadow-none'
                 />
+              </PermissionAwareSelector>
+              <div className='bg-muted-foreground/20 h-4 w-px' />
+              <PermissionAwareSelector
+                orgSlug={resolvedParams.orgSlug}
+                permission={PERMISSIONS.ISSUE_DELETE}
+                fallbackMessage="You don't have permission to delete this issue"
+              >
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='text-destructive hover:bg-destructive/10 hover:text-destructive h-6 gap-1 px-2'
+                  disabled={!canDeleteIssue || isDeletingIssue}
+                  onClick={() => void handleDeleteIssue()}
+                >
+                  <Trash2 className='size-3.5' />
+                  <span className='hidden sm:inline'>Delete</span>
+                </Button>
               </PermissionAwareSelector>
             </div>
           </div>
@@ -935,6 +981,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
           </div>
         </div>
       </div>
+      <ConfirmDeleteDialog />
     </div>
   );
 }

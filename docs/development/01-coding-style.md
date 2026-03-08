@@ -5,7 +5,7 @@ This document outlines the general coding style and conventions to be followed w
 ## Imports
 
 - Always use the `@/` path alias for imports within the `src` directory.
-- Avoid `await import("./module")` inside tRPC routers—use static ES imports so types are checked and bundlers can tree-shake.
+- Prefer static ES imports. Avoid dynamic `await import()` unless there is a clear runtime-loading need.
 
 ## Components
 

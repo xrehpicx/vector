@@ -364,6 +364,7 @@ export const listIssues = query({
     orgSlug: v.string(),
     projectId: v.optional(v.string()),
     teamId: v.optional(v.string()),
+    searchQuery: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -415,11 +416,19 @@ export const listIssues = query({
     const allIssues = await issuesQuery.order('desc').collect();
 
     const visibleIssues: Array<Doc<'issues'>> = [];
+    const searchLower = args.searchQuery?.toLowerCase().trim() || '';
     for (const issue of allIssues) {
       const canView = await canViewIssue(ctx, issue);
-      if (canView) {
-        visibleIssues.push(issue);
+      if (!canView) continue;
+      if (
+        searchLower &&
+        !issue.title.toLowerCase().includes(searchLower) &&
+        !(issue.description ?? '').toLowerCase().includes(searchLower) &&
+        !issue.key.toLowerCase().includes(searchLower)
+      ) {
+        continue;
       }
+      visibleIssues.push(issue);
     }
 
     const issuesWithDetails = await Promise.all(

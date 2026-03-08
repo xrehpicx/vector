@@ -1,33 +1,40 @@
 # User Roles
 
-The application uses a two-layer role system to manage user permissions: organization-level roles and project-level roles. This allows for flexible access control within and across different organizations.
+Vector uses an organization role model plus scoped team and project system roles.
 
-## Organisation-level Roles
+## Organization Roles
 
-These roles are managed by `better-auth` and are stored in the `member.role` field.
+These are the built-in organization-wide roles:
 
-| Role     | Permissions                                                                                                |
-| -------- | ---------------------------------------------------------------------------------------------------------- |
-| `owner`  | Full control over the organization. Can delete the org. Only one owner per org (creator is auto-promoted). |
-| `admin`  | Manage settings, members, billing, etc. Cannot delete the organization.                                    |
-| `member` | Standard user, no administrative rights.                                                                   |
+| Role     | Scope        | Summary                                                                                 |
+| -------- | ------------ | --------------------------------------------------------------------------------------- |
+| `owner`  | Organization | Full access via wildcard permission                                                     |
+| `admin`  | Organization | Broad administrative access across org settings, teams, projects, issues, and documents |
+| `member` | Organization | Baseline access to view org resources and create/edit issues and documents              |
 
-## Project-level Roles
+## Scoped Team and Project Roles
 
-These roles are specific to a project and are stored in the `project_member.role` field.
+In addition to organization roles, Vector manages scoped system roles for membership in a specific team or project:
 
-| Role     | Scope   | Capabilities                                   |
-| -------- | ------- | ---------------------------------------------- |
-| `lead`   | Project | CRUD on project, manage members, triage issues |
-| `member` | Project | Create / update own issues & comments          |
+| Role             | Scope   | Summary                                            |
+| ---------------- | ------- | -------------------------------------------------- |
+| `team:lead`      | Team    | Broad team and issue access within that team       |
+| `team:member`    | Team    | Basic team-scoped access                           |
+| `project:lead`   | Project | Broad project and issue access within that project |
+| `project:member` | Project | Basic project-scoped access                        |
 
-## Lead-based Permissions
+## Custom Roles
 
-In addition to the formal roles, the system also recognizes "lead" status on certain resources, which grants additional permissions dynamically:
+Organizations can also define custom roles and assign them at organization, team, or project scope.
 
-- **Project Leads**: Can perform most project operations on projects they lead.
-- **Team Leads**: Can perform most team operations on teams they lead.
-- **Issue Authors**: Can update issues they created.
-- **Issue Assignees**: Can update issues they are assigned to.
+## How Access Is Resolved
 
-This is handled by the permission policy engine. For a detailed breakdown of permissions, see the [Authentication and Permissions](../architecture/03-authentication-and-permissions.md) document.
+At runtime, access is derived from:
+
+1. Built-in organization role
+2. Custom role assignments
+3. Team-scoped system roles
+4. Project-scoped system roles
+5. Resource-specific access rules in backend checks
+
+For implementation details, see [Authentication and Permissions](../architecture/03-authentication-and-permissions.md).

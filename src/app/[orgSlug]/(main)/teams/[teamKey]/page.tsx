@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IconPicker } from '@/components/ui/icon-picker';
-import { notFound } from 'next/navigation';
+import { notFound, useParams, useRouter } from 'next/navigation';
 import { formatDateHuman } from '@/lib/date';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
@@ -65,7 +65,6 @@ import {
 import { toast } from 'sonner';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
-import { useParams } from 'next/navigation';
 import {
   VisibilitySelector,
   type VisibilityState,
@@ -310,6 +309,7 @@ const DEFAULT_COLORS = [
 
 export default function TeamViewPage() {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = params.orgSlug as string;
   const teamKey = params.teamKey as string;
 
@@ -414,7 +414,13 @@ export default function TeamViewPage() {
     PERMISSIONS.TEAM_EDIT,
     permissionScope,
   ); // Mutations with toast error handling - ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
+  const { isAllowed: canDeleteTeam } = usePermissionCheck(
+    orgSlug,
+    PERMISSIONS.TEAM_DELETE,
+    permissionScope,
+  );
   const updateTeamMutation = useMutation(api.teams.mutations.update);
+  const deleteTeamMutation = useMutation(api.teams.mutations.deleteTeam);
   const deleteMutation = useMutation(api.issues.mutations.deleteIssue);
   const changePriorityMutation = useMutation(
     api.issues.mutations.changePriority,
@@ -636,6 +642,27 @@ export default function TeamViewPage() {
     setIsUpdating(false);
   };
 
+  const handleTeamDelete = async () => {
+    if (!team || !canDeleteTeam) return;
+    const ok = await confirm({
+      title: 'Delete team',
+      description:
+        'This will permanently delete the team and cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    setIsUpdating(true);
+    try {
+      await deleteTeamMutation({
+        teamId: team._id,
+      });
+      router.push(`/${orgSlug}/teams`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   // Issue handlers
   const handlePriorityChange = async (issueId: string, priorityId: string) => {
     if (!user?._id || !priorityId) return;
@@ -838,6 +865,24 @@ export default function TeamViewPage() {
                   {team?.key}
                 </Badge>
               )}
+              <div className='bg-muted-foreground/20 h-4 w-px' />
+              <PermissionAware
+                orgSlug={orgSlug}
+                permission={PERMISSIONS.TEAM_DELETE}
+                scope={permissionScope}
+                fallbackMessage="You don't have permission to delete this team"
+              >
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='text-destructive hover:bg-destructive/10 hover:text-destructive h-6 gap-1 px-2'
+                  disabled={!canDeleteTeam || isUpdating}
+                  onClick={() => void handleTeamDelete()}
+                >
+                  <Trash2 className='size-3.5' />
+                  <span className='hidden sm:inline'>Delete</span>
+                </Button>
+              </PermissionAware>
             </div>
           </div>
 

@@ -25,7 +25,7 @@ function MyComponent({ orgSlug }: { orgSlug: string }) {
   // Simple permission check - returns boolean
   const { isAllowed, isLoading } = usePermissionCheck(
     orgSlug,
-    PERMISSIONS.ISSUE_EDIT
+    PERMISSIONS.ISSUE_EDIT,
   );
 
   if (isLoading) return <div>Loading...</div>;
@@ -157,15 +157,15 @@ Check multiple permissions efficiently:
 function Dashboard({ orgSlug }: { orgSlug: string }) {
   const { isAllowed: canCreateProjects } = usePermissionCheck(
     orgSlug,
-    PERMISSIONS.PROJECT_CREATE
+    PERMISSIONS.PROJECT_CREATE,
   );
   const { isAllowed: canCreateTeams } = usePermissionCheck(
     orgSlug,
-    PERMISSIONS.TEAM_CREATE
+    PERMISSIONS.TEAM_CREATE,
   );
   const { isAllowed: canManageMembers } = usePermissionCheck(
     orgSlug,
-    PERMISSIONS.ORG_MANAGE_MEMBERS
+    PERMISSIONS.ORG_MANAGE_MEMBERS,
   );
 
   return (
@@ -213,7 +213,7 @@ The system automatically handles various error states:
 function IssueStatusButton({ orgSlug, currentUserAssignment, states }) {
   const { isAllowed: canUpdateState } = usePermissionCheck(
     orgSlug,
-    PERMISSIONS.ISSUE_STATE_UPDATE
+    PERMISSIONS.ISSUE_STATE_UPDATE,
   );
 
   return (
@@ -270,7 +270,7 @@ function IssueForm({ orgSlug, issue }) {
 
 ## Available Permissions
 
-See the full list of permissions in `src/lib/permissions.ts`:
+See the full list of permissions in `convex/_shared/permissions.ts`:
 
 - **Organization**: `ORG_VIEW`, `ORG_MANAGE_SETTINGS`, `ORG_MANAGE_MEMBERS`, etc.
 - **Projects**: `PROJECT_CREATE`, `PROJECT_VIEW`, `PROJECT_EDIT`, `PROJECT_DELETE`, etc.

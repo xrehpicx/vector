@@ -12,6 +12,6 @@ Vector is a project and issue management application for teams that need organiz
 
 ## Scope
 
-- Organization-scoped workspaces and membership management.
+- Organization-scoped navigation, membership, and permission management.
 - Project, issue, team, and role management through the web application.
 - Authentication, onboarding, and administrative bootstrap flows for self-hosted setups.

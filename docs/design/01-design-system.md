@@ -1,6 +1,6 @@
 # Design System
 
-This document defines the core visual and interaction principles of the AIKP user interface. The goal is to create a dense, efficient, and consistent user experience inspired by Linear.app.
+This document defines the core visual and interaction principles of the Vector UI. The goal is a dense, efficient, and consistent experience inspired by modern operational tools such as Linear, while still matching the patterns already established in this repository.
 
 ## Navigation Philosophy
 
@@ -10,7 +10,7 @@ This document defines the core visual and interaction principles of the AIKP use
 
 ## Component System
 
-- **Shadcn UI**: All UI primitives are sourced from [shadcn/ui](https://ui.shadcn.com).
+- **UI primitives**: The app uses local primitives in `src/components/ui`, drawing from shadcn, Base UI, and Radix where appropriate.
 - **Dense Variants**: We favor "dense" variants of components:
   - **Inputs**: `h-9`
   - **Buttons**: `size="sm"` (`h-9`) as default.
@@ -29,7 +29,7 @@ This document defines the core visual and interaction principles of the AIKP use
 ## Layout, Spacing, and Sizing
 
 - **4px Grid**: Spacing and sizing are based on a 4px grid (e.g., `space-y-1`, `gap-2`).
-- **Glassmorphism**: Surface layers use a "glassmorphism" effect with `bg-white/80 dark:bg-slate-900/80` and `backdrop-blur-sm`.
+- **Dense operational layout**: Detail pages and list views should stay compact and inline-first rather than card-heavy.
 - **Dense Spacing**:
   - Form controls: `space-y-4`
   - Nav items: `space-y-1`

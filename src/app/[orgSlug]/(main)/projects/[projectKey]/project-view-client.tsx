@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft,
   Save,
@@ -10,6 +12,7 @@ import {
   FolderOpen,
   LayoutList,
   Columns3,
+  Trash2,
 } from 'lucide-react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -35,7 +38,13 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
-import { UsersIcon, CalendarIcon, ClockIcon } from 'lucide-react';
+import {
+  UsersIcon,
+  CalendarIcon,
+  ClockIcon,
+  Search,
+  Loader2,
+} from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
 import type { Id } from '@/convex/_generated/dataModel';
 import {
@@ -46,6 +55,7 @@ import { useOptimisticValue } from '@/hooks/use-optimistic';
 import { IssuesKanban } from '@/components/issues/issues-kanban';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
+import { useConfirm } from '@/hooks/use-confirm';
 
 interface ProjectViewClientProps {
   params: { orgSlug: string; projectKey: string };
@@ -64,10 +74,14 @@ const DEFAULT_COLORS = [
 ];
 
 export default function ProjectViewClient({ params }: ProjectViewClientProps) {
+  const router = useRouter();
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [titleValue, setTitleValue] = useState('');
   const [descriptionValue, setDescriptionValue] = useState('');
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [isDeletingIssue, setIsDeletingIssue] = useState(false);
+  const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
   // Issue view mode from URL search params
   const issueViewParam =
     typeof window !== 'undefined'
@@ -91,6 +105,11 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
       qs ? `?${qs}` : window.location.pathname,
     );
   };
+
+  const [issueSearchText, setIssueSearchText] = useState('');
+  const deferredIssueSearch = useDeferredValue(issueSearchText);
+  const [issuePage, setIssuePage] = useState(1);
+  const ISSUE_PAGE_SIZE = 25;
 
   const user = useQuery(api.users.currentUser);
 
@@ -127,6 +146,16 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
     PERMISSIONS.PROJECT_EDIT,
     permissionScope,
   );
+  const { isAllowed: canDeleteProject } = usePermissionCheck(
+    params.orgSlug,
+    PERMISSIONS.PROJECT_DELETE,
+    permissionScope,
+  );
+  const { isAllowed: canDeleteIssue } = usePermissionCheck(
+    params.orgSlug,
+    PERMISSIONS.ISSUE_DELETE,
+    permissionScope,
+  );
 
   const canEdit = !!(
     user &&
@@ -154,11 +183,38 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   );
   const projectIssuesData = useQuery(
     api.issues.queries.listIssues,
-    project?._id ? { orgSlug: params.orgSlug, projectId: project._id } : 'skip',
+    project?._id
+      ? {
+          orgSlug: params.orgSlug,
+          projectId: project._id,
+          searchQuery: deferredIssueSearch || undefined,
+        }
+      : 'skip',
   );
-  const projectIssues = projectIssuesData?.issues ?? [];
+  const allProjectIssues = projectIssuesData?.issues ?? [];
+  const projectIssuesTotal = projectIssuesData?.total ?? 0;
+
+  // Paginate for table view only
+  const paginatedProjectIssues = useMemo(
+    () =>
+      allProjectIssues.slice(
+        (issuePage - 1) * ISSUE_PAGE_SIZE,
+        issuePage * ISSUE_PAGE_SIZE,
+      ),
+    [allProjectIssues, issuePage, ISSUE_PAGE_SIZE],
+  );
+  const projectIssues =
+    issueViewMode === 'table' ? paginatedProjectIssues : allProjectIssues;
+
+  // Reset page when search changes
+  useEffect(() => {
+    setIssuePage(1);
+  }, [deferredIssueSearch]);
 
   const updateMutation = useMutation(api.projects.mutations.update);
+  const deleteProjectMutation = useMutation(
+    api.projects.mutations.deleteProject,
+  );
   const changeStatusMutation = useMutation(api.projects.mutations.changeStatus);
   const changeTeamMutation = useMutation(api.projects.mutations.changeTeam);
   const changeLeadMutation = useMutation(api.projects.mutations.changeLead);
@@ -171,6 +227,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const updateAssigneesMutation = useMutation(
     api.issues.mutations.updateAssignees,
   );
+  const deleteIssueMutation = useMutation(api.issues.mutations.deleteIssue);
   const changeVisibilityMutation = useMutation(
     api.projects.mutations.changeVisibility,
   );
@@ -248,6 +305,45 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
       projectId: project._id,
       visibility,
     });
+  };
+
+  const handleDeleteProject = async () => {
+    if (!project || !canDeleteProject) return;
+    const ok = await confirmDelete({
+      title: 'Delete project',
+      description:
+        'This will permanently delete the project and cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    setIsDeletingProject(true);
+    try {
+      await deleteProjectMutation({ projectId: project._id });
+      router.push(`/${params.orgSlug}/projects`);
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
+
+  const handleDeleteIssue = async (issueId: string) => {
+    if (!canDeleteIssue) return;
+    const ok = await confirmDelete({
+      title: 'Delete issue',
+      description:
+        'This will permanently delete the issue and cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    setIsDeletingIssue(true);
+    try {
+      await deleteIssueMutation({
+        issueId: issueId as Id<'issues'>,
+      });
+    } finally {
+      setIsDeletingIssue(false);
+    }
   };
 
   if (!project) {
@@ -351,380 +447,420 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                 className='border-none bg-transparent shadow-none'
               />
             </PermissionAware>
+            <div className='bg-muted-foreground/20 h-4 w-px' />
+            <PermissionAware
+              orgSlug={params.orgSlug}
+              permission={PERMISSIONS.PROJECT_DELETE}
+              scope={permissionScope}
+              fallbackMessage="You don't have permission to delete this project"
+            >
+              <Button
+                variant='ghost'
+                size='sm'
+                className='text-destructive hover:bg-destructive/10 hover:text-destructive h-6 gap-1 px-2'
+                disabled={!canDeleteProject || isDeletingProject}
+                onClick={() => void handleDeleteProject()}
+              >
+                <Trash2 className='size-3.5' />
+                <span className='hidden sm:inline'>Delete</span>
+              </Button>
+            </PermissionAware>
           </div>
         </div>
 
         {/* Main Content */}
-        <div className='mx-auto max-w-5xl px-3 py-3 sm:px-4 sm:py-4'>
+        <div className='py-3 sm:py-4'>
           {/* Project Header */}
-          <div className='mb-2 max-w-4xl space-y-2'>
-            <div className='text-muted-foreground flex items-center gap-2 text-xs'>
-              <span className='font-mono'>{params.projectKey}</span>
-              <span>•</span>
-              <span>
-                Updated {formatDateHuman(new Date(project._creationTime))}
-              </span>
-            </div>
-
-            {/* Title */}
-            {editingTitle ? (
-              <div className='flex items-center gap-2'>
-                {/* Icon that stays visible during editing */}
-                {canEdit ? (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button className='flex items-center gap-0 transition-opacity hover:opacity-80'>
-                        {iconValue ? (
-                          (() => {
-                            const IconComp = getDynamicIcon(iconValue);
-                            if (!IconComp)
-                              return (
-                                <FolderOpen className='text-muted-foreground size-6' />
-                              );
-                            return (
-                              <IconComp
-                                className='size-6'
-                                style={{ color: colorValue || undefined }}
-                              />
-                            );
-                          })()
-                        ) : (
-                          <div className='border-muted-foreground/50 flex size-6 items-center justify-center rounded border-2 border-dashed'>
-                            <Plus className='text-muted-foreground size-3' />
-                          </div>
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className='w-80' align='start'>
-                      <div className='space-y-4'>
-                        <div>
-                          <h4 className='mb-2 text-sm font-medium'>
-                            Project Icon
-                          </h4>
-                          <IconPicker
-                            value={iconValue}
-                            onValueChange={handleIconChange}
-                            placeholder='Select project icon'
-                            className='h-8 w-full'
-                          />
-                        </div>
-                        <div>
-                          <h4 className='mb-2 text-sm font-medium'>
-                            Project Color
-                          </h4>
-                          <div className='flex flex-wrap gap-2'>
-                            {DEFAULT_COLORS.map(colorOption => (
-                              <button
-                                key={colorOption}
-                                type='button'
-                                className={`size-8 rounded-md border-2 transition-all ${
-                                  colorValue === colorOption
-                                    ? 'border-foreground scale-110'
-                                    : 'border-border hover:scale-105'
-                                }`}
-                                style={{ backgroundColor: colorOption }}
-                                onClick={() => handleColorChange(colorOption)}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  iconValue &&
-                  (() => {
-                    const IconComp = getDynamicIcon(iconValue);
-                    if (!IconComp) return null;
-                    return (
-                      <IconComp
-                        className='size-6'
-                        style={{ color: colorValue || undefined }}
-                      />
-                    );
-                  })()
-                )}
-                <Input
-                  value={titleValue}
-                  onChange={e => setTitleValue(e.target.value)}
-                  className='h-auto border-none p-0 !text-3xl !leading-tight font-semibold shadow-none focus-visible:ring-0'
-                  style={{ fontFamily: 'var(--font-title)' }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleTitleSave();
-                    if (e.key === 'Escape') {
-                      setTitleValue(displayTitle);
-                      setEditingTitle(false);
-                    }
-                  }}
-                  autoFocus
-                />
-                <div className='flex items-center gap-1'>
-                  <Button size='sm' onClick={handleTitleSave}>
-                    <Save className='size-4' />
-                  </Button>
-                  <Button
-                    size='sm'
-                    variant='ghost'
-                    onClick={() => {
-                      setTitleValue(displayTitle);
-                      setEditingTitle(false);
-                    }}
-                  >
-                    <X className='size-4' />
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <h1 className='flex items-center gap-2 text-3xl leading-tight font-semibold'>
-                {/* Clickable Icon with Color */}
-                {canEdit ? (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button className='flex items-center gap-0 transition-opacity hover:opacity-80'>
-                        {iconValue ? (
-                          (() => {
-                            const IconComp = getDynamicIcon(iconValue);
-                            if (!IconComp)
-                              return (
-                                <FolderOpen className='text-muted-foreground size-6' />
-                              );
-                            return (
-                              <IconComp
-                                className='size-6'
-                                style={{ color: colorValue || undefined }}
-                              />
-                            );
-                          })()
-                        ) : (
-                          <div className='border-muted-foreground/50 flex size-6 items-center justify-center rounded border-2 border-dashed'>
-                            <Plus className='text-muted-foreground size-3' />
-                          </div>
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className='w-80' align='start'>
-                      <div className='space-y-4'>
-                        <div>
-                          <h4 className='mb-2 text-sm font-medium'>
-                            Project Icon
-                          </h4>
-                          <IconPicker
-                            value={iconValue}
-                            onValueChange={handleIconChange}
-                            placeholder='Select project icon'
-                            className='h-8 w-full'
-                          />
-                        </div>
-                        <div>
-                          <h4 className='mb-2 text-sm font-medium'>
-                            Project Color
-                          </h4>
-                          <div className='flex flex-wrap gap-2'>
-                            {DEFAULT_COLORS.map(colorOption => (
-                              <button
-                                key={colorOption}
-                                type='button'
-                                className={`size-8 rounded-md border-2 transition-all ${
-                                  colorValue === colorOption
-                                    ? 'border-foreground scale-110'
-                                    : 'border-border hover:scale-105'
-                                }`}
-                                style={{ backgroundColor: colorOption }}
-                                onClick={() => handleColorChange(colorOption)}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  iconValue &&
-                  (() => {
-                    const IconComp = getDynamicIcon(iconValue);
-                    if (!IconComp) return null;
-                    return (
-                      <IconComp
-                        className='size-6'
-                        style={{ color: colorValue || undefined }}
-                      />
-                    );
-                  })()
-                )}
-                <span
-                  className={cn(
-                    'transition-colors',
-                    canEdit && 'hover:text-muted-foreground cursor-pointer',
-                  )}
-                  onClick={() => {
-                    if (!canEdit) return;
-                    setTitleValue(displayTitle);
-                    setEditingTitle(true);
-                  }}
-                >
-                  {displayTitle}
+          <div className='mx-auto max-w-5xl px-3 sm:px-4'>
+            <div className='mb-2 max-w-4xl space-y-2'>
+              <div className='text-muted-foreground flex items-center gap-2 text-xs'>
+                <span className='font-mono'>{params.projectKey}</span>
+                <span>•</span>
+                <span>
+                  Updated {formatDateHuman(new Date(project._creationTime))}
                 </span>
-              </h1>
-            )}
-          </div>
-
-          {/* Description */}
-          <div className='mb-4'>
-            {editingDescription ? (
-              <div className='space-y-4'>
-                <RichEditor
-                  value={descriptionValue}
-                  onChange={setDescriptionValue}
-                  placeholder='Add a description...'
-                  mode='compact'
-                />
-                <div className='flex items-center gap-3'>
-                  <Button onClick={handleDescriptionSave}>
-                    <Save className='mr-2 size-4' />
-                    Save
-                  </Button>
-                  <Button
-                    variant='outline'
-                    onClick={() => {
-                      setDescriptionValue(displayDescription);
-                      setEditingDescription(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
               </div>
-            ) : (
-              <div>
-                {displayDescription ? (
-                  <div
+
+              {/* Title */}
+              {editingTitle ? (
+                <div className='flex items-center gap-2'>
+                  {/* Icon that stays visible during editing */}
+                  {canEdit ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className='flex items-center gap-0 transition-opacity hover:opacity-80'>
+                          {iconValue ? (
+                            (() => {
+                              const IconComp = getDynamicIcon(iconValue);
+                              if (!IconComp)
+                                return (
+                                  <FolderOpen className='text-muted-foreground size-6' />
+                                );
+                              return (
+                                <IconComp
+                                  className='size-6'
+                                  style={{ color: colorValue || undefined }}
+                                />
+                              );
+                            })()
+                          ) : (
+                            <div className='border-muted-foreground/50 flex size-6 items-center justify-center rounded border-2 border-dashed'>
+                              <Plus className='text-muted-foreground size-3' />
+                            </div>
+                          )}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className='w-80' align='start'>
+                        <div className='space-y-4'>
+                          <div>
+                            <h4 className='mb-2 text-sm font-medium'>
+                              Project Icon
+                            </h4>
+                            <IconPicker
+                              value={iconValue}
+                              onValueChange={handleIconChange}
+                              placeholder='Select project icon'
+                              className='h-8 w-full'
+                            />
+                          </div>
+                          <div>
+                            <h4 className='mb-2 text-sm font-medium'>
+                              Project Color
+                            </h4>
+                            <div className='flex flex-wrap gap-2'>
+                              {DEFAULT_COLORS.map(colorOption => (
+                                <button
+                                  key={colorOption}
+                                  type='button'
+                                  className={`size-8 rounded-md border-2 transition-all ${
+                                    colorValue === colorOption
+                                      ? 'border-foreground scale-110'
+                                      : 'border-border hover:scale-105'
+                                  }`}
+                                  style={{ backgroundColor: colorOption }}
+                                  onClick={() => handleColorChange(colorOption)}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    iconValue &&
+                    (() => {
+                      const IconComp = getDynamicIcon(iconValue);
+                      if (!IconComp) return null;
+                      return (
+                        <IconComp
+                          className='size-6'
+                          style={{ color: colorValue || undefined }}
+                        />
+                      );
+                    })()
+                  )}
+                  <Input
+                    value={titleValue}
+                    onChange={e => setTitleValue(e.target.value)}
+                    className='h-auto border-none p-0 !text-3xl !leading-tight font-semibold shadow-none focus-visible:ring-0'
+                    style={{ fontFamily: 'var(--font-title)' }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleTitleSave();
+                      if (e.key === 'Escape') {
+                        setTitleValue(displayTitle);
+                        setEditingTitle(false);
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <div className='flex items-center gap-1'>
+                    <Button size='sm' onClick={handleTitleSave}>
+                      <Save className='size-4' />
+                    </Button>
+                    <Button
+                      size='sm'
+                      variant='ghost'
+                      onClick={() => {
+                        setTitleValue(displayTitle);
+                        setEditingTitle(false);
+                      }}
+                    >
+                      <X className='size-4' />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <h1 className='flex items-center gap-2 text-3xl leading-tight font-semibold'>
+                  {/* Clickable Icon with Color */}
+                  {canEdit ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className='flex items-center gap-0 transition-opacity hover:opacity-80'>
+                          {iconValue ? (
+                            (() => {
+                              const IconComp = getDynamicIcon(iconValue);
+                              if (!IconComp)
+                                return (
+                                  <FolderOpen className='text-muted-foreground size-6' />
+                                );
+                              return (
+                                <IconComp
+                                  className='size-6'
+                                  style={{ color: colorValue || undefined }}
+                                />
+                              );
+                            })()
+                          ) : (
+                            <div className='border-muted-foreground/50 flex size-6 items-center justify-center rounded border-2 border-dashed'>
+                              <Plus className='text-muted-foreground size-3' />
+                            </div>
+                          )}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className='w-80' align='start'>
+                        <div className='space-y-4'>
+                          <div>
+                            <h4 className='mb-2 text-sm font-medium'>
+                              Project Icon
+                            </h4>
+                            <IconPicker
+                              value={iconValue}
+                              onValueChange={handleIconChange}
+                              placeholder='Select project icon'
+                              className='h-8 w-full'
+                            />
+                          </div>
+                          <div>
+                            <h4 className='mb-2 text-sm font-medium'>
+                              Project Color
+                            </h4>
+                            <div className='flex flex-wrap gap-2'>
+                              {DEFAULT_COLORS.map(colorOption => (
+                                <button
+                                  key={colorOption}
+                                  type='button'
+                                  className={`size-8 rounded-md border-2 transition-all ${
+                                    colorValue === colorOption
+                                      ? 'border-foreground scale-110'
+                                      : 'border-border hover:scale-105'
+                                  }`}
+                                  style={{ backgroundColor: colorOption }}
+                                  onClick={() => handleColorChange(colorOption)}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    iconValue &&
+                    (() => {
+                      const IconComp = getDynamicIcon(iconValue);
+                      if (!IconComp) return null;
+                      return (
+                        <IconComp
+                          className='size-6'
+                          style={{ color: colorValue || undefined }}
+                        />
+                      );
+                    })()
+                  )}
+                  <span
                     className={cn(
-                      'prose prose-sm text-muted-foreground max-w-none transition-colors',
-                      canEdit && 'hover:text-foreground cursor-pointer',
+                      'transition-colors',
+                      canEdit && 'hover:text-muted-foreground cursor-pointer',
                     )}
                     onClick={() => {
                       if (!canEdit) return;
-                      setDescriptionValue(displayDescription);
-                      setEditingDescription(true);
+                      setTitleValue(displayTitle);
+                      setEditingTitle(true);
                     }}
                   >
-                    <RichEditor
-                      value={displayDescription}
-                      onChange={() => {}}
-                      mode='compact'
-                      disabled={true}
-                    />
-                  </div>
-                ) : canEdit ? (
-                  <button
-                    className='text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base'
-                    onClick={() => {
-                      setDescriptionValue(displayDescription);
-                      setEditingDescription(true);
-                    }}
-                  >
-                    Add a description...
-                  </button>
-                ) : (
-                  <p className='text-muted-foreground text-sm'>
-                    No description provided.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+                    {displayTitle}
+                  </span>
+                </h1>
+              )}
+            </div>
 
-          {/* Properties Bar */}
-          <div className='mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm'>
-            {/* Status */}
-            <div className='flex min-w-[120px] items-center gap-1'>
-              <span className='text-muted-foreground'>
-                <PermissionAware
-                  orgSlug={params.orgSlug}
-                  permission={PERMISSIONS.PROJECT_EDIT}
-                  scope={permissionScope}
-                  fallbackMessage="You don't have permission to change status"
-                >
-                  <StatusSelector
-                    statuses={statuses || []}
-                    selectedStatus={project.statusId || ''}
-                    onStatusSelect={handleStatusChange}
-                    className='h-5 w-5 border-none bg-transparent p-0 shadow-none'
-                    displayMode='iconOnly'
+            {/* Description */}
+            <div className='mb-4'>
+              {editingDescription ? (
+                <div className='space-y-4'>
+                  <RichEditor
+                    value={descriptionValue}
+                    onChange={setDescriptionValue}
+                    placeholder='Add a description...'
+                    mode='compact'
                   />
-                </PermissionAware>
-              </span>
-              <span className='text-muted-foreground text-xs'>Status</span>
-              <span className='ml-1 font-medium'>
-                {statuses?.find(s => s._id === project.statusId)?.name || '—'}
-              </span>
+                  <div className='flex items-center gap-3'>
+                    <Button onClick={handleDescriptionSave}>
+                      <Save className='mr-2 size-4' />
+                      Save
+                    </Button>
+                    <Button
+                      variant='outline'
+                      onClick={() => {
+                        setDescriptionValue(displayDescription);
+                        setEditingDescription(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {displayDescription ? (
+                    <div
+                      className={cn(
+                        'prose prose-sm text-muted-foreground max-w-none transition-colors',
+                        canEdit && 'hover:text-foreground cursor-pointer',
+                      )}
+                      onClick={() => {
+                        if (!canEdit) return;
+                        setDescriptionValue(displayDescription);
+                        setEditingDescription(true);
+                      }}
+                    >
+                      <RichEditor
+                        value={displayDescription}
+                        onChange={() => {}}
+                        mode='compact'
+                        disabled={true}
+                      />
+                    </div>
+                  ) : canEdit ? (
+                    <button
+                      className='text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base'
+                      onClick={() => {
+                        setDescriptionValue(displayDescription);
+                        setEditingDescription(true);
+                      }}
+                    >
+                      Add a description...
+                    </button>
+                  ) : (
+                    <p className='text-muted-foreground text-sm'>
+                      No description provided.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
-            {/* Lead */}
-            <div className='flex min-w-[120px] items-center gap-1'>
-              <span className='text-muted-foreground'>
-                <PermissionAware
-                  orgSlug={params.orgSlug}
-                  permission={PERMISSIONS.PROJECT_EDIT}
-                  scope={permissionScope}
-                  fallbackMessage="You don't have permission to change lead"
-                >
-                  <ProjectLeadSelector
+
+            {/* Properties Bar */}
+            <div className='mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm'>
+              {/* Status */}
+              <div className='flex min-w-[120px] items-center gap-1'>
+                <span className='text-muted-foreground'>
+                  <PermissionAware
                     orgSlug={params.orgSlug}
-                    projectKey={params.projectKey}
-                    selectedLead={project.leadId || ''}
-                    onLeadSelect={handleLeadChange}
-                    className='h-5 w-5 border-none bg-transparent p-0 shadow-none'
-                    displayMode='iconOnly'
-                  />
-                </PermissionAware>
-              </span>
-              <span className='text-muted-foreground text-xs'>Lead</span>
-              <span className='ml-1 font-medium'>
-                {project.lead?.name || '—'}
-              </span>
-            </div>
-            {/* Team */}
-            <div className='flex min-w-[120px] items-center gap-1'>
-              <span className='text-muted-foreground'>
-                <UsersIcon className='size-4' />
-              </span>
-              <span className='text-muted-foreground text-xs'>Team</span>
-              <span className='ml-1 font-medium'>
-                {teams?.find(t => t._id === project.teamId)?.name || '—'}
-              </span>
-            </div>
-            {/* Dates */}
-            <div className='flex min-w-[180px] items-center gap-1'>
-              <span className='text-muted-foreground'>
-                <CalendarIcon className='size-4' />
-              </span>
-              <span className='text-muted-foreground text-xs'>Dates</span>
-              <span className='ml-1'>
-                {project.startDate
-                  ? formatDateHuman(new Date(project.startDate))
-                  : '—'}
-                {project.dueDate
-                  ? ` → ${formatDateHuman(new Date(project.dueDate))}`
-                  : ''}
-              </span>
-            </div>
-            {/* Created/Updated */}
-            <div className='flex min-w-[160px] items-center gap-1'>
-              <span className='text-muted-foreground'>
-                <ClockIcon className='size-4' />
-              </span>
-              <span className='text-muted-foreground text-xs'>Created</span>
-              <span className='ml-1'>
-                {formatDateHuman(new Date(project._creationTime))}
-              </span>
+                    permission={PERMISSIONS.PROJECT_EDIT}
+                    scope={permissionScope}
+                    fallbackMessage="You don't have permission to change status"
+                  >
+                    <StatusSelector
+                      statuses={statuses || []}
+                      selectedStatus={project.statusId || ''}
+                      onStatusSelect={handleStatusChange}
+                      className='h-5 w-5 border-none bg-transparent p-0 shadow-none'
+                      displayMode='iconOnly'
+                    />
+                  </PermissionAware>
+                </span>
+                <span className='text-muted-foreground text-xs'>Status</span>
+                <span className='ml-1 font-medium'>
+                  {statuses?.find(s => s._id === project.statusId)?.name || '—'}
+                </span>
+              </div>
+              {/* Lead */}
+              <div className='flex min-w-[120px] items-center gap-1'>
+                <span className='text-muted-foreground'>
+                  <PermissionAware
+                    orgSlug={params.orgSlug}
+                    permission={PERMISSIONS.PROJECT_EDIT}
+                    scope={permissionScope}
+                    fallbackMessage="You don't have permission to change lead"
+                  >
+                    <ProjectLeadSelector
+                      orgSlug={params.orgSlug}
+                      projectKey={params.projectKey}
+                      selectedLead={project.leadId || ''}
+                      onLeadSelect={handleLeadChange}
+                      className='h-5 w-5 border-none bg-transparent p-0 shadow-none'
+                      displayMode='iconOnly'
+                    />
+                  </PermissionAware>
+                </span>
+                <span className='text-muted-foreground text-xs'>Lead</span>
+                <span className='ml-1 font-medium'>
+                  {project.lead?.name || '—'}
+                </span>
+              </div>
+              {/* Team */}
+              <div className='flex min-w-[120px] items-center gap-1'>
+                <span className='text-muted-foreground'>
+                  <UsersIcon className='size-4' />
+                </span>
+                <span className='text-muted-foreground text-xs'>Team</span>
+                <span className='ml-1 font-medium'>
+                  {teams?.find(t => t._id === project.teamId)?.name || '—'}
+                </span>
+              </div>
+              {/* Dates */}
+              <div className='flex min-w-[180px] items-center gap-1'>
+                <span className='text-muted-foreground'>
+                  <CalendarIcon className='size-4' />
+                </span>
+                <span className='text-muted-foreground text-xs'>Dates</span>
+                <span className='ml-1'>
+                  {project.startDate
+                    ? formatDateHuman(new Date(project.startDate))
+                    : '—'}
+                  {project.dueDate
+                    ? ` → ${formatDateHuman(new Date(project.dueDate))}`
+                    : ''}
+                </span>
+              </div>
+              {/* Created/Updated */}
+              <div className='flex min-w-[160px] items-center gap-1'>
+                <span className='text-muted-foreground'>
+                  <ClockIcon className='size-4' />
+                </span>
+                <span className='text-muted-foreground text-xs'>Created</span>
+                <span className='ml-1'>
+                  {formatDateHuman(new Date(project._creationTime))}
+                </span>
+              </div>
             </div>
           </div>
+          {/* end max-w-5xl */}
 
           {/* Issues Board */}
           <div className='mb-6'>
-            <div className='mb-2 flex items-center justify-between'>
+            <div
+              className={cn(
+                'mb-2 flex items-center justify-between px-3 sm:px-4',
+                issueViewMode === 'table' && 'mx-auto max-w-5xl',
+              )}
+            >
               <h2 className='text-sm font-semibold'>Issues</h2>
               <div className='flex items-center gap-2'>
+                {/* Search */}
+                <div className='relative'>
+                  {deferredIssueSearch !== issueSearchText ? (
+                    <Loader2 className='text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 animate-spin' />
+                  ) : (
+                    <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2' />
+                  )}
+                  <Input
+                    placeholder='Search issues...'
+                    value={issueSearchText}
+                    onChange={e => setIssueSearchText(e.target.value)}
+                    className='h-6 w-40 pl-7 text-xs'
+                  />
+                </div>
                 <div className='border-border flex items-center rounded-md border'>
                   <Button
                     variant={issueViewMode === 'kanban' ? 'secondary' : 'ghost'}
@@ -752,63 +888,141 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                 )}
               </div>
             </div>
-            {projectIssues.length === 0 ? (
-              <div className='text-muted-foreground rounded-lg border border-dashed px-3 py-8 text-center text-sm'>
-                No issues yet. Create one to get started.
-              </div>
-            ) : issueViewMode === 'kanban' ? (
-              <div className='-mx-3 overflow-hidden rounded-lg border sm:-mx-4'>
-                <IssuesKanban
-                  orgSlug={params.orgSlug}
-                  issues={projectIssues}
-                  states={issueStates ?? []}
-                  priorities={issuePriorities ?? []}
-                  currentUserId={user?._id || ''}
-                  onStateChange={(_issueId, assignmentId, stateId) => {
-                    void changeAssignmentStateMutation({
-                      assignmentId: assignmentId as Id<'issueAssignees'>,
-                      stateId: stateId as Id<'issueStates'>,
-                    });
-                  }}
-                  onPriorityChange={(issueId, priorityId) => {
-                    void changePriorityMutation({
-                      issueId: issueId as Id<'issues'>,
-                      priorityId: priorityId as Id<'issuePriorities'>,
-                    });
-                  }}
-                  onAssigneesChange={(issueId, assigneeIds) => {
-                    void updateAssigneesMutation({
-                      issueId: issueId as Id<'issues'>,
-                      assigneeIds: assigneeIds as Id<'users'>[],
-                    });
-                  }}
-                  createDefaults={{ projectId: project._id }}
-                />
-              </div>
-            ) : (
-              <div className='overflow-hidden rounded-lg border'>
-                <IssuesTable
-                  orgSlug={params.orgSlug}
-                  issues={projectIssues}
-                  states={issueStates ?? []}
-                  priorities={issuePriorities ?? []}
-                  teams={teams ?? []}
-                  projects={[]}
-                  onPriorityChange={() => {}}
-                  onAssigneesChange={() => {}}
-                  onTeamChange={() => {}}
-                  onProjectChange={() => {}}
-                  onDelete={() => {}}
-                  onAssignmentStateChange={() => {}}
-                  currentUserId={user?._id || ''}
-                  activeFilter='all'
-                />
-              </div>
-            )}
+            <AnimatePresence mode='wait' initial={false}>
+              {projectIssuesData === undefined ? (
+                <motion.div
+                  key='loading'
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className='mx-auto max-w-5xl px-3 sm:px-4'
+                >
+                  <div className='flex items-center justify-center py-8'>
+                    <Loader2 className='text-muted-foreground size-5 animate-spin' />
+                  </div>
+                </motion.div>
+              ) : projectIssues.length === 0 ? (
+                <motion.div
+                  key='empty'
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className='mx-auto max-w-5xl px-3 sm:px-4'
+                >
+                  <div className='text-muted-foreground rounded-lg border border-dashed px-3 py-8 text-center text-sm'>
+                    {issueSearchText
+                      ? 'No issues match your search.'
+                      : 'No issues yet. Create one to get started.'}
+                  </div>
+                </motion.div>
+              ) : issueViewMode === 'kanban' ? (
+                <motion.div
+                  key='kanban'
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className='overflow-hidden'
+                >
+                  <IssuesKanban
+                    orgSlug={params.orgSlug}
+                    issues={projectIssues}
+                    states={issueStates ?? []}
+                    priorities={issuePriorities ?? []}
+                    teams={teams ?? []}
+                    currentUserId={user?._id || ''}
+                    onStateChange={(_issueId, assignmentId, stateId) => {
+                      void changeAssignmentStateMutation({
+                        assignmentId: assignmentId as Id<'issueAssignees'>,
+                        stateId: stateId as Id<'issueStates'>,
+                      });
+                    }}
+                    onPriorityChange={(issueId, priorityId) => {
+                      void changePriorityMutation({
+                        issueId: issueId as Id<'issues'>,
+                        priorityId: priorityId as Id<'issuePriorities'>,
+                      });
+                    }}
+                    onAssigneesChange={(issueId, assigneeIds) => {
+                      void updateAssigneesMutation({
+                        issueId: issueId as Id<'issues'>,
+                        assigneeIds: assigneeIds as Id<'users'>[],
+                      });
+                    }}
+                    onDelete={canDeleteIssue ? handleDeleteIssue : undefined}
+                    deletePending={isDeletingIssue}
+                    createDefaults={{ projectId: project._id }}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key='table'
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className='mx-auto max-w-5xl px-3 sm:px-4'
+                >
+                  <div className='overflow-hidden rounded-lg border'>
+                    <IssuesTable
+                      orgSlug={params.orgSlug}
+                      issues={projectIssues}
+                      states={issueStates ?? []}
+                      priorities={issuePriorities ?? []}
+                      teams={teams ?? []}
+                      projects={[]}
+                      onPriorityChange={() => {}}
+                      onAssigneesChange={() => {}}
+                      onTeamChange={() => {}}
+                      onProjectChange={() => {}}
+                      onDelete={() => {}}
+                      onAssignmentStateChange={() => {}}
+                      currentUserId={user?._id || ''}
+                      activeFilter='all'
+                    />
+                  </div>
+                  {projectIssuesTotal > ISSUE_PAGE_SIZE && (
+                    <div className='text-muted-foreground flex items-center justify-between px-1 py-1.5 text-xs'>
+                      <span>
+                        Page {issuePage} of{' '}
+                        {Math.max(
+                          1,
+                          Math.ceil(projectIssuesTotal / ISSUE_PAGE_SIZE),
+                        )}
+                      </span>
+                      <div className='flex gap-1'>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          className='h-6 px-2 text-xs'
+                          disabled={issuePage === 1}
+                          onClick={() => setIssuePage(p => Math.max(1, p - 1))}
+                        >
+                          Prev
+                        </Button>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          className='h-6 px-2 text-xs'
+                          disabled={
+                            issuePage * ISSUE_PAGE_SIZE >= projectIssuesTotal
+                          }
+                          onClick={() => setIssuePage(p => p + 1)}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Project Details */}
-          <div className='space-y-6'>
+          <div className='mx-auto max-w-5xl space-y-6 px-3 sm:px-4'>
             <div>
               <h2 className='mb-2 text-sm font-semibold'>Activity</h2>
               {projectId ? (
@@ -829,6 +1043,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
           </div>
         </div>
       </div>
+      <ConfirmDeleteDialog />
     </div>
   );
 }

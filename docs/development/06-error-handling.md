@@ -68,7 +68,7 @@ const { execute, isLoading, error } = useConvexMutation(
     context: 'Invite',
     onSuccess: result => console.log('Success:', result),
     onError: errorInfo => console.log('Error:', errorInfo),
-  }
+  },
 );
 
 // Usage
@@ -88,7 +88,7 @@ const { submit, isSubmitting, error } = useFormSubmission(
     context: 'Profile update',
     successMessage: 'Profile updated successfully',
     onSuccess: () => router.refresh(),
-  }
+  },
 );
 
 // Usage
@@ -108,7 +108,7 @@ const { execute, isLoading, error, retryCount } = useAsyncOperation(
     context: 'File upload',
     maxRetries: 3,
     retryDelay: 1000,
-  }
+  },
 );
 ```
 

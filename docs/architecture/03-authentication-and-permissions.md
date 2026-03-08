@@ -1,119 +1,85 @@
 # Authentication and Permissions
 
-This document outlines the comprehensive permissions system with scoped roles for organizations, teams, and projects.
+This document outlines the current auth and authorization model used by Vector.
 
-## Permission System Overview
+## Authentication
 
-The permission system supports three levels of scoping:
+- Auth provider: Better Auth with the Convex adapter
+- Server-side integration: `convex/auth.ts`
+- Next.js bridge: `src/lib/auth-server.ts`
+- Client helper: `src/lib/auth-client.ts`
+- Auth route: `src/app/api/auth/[...all]/route.ts`
+- First-admin bootstrap flow: `src/app/setup-admin/page.tsx`
 
-1. **Organization-level**: Global permissions within an organization
-2. **Team-level**: Permissions specific to a team and its issues
-3. **Project-level**: Permissions specific to a project and its issues
+The application uses Better Auth for identity and session handling, while Convex remains the source of truth for application data, permissions, and role assignments.
 
-## Permission Resolution Order
+## Permission Scope Model
 
-When checking permissions, the system evaluates in this order:
+Permissions are evaluated at three scopes:
 
-1. **Built-in roles**: Owner/Admin get all permissions
-2. **Default member permissions**: All org members get basic permissions
-3. **Organization custom roles**: Custom roles assigned at org level
-4. **Team-scoped roles**: Roles specific to a team (if applicable)
-5. **Project-scoped roles**: Roles specific to a project (if applicable)
+1. **Organization scope**
+2. **Team scope**
+3. **Project scope**
 
-## How to Add a New Permission
+Issue and document access may inherit through organization, team, or project membership depending on the resource.
 
-1. **Define the Constant**: Add your new permission to `PERMISSIONS` in `src/lib/permissions.ts` and `convex/permissions.ts`
-2. **Assign to Roles**: Add the permission to appropriate role assignments
-3. **Implement the Check**: Use `hasScopedPermission()` in backend or `useScopedPermission()` in frontend
-4. **Update this Document**: Add the new permission to the matrix below
+## Permission Sources
 
----
+- Permission constants: `convex/_shared/permissions.ts`
+- Backend access checks: `convex/access.ts`
+- Permission query API for the frontend: `convex/permissions/queries.ts`
+- Role assignment and system-role management: `convex/roles/index.ts`
+- Frontend hooks: `src/hooks/use-permissions.tsx`
+- UI wrappers: `src/components/ui/permission-aware.tsx`
 
-## Permission Matrix
+## Built-In Organization Roles
 
-### Organization Permissions
+The default organization roles are:
 
-| Permission            | Owner | Admin | Member | Notes                            |
-| --------------------- | ----- | ----- | ------ | -------------------------------- |
-| `org:view`            | ✅    | ✅    | ✅     | Required for organization access |
-| `org:manage:settings` | ✅    | ✅    | ❌     | Organization settings            |
-| `org:manage:billing`  | ✅    | ✅    | ❌     | Billing management               |
-| `org:manage:members`  | ✅    | ✅    | ❌     | Member management                |
-| `org:manage:roles`    | ✅    | ✅    | ❌     | Role management                  |
+| Role     | Summary                                                                 |
+| -------- | ----------------------------------------------------------------------- |
+| `owner`  | Full access via wildcard permission                                     |
+| `admin`  | Broad org, team, project, issue, and document management access         |
+| `member` | Basic access to view org resources and create/edit issues and documents |
 
-### Issue Permissions
+The exact permission lists live in `BUILTIN_ROLE_PERMISSIONS` in `convex/_shared/permissions.ts`.
 
-| Permission                | Owner | Admin | Member | Notes                              |
-| ------------------------- | ----- | ----- | ------ | ---------------------------------- |
-| `issue:create`            | ✅    | ✅    | ✅     | Default permission for all members |
-| `issue:view`              | ✅    | ✅    | ✅     | Default permission for all members |
-| `issue:edit`              | ✅    | ✅    | ❌     | Edit issue details                 |
-| `issue:delete`            | ✅    | ✅    | ❌     | Delete issues                      |
-| `issue:assign`            | ✅    | ✅    | ❌     | Assign users to issues             |
-| `issue:assignment:update` | ✅    | ✅    | ❌     | Update assignment states           |
-| `issue:relation:update`   | ✅    | ✅    | ❌     | Change team/project assignments    |
-| `issue:state:update`      | ✅    | ✅    | ❌     | Update issue state                 |
-| `issue:priority:update`   | ✅    | ✅    | ❌     | Update issue priority              |
+## Scoped System Roles
 
-### Team Permissions
+Vector also creates scoped system roles for team and project membership:
 
-| Permission           | Owner | Admin | Member | Notes                    |
-| -------------------- | ----- | ----- | ------ | ------------------------ |
-| `team:create`        | ✅    | ✅    | ❌     | Create new teams         |
-| `team:view`          | ✅    | ✅    | ❌     | View team details        |
-| `team:edit`          | ✅    | ✅    | ❌     | Edit team details        |
-| `team:delete`        | ✅    | ✅    | ❌     | Delete teams             |
-| `team:member:add`    | ✅    | ✅    | ❌     | Add team members         |
-| `team:member:remove` | ✅    | ✅    | ❌     | Remove team members      |
-| `team:member:update` | ✅    | ✅    | ❌     | Update team member roles |
-| `team:lead:update`   | ✅    | ✅    | ❌     | Update team lead         |
+- `team:lead`
+- `team:member`
+- `project:lead`
+- `project:member`
 
-### Project Permissions
+These roles are managed through `convex/roles/index.ts` and allow permissions to vary per team or project without forking the entire organization role model.
 
-| Permission              | Owner | Admin | Member | Notes                       |
-| ----------------------- | ----- | ----- | ------ | --------------------------- |
-| `project:create`        | ✅    | ✅    | ❌     | Create new projects         |
-| `project:view`          | ✅    | ✅    | ❌     | View project details        |
-| `project:edit`          | ✅    | ✅    | ❌     | Edit project details        |
-| `project:delete`        | ✅    | ✅    | ❌     | Delete projects             |
-| `project:member:add`    | ✅    | ✅    | ❌     | Add project members         |
-| `project:member:remove` | ✅    | ✅    | ❌     | Remove project members      |
-| `project:member:update` | ✅    | ✅    | ❌     | Update project member roles |
-| `project:lead:update`   | ✅    | ✅    | ❌     | Update project lead         |
+## Frontend Usage
 
-### Wildcard Permissions
+For UI checks, use:
 
-| Permission          | Owner | Admin | Member | Notes                                                      |
-| ------------------- | ----- | ----- | ------ | ---------------------------------------------------------- |
-| `*`                 | ✅    | ✅    | ❌     | All permissions                                            |
-| `issue:*`           | ✅    | ✅    | ❌     | All issue permissions                                      |
-| `team:*`            | ✅    | ✅    | ❌     | All team permissions                                       |
-| `project:*`         | ✅    | ✅    | ❌     | All project permissions                                    |
-| `project:view`      | ✅    | ✅    | ✅     | View accessible projects                                   |
-| `project:create`    | ✅    | ✅    | ❌     | Create new projects                                        |
-| `project:update`    | ✅    | ✅    | ❌     | Update project details                                     |
-| `project:delete`    | ✅    | ✅    | ❌     | Delete projects                                            |
-| `team:view`         | ✅    | ✅    | ✅     | View accessible teams                                      |
-| `team:create`       | ✅    | ✅    | ❌     | Create new teams                                           |
-| `team:update`       | ✅    | ✅    | ❌     | Update team details                                        |
-| `team:delete`       | ✅    | ✅    | ❌     | Delete teams                                               |
-| `issue:view`        | ✅    | ✅    | ✅     | View accessible issues                                     |
-| `issue:create`      | ✅    | ✅    | ✅     | Create new issues                                          |
-| `issue:update`      | ✅    | ✅    | ✅\*   | Update issues (_limited to own/assigned by policy engine_) |
-| `issue:delete`      | ✅    | ✅    | ❌     | Delete issues                                              |
-| `assignment:manage` | ✅    | ✅    | ❌     | Manage issue assignments                                   |
+- `usePermissionCheck()` for simple boolean checks
+- `useScopedPermission()` for scoped checks
+- `PermissionAware`, `PermissionAwareButton`, `PermissionAwareField`, and related wrappers for interactive UI
 
----
+See [UI-Level Permission Handling Guide](../development/07-permission-handling.md) for examples.
 
-## Permission Policy Engine
+## Backend Usage
 
-The centralized policy engine (`src/auth/policy-engine.ts`) handles all permission checks with the following fallback logic:
+For server-side enforcement:
 
-1.  **Platform Admin**: Always allowed.
-2.  **Lead Status**: Project/team leads get automatic permissions for their resources. Project and team creators automatically become members with "lead" role.
-3.  **Owner Wildcard**: Organization owners have all permissions.
-4.  **Built-in Role**: Checks static permission sets (`owner`, `admin`, `member`).
-5.  **Custom Roles**: Checks permissions granted by assigned custom roles.
+- Use backend access helpers in `convex/access.ts`
+- Use role and permission queries in `convex/permissions/queries.ts`
+- Never rely only on client-side permission checks for security
+
+## Adding a New Permission
+
+1. Add the permission constant to `convex/_shared/permissions.ts`.
+2. Add it to the appropriate built-in or system role sets if needed.
+3. Enforce it in backend code.
+4. Expose it to the frontend through existing permission queries and wrappers.
+5. Update the documentation.
 
 ### Frontend Usage
 
@@ -229,7 +195,7 @@ const canCreateProject = await hasScopedPermission(
   ctx,
   { organizationId: org._id },
   userId,
-  PERMISSIONS.PROJECT_CREATE
+  PERMISSIONS.PROJECT_CREATE,
 );
 
 // Team-scoped permission
@@ -237,7 +203,7 @@ const canEditTeam = await hasScopedPermission(
   ctx,
   { organizationId: org._id, teamId: team._id },
   userId,
-  PERMISSIONS.TEAM_EDIT
+  PERMISSIONS.TEAM_EDIT,
 );
 ```
 

@@ -1,6 +1,6 @@
 # Design Patterns
 
-This document provides concrete examples and patterns for building user interfaces in AIKP.
+This document provides concrete examples and patterns for building user interfaces in Vector.
 
 ## Accessibility
 
@@ -18,21 +18,15 @@ This document provides concrete examples and patterns for building user interfac
 
 ## View Page Layout Pattern
 
-Entity list pages should follow the pattern established by the **Issues Page** (`src/app/[orgId]/(main)/issues/page.tsx`).
+Entity list pages should follow the pattern established by the **Issues Page** (`src/app/[orgSlug]/(main)/issues/page.tsx`).
 
 ```tsx
 export default function EntityListPage() {
-  // 1. Client component with state and data fetching hooks
+  // 1. Client component with state and Convex hooks
   const [activeFilter, setActiveFilter] = useState('all');
-  const { data, isLoading } = trpc.entity.list.useQuery({
+  const data = useQuery(api.entity.queries.list, {
+    orgSlug,
     filter: activeFilter,
-  });
-
-  // 2. Mutation handlers with targeted cache invalidation
-  const deleteMutation = trpc.entity.delete.useMutation({
-    onSuccess: () => {
-      utils.entity.list.invalidate();
-    },
   });
 
   return (
@@ -54,4 +48,4 @@ export default function EntityListPage() {
 }
 ```
 
-This pattern ensures consistency across all list views and separates concerns between data fetching, state management, and rendering.
+This pattern keeps list views consistent and separates concerns between data fetching, state management, and rendering.

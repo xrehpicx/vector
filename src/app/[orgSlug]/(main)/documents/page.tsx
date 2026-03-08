@@ -11,15 +11,8 @@ import { ScopedPermissionGate } from '@/hooks/use-permissions';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { formatDateHuman } from '@/lib/date';
 import Link from 'next/link';
-import {
-  FileText,
-  Trash2,
-  Plus,
-  ArrowLeft,
-  Pencil,
-  MoreHorizontal,
-  GripVertical,
-} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { FileText, Trash2, Plus, Pencil, MoreHorizontal } from 'lucide-react';
 import { PageSkeleton } from '@/components/ui/table-skeleton';
 import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
@@ -262,7 +255,9 @@ function RenameFolderDialog({
 function DraggableDocRow({
   doc,
   orgSlug,
+  folders,
   onDelete,
+  onMoveToFolder,
 }: {
   doc: {
     _id: string;
@@ -275,7 +270,14 @@ function DraggableDocRow({
     _creationTime: number;
   };
   orgSlug: string;
+  folders: Array<{
+    _id: string;
+    name: string;
+    color?: string;
+    documentCount: number;
+  }>;
   onDelete: (id: string) => void;
+  onMoveToFolder: (docId: string, folderId: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `doc:${doc._id}`,
@@ -285,18 +287,13 @@ function DraggableDocRow({
   return (
     <div
       ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       className={cn(
-        'hover:bg-muted/50 flex items-center gap-2 px-3 py-2 transition-colors',
+        'hover:bg-muted/50 flex cursor-grab touch-none items-center gap-2 px-3 py-2 transition-colors active:cursor-grabbing',
         isDragging && 'opacity-30',
       )}
     >
-      <button
-        {...listeners}
-        {...attributes}
-        className='text-muted-foreground/50 hover:text-muted-foreground flex-shrink-0 cursor-grab touch-none active:cursor-grabbing'
-      >
-        <GripVertical className='size-3.5' />
-      </button>
       <FileText className='text-muted-foreground size-4 flex-shrink-0' />
       <Link
         href={`/${orgSlug}/documents/${doc._id}`}
@@ -323,14 +320,61 @@ function DraggableDocRow({
           </span>
         </div>
       </Link>
-      <Button
-        variant='ghost'
-        size='sm'
-        className='text-muted-foreground hover:text-destructive h-7 w-7 flex-shrink-0 p-0'
-        onClick={() => onDelete(doc._id)}
+      <div
+        onClick={e => e.stopPropagation()}
+        onPointerDown={e => e.stopPropagation()}
       >
-        <Trash2 className='size-3' />
-      </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='text-muted-foreground h-7 w-7 flex-shrink-0 p-0'
+            >
+              <MoreHorizontal className='size-3.5' />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end' className='w-48'>
+            {folders.length > 0 && (
+              <>
+                <div className='text-muted-foreground px-2 py-1 text-xs font-medium'>
+                  Move to folder
+                </div>
+                {folders.map(folder => (
+                  <DropdownMenuItem
+                    key={folder._id}
+                    onClick={() => onMoveToFolder(doc._id, folder._id)}
+                    className='gap-2'
+                  >
+                    <span
+                      className='inline-block size-2.5 rounded-sm'
+                      style={{ backgroundColor: folder.color || '#6366f1' }}
+                    />
+                    <span className='truncate'>{folder.name}</span>
+                  </DropdownMenuItem>
+                ))}
+                {doc.folderId && (
+                  <DropdownMenuItem
+                    onClick={() => onMoveToFolder(doc._id, null)}
+                    className='gap-2'
+                  >
+                    <span className='bg-muted inline-block size-2.5 rounded-sm' />
+                    <span>Remove from folder</span>
+                  </DropdownMenuItem>
+                )}
+                <div className='bg-border my-1 h-px' />
+              </>
+            )}
+            <DropdownMenuItem
+              variant='destructive'
+              onClick={() => onDelete(doc._id)}
+            >
+              <Trash2 className='size-4' />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
@@ -362,8 +406,12 @@ function DroppableFolderBook({
 
   return (
     <div ref={setNodeRef} className='group relative'>
-      <button onClick={onOpen} className='text-left'>
-        <PerspectiveBook size='sm' className='text-white'>
+      <button
+        onClick={onOpen}
+        className='text-left'
+        data-drag-over={isOver || undefined}
+      >
+        <PerspectiveBook size='sm' className='text-white' open={isOver}>
           <div
             className={cn(
               'absolute inset-0 rounded-[inherit] transition-all',
@@ -421,7 +469,7 @@ interface DocumentsPageProps {
 }
 
 function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
-  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const router = useRouter();
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [editingFolder, setEditingFolder] = useState<{
     _id: string;
@@ -442,9 +490,6 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
   });
   const documents = useQuery(api.documents.queries.list, {
     orgSlug,
-    ...(activeFolderId
-      ? { folderId: activeFolderId as Id<'documentFolders'> }
-      : {}),
   });
   const removeMutation = useMutation(api.documents.mutations.remove);
   const updateDocMutation = useMutation(api.documents.mutations.update);
@@ -464,10 +509,6 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
       />
     );
   }
-
-  const activeFolder = activeFolderId
-    ? folders.find(f => f._id === activeFolderId)
-    : null;
 
   const handleDeleteDoc = async (documentId: string) => {
     const confirmed = await confirmDelete({
@@ -495,7 +536,6 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
       await removeFolderMutation({
         folderId: folderId as Id<'documentFolders'>,
       });
-      if (activeFolderId === folderId) setActiveFolderId(null);
       toast.success('Folder deleted');
     } catch {
       toast.error('Failed to delete folder');
@@ -533,10 +573,8 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
     ? documents.find(d => d._id === draggedDocId)
     : null;
 
-  // Filter unfiled documents when viewing all (no active folder)
-  const displayDocs = activeFolderId
-    ? documents
-    : documents.filter(d => !d.folderId);
+  // Show only unfiled documents on the root page
+  const displayDocs = documents.filter(d => !d.folderId);
 
   return (
     <DndContext
@@ -564,57 +602,29 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
           <div className='flex items-center justify-between p-1'>
             <div className='flex items-center gap-1'>
               <MobileNavTrigger />
-              {activeFolder ? (
-                <>
-                  <Button
-                    variant='ghost'
-                    size='sm'
-                    className='h-6 gap-1 px-2 text-xs'
-                    onClick={() => setActiveFolderId(null)}
-                  >
-                    <ArrowLeft className='size-3' />
-                    Back
-                  </Button>
-                  <span
-                    className='inline-block size-2 rounded-full'
-                    style={{
-                      backgroundColor: activeFolder.color || '#6b7280',
-                    }}
-                  />
-                  <span className='text-sm font-medium'>
-                    {activeFolder.name}
-                  </span>
-                  <span className='text-muted-foreground text-xs'>
-                    {documents.length}
-                  </span>
-                </>
-              ) : (
-                <Button
-                  variant='secondary'
-                  size='sm'
-                  className='bg-secondary h-6 gap-2 rounded-xs px-3 text-xs font-normal'
-                >
-                  <span>All documents</span>
-                </Button>
-              )}
+              <Button
+                variant='secondary'
+                size='sm'
+                className='bg-secondary h-6 gap-2 rounded-xs px-3 text-xs font-normal'
+              >
+                <span>All documents</span>
+              </Button>
             </div>
             <div className='flex items-center gap-1'>
-              {!activeFolder && (
-                <ScopedPermissionGate
-                  scope={{ orgSlug }}
-                  permission={PERMISSIONS.DOCUMENT_CREATE}
+              <ScopedPermissionGate
+                scope={{ orgSlug }}
+                permission={PERMISSIONS.DOCUMENT_CREATE}
+              >
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setShowCreateFolder(true)}
+                  className='h-6 gap-1 text-xs'
                 >
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={() => setShowCreateFolder(true)}
-                    className='h-6 gap-1 text-xs'
-                  >
-                    <Plus className='size-3' />
-                    Folder
-                  </Button>
-                </ScopedPermissionGate>
-              )}
+                  <Plus className='size-3' />
+                  Folder
+                </Button>
+              </ScopedPermissionGate>
               <ScopedPermissionGate
                 scope={{ orgSlug }}
                 permission={PERMISSIONS.DOCUMENT_CREATE}
@@ -623,24 +633,23 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
                   orgSlug={orgSlug}
                   onDocumentCreated={() => {}}
                   className='h-6'
-                  defaultStates={
-                    activeFolderId ? { folderId: activeFolderId } : undefined
-                  }
                 />
               </ScopedPermissionGate>
             </div>
           </div>
         </div>
 
-        {/* Folders grid (only when not inside a folder) */}
-        {!activeFolder && folders.length > 0 && (
+        {/* Folders grid */}
+        {folders.length > 0 && (
           <div className='border-b px-3 py-4 sm:px-4'>
             <div className='flex flex-wrap gap-4'>
               {folders.map(folder => (
                 <DroppableFolderBook
                   key={folder._id}
                   folder={folder}
-                  onOpen={() => setActiveFolderId(folder._id)}
+                  onOpen={() =>
+                    router.push(`/${orgSlug}/documents/folders/${folder._id}`)
+                  }
                   onEdit={() =>
                     setEditingFolder({
                       _id: folder._id,
@@ -657,7 +666,7 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
         )}
 
         {/* Documents list */}
-        {displayDocs.length === 0 && !activeFolder && folders.length === 0 ? (
+        {displayDocs.length === 0 && folders.length === 0 ? (
           <div className='flex flex-col items-center justify-center py-16 text-center'>
             <FileText className='text-muted-foreground mb-4 size-12' />
             <h3 className='text-lg font-medium'>No documents yet</h3>
@@ -667,9 +676,7 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
           </div>
         ) : displayDocs.length === 0 ? (
           <div className='text-muted-foreground px-3 py-8 text-center text-sm'>
-            {activeFolder
-              ? 'No documents in this folder.'
-              : 'No unfiled documents.'}
+            No unfiled documents.
           </div>
         ) : (
           <div className='divide-y'>
@@ -678,7 +685,21 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
                 key={doc._id}
                 doc={doc}
                 orgSlug={orgSlug}
+                folders={folders}
                 onDelete={handleDeleteDoc}
+                onMoveToFolder={(docId, folderId) => {
+                  void updateDocMutation({
+                    documentId: docId as Id<'documents'>,
+                    data: {
+                      folderId: folderId
+                        ? (folderId as Id<'documentFolders'>)
+                        : null,
+                    },
+                  });
+                  toast.success(
+                    folderId ? 'Moved to folder' : 'Removed from folder',
+                  );
+                }}
               />
             ))}
           </div>

@@ -125,6 +125,7 @@ Creation dialogs already own local form state. That means:
 - submit buttons may show `Creating...` and disable while the request is in flight
 
 Do not add page-level spinners inside the dialog for routine submission.
+If a dialog needs an indeterminate spinner for a blocking async step, use `BarsSpinner` from `src/components/bars-spinner.tsx` as the default spinner component.
 
 ## Tone and Copy
 
@@ -133,6 +134,9 @@ Keep dialog copy short:
 - placeholders are verbs or direct object labels
 - button labels are action-first: `Create team`, `Create project`
 - secondary text is rare and terse
+
+If a dialog has a centered line of small supporting copy that calls attention to a useful capability or reassuring system behavior, prefer `GradientWaveText` from `src/components/gradient-wave-text.tsx` over plain muted text.
+Keep it short, centered, and clearly secondary to the form.
 
 ## Dialog Checklist
 

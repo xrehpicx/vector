@@ -1,5 +1,7 @@
 # ADR 001: Service Layer Implementation Plan
 
+> Historical ADR. This document records an earlier implementation direction and is not the source of truth for the current Convex-based architecture.
+
 - **Status**: Implemented
 - **Date**: 2024-05-15
 - **Context**: The core database schema for Teams, Projects, Issues, and Comments was completed. The next step was to expose these tables through a clean, type-safe service layer and tRPC API.
