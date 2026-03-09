@@ -10,10 +10,13 @@ import {
   subscribeCurrentBrowserToPush,
   unsubscribeCurrentBrowserPush,
 } from '@/lib/notifications';
-import { useOptimisticArray } from '@/hooks/use-optimistic';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import {
+  updateNotificationPreference,
+  updateQuery,
+} from '@/lib/optimistic-updates';
 
 type Preferences = NonNullable<
   ReturnType<typeof useQuery<typeof api.notifications.queries.getPreferences>>
@@ -51,16 +54,23 @@ export function NotificationPreferencesPage() {
   );
   const updatePreferences = useMutation(
     api.notifications.mutations.updatePreferences,
-  );
+  ).withOptimisticUpdate((store, args) => {
+    updateQuery(store, api.notifications.queries.getPreferences, {}, current =>
+      updateNotificationPreference(current, args.category, preference => ({
+        ...preference,
+        inAppEnabled: args.inAppEnabled,
+        emailEnabled: args.emailEnabled,
+        pushEnabled: args.pushEnabled,
+      })),
+    );
+  });
   const upsertPushSubscription = useMutation(
     api.notifications.mutations.upsertPushSubscription,
   );
   const removePushSubscription = useMutation(
     api.notifications.mutations.removePushSubscription,
   );
-  const [displayPreferences, setOptimisticPreferences] = useOptimisticArray(
-    preferences ?? [],
-  );
+  const displayPreferences = preferences ?? [];
   const [permission, setPermission] = useState<
     NotificationPermission | 'unsupported'
   >('unsupported');
@@ -92,8 +102,6 @@ export function NotificationPreferencesPage() {
           }
         : preference,
     );
-
-    setOptimisticPreferences(nextPreferences);
 
     const next = nextPreferences.find(
       preference => preference.category === category,

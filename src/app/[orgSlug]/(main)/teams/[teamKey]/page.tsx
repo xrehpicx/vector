@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useDeferredValue } from 'react';
 import { useQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
@@ -17,18 +17,26 @@ import {
   Target,
   FolderOpen,
   FileText,
+  Columns3,
+  LayoutList,
+  Search,
+  Loader2,
+  Clock,
+  UsersRound,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IconPicker } from '@/components/ui/icon-picker';
-import { notFound } from 'next/navigation';
+import { notFound, useParams, useRouter } from 'next/navigation';
 import { formatDateHuman } from '@/lib/date';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { IssuesTable } from '@/components/issues/issues-table';
+import { IssuesKanban } from '@/components/issues/issues-kanban';
 import { ProjectsTable } from '@/components/projects/projects-table';
 import { TeamActivityFeed } from '@/components/activity/team-activity-feed';
+import { KanbanSkeleton } from '@/components/ui/table-skeleton';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -50,6 +58,12 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@/components/ui/tooltip';
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -65,17 +79,24 @@ import {
 import { toast } from 'sonner';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
-import { useParams } from 'next/navigation';
 import {
   VisibilitySelector,
   type VisibilityState,
 } from '@/components/ui/visibility-selector';
-import { useOptimisticValue } from '@/hooks/use-optimistic';
 
 import { Id } from '@/convex/_generated/dataModel';
 import { FunctionReturnType } from 'convex/server';
 import { useConfirm } from '@/hooks/use-confirm';
 import { MobileNavTrigger } from '../../layout';
+import {
+  buildOptimisticIssueRows,
+  removeProjectRow,
+  replaceIssueRows,
+  updateIssueRows,
+  updateProjectRows,
+  updateQuery,
+  updateTeamRows,
+} from '@/lib/optimistic-updates';
 
 // Add Member Dialog
 function AddMemberDialog({
@@ -310,6 +331,7 @@ const DEFAULT_COLORS = [
 
 export default function TeamViewPage() {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = params.orgSlug as string;
   const teamKey = params.teamKey as string;
 
@@ -319,10 +341,15 @@ export default function TeamViewPage() {
   const [nameValue, setNameValue] = useState('');
   const [descriptionValue, setDescriptionValue] = useState('');
   const [keyValue, setKeyValue] = useState('');
-  const [iconValue, setIconValue] = useState<string | null>(null);
-  const [colorValue, setColorValue] = useState<string | null>(null);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('members');
+  const [issueViewMode, setIssueViewMode] = useState<'table' | 'kanban'>(
+    'kanban',
+  );
+  const [issueSearchText, setIssueSearchText] = useState('');
+  const deferredIssueSearch = useDeferredValue(issueSearchText);
+  const [memberSearchText, setMemberSearchText] = useState('');
+  const deferredMemberSearch = useDeferredValue(memberSearchText);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUpdatingIssues, setIsUpdatingIssues] = useState(false);
   const [isUpdatingProjects, setIsUpdatingProjects] = useState(false);
@@ -341,22 +368,39 @@ export default function TeamViewPage() {
     teamKey,
   });
   const team = teamQuery.data;
-  const [displayName, setOptimisticName] = useOptimisticValue(team?.name ?? '');
-  const [displayDescription, setOptimisticDescription] = useOptimisticValue(
-    team?.description ?? '',
-  );
+  const teamQueryArgs = { orgSlug, teamKey };
+  const displayName = team?.name ?? '';
+  const displayDescription = team?.description ?? '';
+  const iconValue = team?.icon ?? null;
+  const colorValue = team?.color ?? null;
 
   // Fetch team members
   const teamMembersQuery = useQuery(
     api.teams.queries.listMembers,
     team?._id ? { teamId: team._id } : 'skip',
   );
-  const teamMembers = teamMembersQuery.data ?? [];
+  const teamMembers = teamMembersQuery.data;
+  const filteredMembers = useMemo(() => {
+    const memberRows = teamMembers ?? [];
+    const q = deferredMemberSearch.trim().toLowerCase();
+    if (!q) return memberRows;
+    return memberRows.filter(m => {
+      const name = m.user?.name?.toLowerCase() ?? '';
+      const email = m.user?.email?.toLowerCase() ?? '';
+      return name.includes(q) || email.includes(q);
+    });
+  }, [teamMembers, deferredMemberSearch]);
 
   // Fetch team issues
   const teamIssuesQuery = useQuery(
     api.issues.queries.listIssues,
-    team?.key ? { orgSlug, teamId: team.key } : 'skip',
+    team?._id
+      ? {
+          orgSlug,
+          teamId: team._id,
+          searchQuery: deferredIssueSearch || undefined,
+        }
+      : 'skip',
   );
   const teamIssuesData = teamIssuesQuery.data;
 
@@ -366,6 +410,16 @@ export default function TeamViewPage() {
     team?.key ? { orgSlug, teamId: team.key } : 'skip',
   );
   const teamProjects = teamProjectsQuery.data ?? [];
+  const teamIssuesQueryArgs = team?._id
+    ? {
+        orgSlug,
+        teamId: team._id,
+        searchQuery: deferredIssueSearch || undefined,
+      }
+    : null;
+  const teamProjectsQueryArgs = team?.key
+    ? { orgSlug, teamId: team.key }
+    : null;
 
   // Fetch supporting data for tables
   const statesQuery = useQuery(api.organizations.queries.listIssueStates, {
@@ -414,31 +468,268 @@ export default function TeamViewPage() {
     PERMISSIONS.TEAM_EDIT,
     permissionScope,
   ); // Mutations with toast error handling - ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
-  const updateTeamMutation = useMutation(api.teams.mutations.update);
+  const { isAllowed: canDeleteTeam } = usePermissionCheck(
+    orgSlug,
+    PERMISSIONS.TEAM_DELETE,
+    permissionScope,
+  );
+  const updateTeamMutation = useMutation(
+    api.teams.mutations.update,
+  ).withOptimisticUpdate((store, args) => {
+    updateQuery(store, api.teams.queries.getByKey, teamQueryArgs, current => ({
+      ...current,
+      ...(args.data.name !== undefined ? { name: args.data.name } : {}),
+      ...(args.data.description !== undefined
+        ? { description: args.data.description }
+        : {}),
+      ...(args.data.icon !== undefined ? { icon: args.data.icon } : {}),
+      ...(args.data.color !== undefined ? { color: args.data.color } : {}),
+      ...(args.data.leadId !== undefined ? { leadId: args.data.leadId } : {}),
+    }));
+    updateQuery(
+      store,
+      api.organizations.queries.listTeams,
+      { orgSlug },
+      current =>
+        updateTeamRows(current, String(args.teamId), row => ({
+          ...row,
+          ...(args.data.name !== undefined ? { name: args.data.name } : {}),
+          ...(args.data.description !== undefined
+            ? { description: args.data.description }
+            : {}),
+          ...(args.data.icon !== undefined ? { icon: args.data.icon } : {}),
+          ...(args.data.color !== undefined ? { color: args.data.color } : {}),
+          ...(args.data.leadId !== undefined
+            ? { leadId: args.data.leadId }
+            : {}),
+        })),
+    );
+  });
+  const deleteTeamMutation = useMutation(api.teams.mutations.deleteTeam);
   const deleteMutation = useMutation(api.issues.mutations.deleteIssue);
   const changePriorityMutation = useMutation(
     api.issues.mutations.changePriority,
-  );
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamIssuesQueryArgs) return;
+    const nextPriority = priorities.find(
+      priority => String(priority._id) === String(args.priorityId),
+    );
+    updateQuery(
+      store,
+      api.issues.queries.listIssues,
+      teamIssuesQueryArgs,
+      current =>
+        updateIssueRows(current, String(args.issueId), row => ({
+          ...row,
+          priorityId: nextPriority?._id,
+          priorityName: nextPriority?.name ?? undefined,
+          priorityIcon: nextPriority?.icon ?? undefined,
+          priorityColor: nextPriority?.color ?? undefined,
+        })),
+    );
+  });
   const updateAssigneesMutation = useMutation(
     api.issues.mutations.updateAssignees,
-  );
-  const changeTeamMutation = useMutation(api.issues.mutations.changeTeam);
-  const changeProjectMutation = useMutation(api.issues.mutations.changeProject);
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamIssuesQueryArgs) return;
+    updateQuery(
+      store,
+      api.issues.queries.listIssues,
+      teamIssuesQueryArgs,
+      current => {
+        const existingRows = current.issues.filter(
+          row => String(row.id) === String(args.issueId),
+        );
+        const existingStateRow = existingRows.find(row => row.stateId);
+        const fallbackState = existingStateRow
+          ? {
+              _id: existingStateRow.stateId,
+              name: existingStateRow.stateName,
+              icon: existingStateRow.stateIcon,
+              color: existingStateRow.stateColor,
+              type: existingStateRow.stateType,
+            }
+          : states[0]
+            ? {
+                _id: states[0]._id,
+                name: states[0].name,
+                icon: states[0].icon,
+                color: states[0].color,
+                type: states[0].type,
+              }
+            : null;
+        const membersForOrg =
+          store.getQuery(api.organizations.queries.listMembers, { orgSlug }) ??
+          undefined;
+        const nextRows = buildOptimisticIssueRows(
+          existingRows,
+          args.issueId,
+          args.assigneeIds,
+          membersForOrg,
+          fallbackState,
+        );
+        return replaceIssueRows(current, String(args.issueId), nextRows);
+      },
+    );
+  });
+  const changeTeamMutation = useMutation(
+    api.issues.mutations.changeTeam,
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamIssuesQueryArgs || !team) return;
+    updateQuery(
+      store,
+      api.issues.queries.listIssues,
+      teamIssuesQueryArgs,
+      current => {
+        if (String(args.teamId) !== String(team._id)) {
+          return {
+            ...current,
+            issues: current.issues.filter(
+              row => String(row.id) !== String(args.issueId),
+            ),
+            total: Math.max(
+              0,
+              current.total -
+                (current.issues.some(
+                  row => String(row.id) === String(args.issueId),
+                )
+                  ? 1
+                  : 0),
+            ),
+          };
+        }
+        return current;
+      },
+    );
+  });
+  const changeProjectMutation = useMutation(
+    api.issues.mutations.changeProject,
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamIssuesQueryArgs) return;
+    const nextProject =
+      projects.find(
+        project => String(project._id) === String(args.projectId),
+      ) ?? null;
+    updateQuery(
+      store,
+      api.issues.queries.listIssues,
+      teamIssuesQueryArgs,
+      current =>
+        updateIssueRows(current, String(args.issueId), row => ({
+          ...row,
+          projectId: args.projectId ?? undefined,
+          projectKey: nextProject?.key,
+        })),
+    );
+  });
   const changeAssignmentStateMutation = useMutation(
     api.issues.mutations.changeAssignmentState,
-  );
-  const changeStatusMutation = useMutation(api.projects.mutations.changeStatus);
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamIssuesQueryArgs) return;
+    const nextState = states.find(
+      state => String(state._id) === String(args.stateId),
+    );
+    updateQuery(
+      store,
+      api.issues.queries.listIssues,
+      teamIssuesQueryArgs,
+      current => ({
+        ...current,
+        issues: current.issues.map(row =>
+          String(row.assignmentId) === String(args.assignmentId)
+            ? {
+                ...row,
+                stateId: nextState?._id,
+                stateName: nextState?.name ?? undefined,
+                stateIcon: nextState?.icon ?? undefined,
+                stateColor: nextState?.color ?? undefined,
+                stateType: nextState?.type ?? undefined,
+              }
+            : row,
+        ) as typeof current.issues,
+      }),
+    );
+  });
+  const changeStatusMutation = useMutation(
+    api.projects.mutations.changeStatus,
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamProjectsQueryArgs) return;
+    const nextStatus =
+      statuses.find(status => String(status._id) === String(args.statusId)) ??
+      null;
+    updateQuery(
+      store,
+      api.projects.queries.list,
+      teamProjectsQueryArgs,
+      current =>
+        updateProjectRows(current, String(args.projectId), row => ({
+          ...row,
+          statusId: args.statusId ?? undefined,
+          status: nextStatus,
+        })),
+    );
+  });
   const changeProjectTeamMutation = useMutation(
     api.projects.mutations.changeTeam,
-  );
-  const changeLeadMutation = useMutation(api.projects.mutations.changeLead);
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamProjectsQueryArgs || !team) return;
+    updateQuery(
+      store,
+      api.projects.queries.list,
+      teamProjectsQueryArgs,
+      current => {
+        if (String(args.teamId) !== String(team._id)) {
+          return removeProjectRow(current, String(args.projectId));
+        }
+        return updateProjectRows(current, String(args.projectId), row => ({
+          ...row,
+          teamId: args.teamId ?? undefined,
+        }));
+      },
+    );
+  });
+  const changeLeadMutation = useMutation(
+    api.projects.mutations.changeLead,
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamProjectsQueryArgs) return;
+    const projectRow = teamProjects.find(
+      project => String(project._id) === String(args.projectId),
+    );
+    updateQuery(
+      store,
+      api.projects.queries.list,
+      teamProjectsQueryArgs,
+      current =>
+        updateProjectRows(current, String(args.projectId), row => ({
+          ...row,
+          leadId: args.leadId ?? undefined,
+        })),
+    );
+    if (projectRow) {
+      updateQuery(
+        store,
+        api.projects.queries.getByKey,
+        { orgSlug, projectKey: projectRow.key },
+        current => ({
+          ...current,
+          leadId: args.leadId ?? undefined,
+          ...(args.leadId === null ? { lead: null } : {}),
+        }),
+      );
+    }
+  });
   const deleteProjectMutation = useMutation(
     api.projects.mutations.deleteProject,
   );
   const removeMemberMutation = useMutation(api.teams.mutations.removeMember);
   const changeVisibilityMutation = useMutation(
     api.teams.mutations.changeVisibility,
-  );
+  ).withOptimisticUpdate((store, args) => {
+    updateQuery(store, api.teams.queries.getByKey, teamQueryArgs, current => ({
+      ...current,
+      visibility: args.visibility,
+    }));
+  });
 
   // Check if any queries are still loading
   const isLoading =
@@ -550,8 +841,6 @@ export default function TeamViewPage() {
     setNameValue(team.name);
     setDescriptionValue(team.description || '');
     setKeyValue(team.key);
-    setIconValue(team.icon || null);
-    setColorValue(team.color || null);
   }
 
   if (!user) return null;
@@ -560,7 +849,6 @@ export default function TeamViewPage() {
     if (!nameValue.trim() || !team) return;
     const nextName = nameValue.trim();
     setIsUpdating(true);
-    setOptimisticName(nextName);
     setNameValue(nextName);
     setEditingName(false);
     await updateTeamMutation({
@@ -574,7 +862,6 @@ export default function TeamViewPage() {
     if (!team) return;
     const nextDescription = descriptionValue.trim();
     setIsUpdating(true);
-    setOptimisticDescription(nextDescription);
     setDescriptionValue(nextDescription);
     setEditingDescription(false);
     await updateTeamMutation({
@@ -597,7 +884,6 @@ export default function TeamViewPage() {
 
   const handleIconChange = async (iconName: string | null) => {
     if (!team) return;
-    setIconValue(iconName);
     setIsUpdating(true);
     await updateTeamMutation({
       teamId: team._id,
@@ -608,7 +894,6 @@ export default function TeamViewPage() {
 
   const handleColorChange = async (color: string) => {
     if (!team) return;
-    setColorValue(color);
     setIsUpdating(true);
     await updateTeamMutation({
       teamId: team._id,
@@ -634,6 +919,27 @@ export default function TeamViewPage() {
       visibility,
     });
     setIsUpdating(false);
+  };
+
+  const handleTeamDelete = async () => {
+    if (!team || !canDeleteTeam) return;
+    const ok = await confirm({
+      title: 'Delete team',
+      description:
+        'This will permanently delete the team and cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    setIsUpdating(true);
+    try {
+      await deleteTeamMutation({
+        teamId: team._id,
+      });
+      router.push(`/${orgSlug}/teams`);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   // Issue handlers
@@ -838,506 +1144,682 @@ export default function TeamViewPage() {
                   {team?.key}
                 </Badge>
               )}
+              <div className='bg-muted-foreground/20 h-4 w-px' />
+              <PermissionAware
+                orgSlug={orgSlug}
+                permission={PERMISSIONS.TEAM_DELETE}
+                scope={permissionScope}
+                fallbackMessage="You don't have permission to delete this team"
+              >
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='text-destructive hover:bg-destructive/10 hover:text-destructive h-6 gap-1 px-2'
+                  disabled={!canDeleteTeam || isUpdating}
+                  onClick={() => void handleTeamDelete()}
+                >
+                  <Trash2 className='size-3.5' />
+                  <span className='hidden sm:inline'>Delete</span>
+                </Button>
+              </PermissionAware>
             </div>
           </div>
 
           {/* Main Content */}
-          <div className='mx-auto max-w-5xl px-3 py-3 sm:px-4 sm:py-4'>
+          <div className='py-3 sm:py-4'>
             {/* Team Header */}
-            <div className='mb-2 max-w-4xl space-y-2'>
-              <div className='text-muted-foreground flex items-center gap-2 text-xs'>
-                <span className='font-mono'>{team?.key}</span>
-                <span>•</span>
-                <span>
-                  Created {formatDateHuman(new Date(team?._creationTime || 0))}
-                </span>
-              </div>
-
-              {/* Name */}
-              {editingName ? (
-                <div className='flex items-center gap-2'>
-                  {/* Icon that stays visible during editing */}
-                  {canEdit ? (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button className='flex items-center gap-0 transition-opacity hover:opacity-80'>
-                          {iconValue ? (
-                            (() => {
-                              const IconComp = getDynamicIcon(iconValue);
-                              if (!IconComp)
+            <div className='px-3 sm:px-4'>
+              <div className='mb-2 max-w-4xl space-y-2'>
+                {/* Name */}
+                {editingName ? (
+                  <div className='flex items-center gap-2'>
+                    {/* Icon that stays visible during editing */}
+                    {canEdit ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className='flex items-center gap-0 transition-opacity hover:opacity-80'>
+                            {iconValue ? (
+                              (() => {
+                                const IconComp = getDynamicIcon(iconValue);
+                                if (!IconComp)
+                                  return (
+                                    <Users className='text-muted-foreground size-6' />
+                                  );
                                 return (
-                                  <Users className='text-muted-foreground size-6' />
+                                  <IconComp
+                                    className='size-6'
+                                    style={{ color: colorValue || undefined }}
+                                  />
                                 );
-                              return (
-                                <IconComp
-                                  className='size-6'
-                                  style={{ color: colorValue || undefined }}
-                                />
-                              );
-                            })()
-                          ) : (
-                            <div className='border-muted-foreground/50 flex size-6 items-center justify-center rounded border-2 border-dashed'>
-                              <Plus className='text-muted-foreground size-3' />
+                              })()
+                            ) : (
+                              <div className='border-muted-foreground/50 flex size-6 items-center justify-center rounded border-2 border-dashed'>
+                                <Plus className='text-muted-foreground size-3' />
+                              </div>
+                            )}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className='w-80' align='start'>
+                          <div className='space-y-4'>
+                            <div>
+                              <h4 className='mb-2 text-sm font-medium'>
+                                Team Icon
+                              </h4>
+                              <IconPicker
+                                value={iconValue}
+                                onValueChange={handleIconChange}
+                                placeholder='Select team icon'
+                                className='h-8 w-full'
+                              />
                             </div>
-                          )}
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className='w-80' align='start'>
-                        <div className='space-y-4'>
-                          <div>
-                            <h4 className='mb-2 text-sm font-medium'>
-                              Team Icon
-                            </h4>
-                            <IconPicker
-                              value={iconValue}
-                              onValueChange={handleIconChange}
-                              placeholder='Select team icon'
-                              className='h-8 w-full'
-                            />
-                          </div>
-                          <div>
-                            <h4 className='mb-2 text-sm font-medium'>
-                              Team Color
-                            </h4>
-                            <div className='flex flex-wrap gap-2'>
-                              {DEFAULT_COLORS.map(colorOption => (
-                                <button
-                                  key={colorOption}
-                                  type='button'
-                                  className={`size-8 rounded-md border-2 transition-all ${
-                                    colorValue === colorOption
-                                      ? 'border-foreground scale-110'
-                                      : 'border-border hover:scale-105'
-                                  }`}
-                                  style={{ backgroundColor: colorOption }}
-                                  onClick={() => handleColorChange(colorOption)}
-                                />
-                              ))}
+                            <div>
+                              <h4 className='mb-2 text-sm font-medium'>
+                                Team Color
+                              </h4>
+                              <div className='flex flex-wrap gap-2'>
+                                {DEFAULT_COLORS.map(colorOption => (
+                                  <button
+                                    key={colorOption}
+                                    type='button'
+                                    className={`size-8 rounded-md border-2 transition-all ${
+                                      colorValue === colorOption
+                                        ? 'border-foreground scale-110'
+                                        : 'border-border hover:scale-105'
+                                    }`}
+                                    style={{ backgroundColor: colorOption }}
+                                    onClick={() =>
+                                      handleColorChange(colorOption)
+                                    }
+                                  />
+                                ))}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    iconValue &&
-                    (() => {
-                      const IconComp = getDynamicIcon(iconValue);
-                      if (!IconComp) return null;
-                      return (
-                        <IconComp
-                          className='size-6'
-                          style={{ color: colorValue || undefined }}
-                        />
-                      );
-                    })()
-                  )}
-                  <Input
-                    value={nameValue}
-                    onChange={e => setNameValue(e.target.value)}
-                    className='h-auto border-none p-0 !text-3xl !leading-tight font-semibold shadow-none focus-visible:ring-0'
-                    style={{ fontFamily: 'var(--font-title)' }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') void handleNameSave();
-                      if (e.key === 'Escape') {
-                        setNameValue(displayName);
-                        setEditingName(false);
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <div className='flex items-center gap-1'>
-                    <Button
-                      size='sm'
-                      onClick={handleNameSave}
-                      disabled={isUpdating}
-                    >
-                      <Save className='size-4' />
-                    </Button>
-                    <Button
-                      size='sm'
-                      variant='ghost'
-                      onClick={() => {
-                        setNameValue(displayName);
-                        setEditingName(false);
-                      }}
-                    >
-                      <X className='size-4' />
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <h1 className='flex items-center gap-2 text-3xl leading-tight font-semibold'>
-                  {/* Clickable Icon with Color */}
-                  {canEdit ? (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button className='flex items-center gap-0 transition-opacity hover:opacity-80'>
-                          {iconValue ? (
-                            (() => {
-                              const IconComp = getDynamicIcon(iconValue);
-                              if (!IconComp)
-                                return (
-                                  <Users className='text-muted-foreground size-6' />
-                                );
-                              return (
-                                <IconComp
-                                  className='size-6'
-                                  style={{ color: colorValue || undefined }}
-                                />
-                              );
-                            })()
-                          ) : (
-                            <div className='border-muted-foreground/50 flex size-6 items-center justify-center rounded border-2 border-dashed'>
-                              <Plus className='text-muted-foreground size-3' />
-                            </div>
-                          )}
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className='w-80' align='start'>
-                        <div className='space-y-4'>
-                          <div>
-                            <h4 className='mb-2 text-sm font-medium'>
-                              Team Icon
-                            </h4>
-                            <IconPicker
-                              value={iconValue}
-                              onValueChange={handleIconChange}
-                              placeholder='Select team icon'
-                              className='h-8 w-full'
-                            />
-                          </div>
-                          <div>
-                            <h4 className='mb-2 text-sm font-medium'>
-                              Team Color
-                            </h4>
-                            <div className='flex flex-wrap gap-2'>
-                              {DEFAULT_COLORS.map(colorOption => (
-                                <button
-                                  key={colorOption}
-                                  type='button'
-                                  className={`size-8 rounded-md border-2 transition-all ${
-                                    colorValue === colorOption
-                                      ? 'border-foreground scale-110'
-                                      : 'border-border hover:scale-105'
-                                  }`}
-                                  style={{ backgroundColor: colorOption }}
-                                  onClick={() => handleColorChange(colorOption)}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    iconValue &&
-                    (() => {
-                      const IconComp = getDynamicIcon(iconValue);
-                      if (!IconComp) return null;
-                      return (
-                        <IconComp
-                          className='size-6'
-                          style={{ color: colorValue || undefined }}
-                        />
-                      );
-                    })()
-                  )}
-                  <span
-                    className={cn(
-                      'transition-colors',
-                      canEdit && 'hover:text-muted-foreground cursor-pointer',
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      iconValue &&
+                      (() => {
+                        const IconComp = getDynamicIcon(iconValue);
+                        if (!IconComp) return null;
+                        return (
+                          <IconComp
+                            className='size-6'
+                            style={{ color: colorValue || undefined }}
+                          />
+                        );
+                      })()
                     )}
-                    onClick={() => {
-                      if (!canEdit) return;
-                      setNameValue(displayName);
-                      setEditingName(true);
-                    }}
-                  >
-                    {displayName}
-                  </span>
-                </h1>
-              )}
-            </div>
-
-            {/* Description */}
-            <div className='mb-2'>
-              {editingDescription ? (
-                <div className='space-y-4'>
-                  <RichEditor
-                    value={descriptionValue}
-                    onChange={setDescriptionValue}
-                    placeholder='Add a description...'
-                    mode='compact'
-                  />
-                  <div className='flex items-center gap-3'>
-                    <Button
-                      onClick={handleDescriptionSave}
-                      disabled={isUpdating}
-                    >
-                      <Save className='mr-2 size-4' />
-                      Save
-                    </Button>
-                    <Button
-                      variant='outline'
-                      onClick={() => {
-                        setDescriptionValue(displayDescription);
-                        setEditingDescription(false);
+                    <Input
+                      value={nameValue}
+                      onChange={e => setNameValue(e.target.value)}
+                      className='h-auto border-none p-0 !text-3xl !leading-tight font-semibold shadow-none focus-visible:ring-0'
+                      style={{ fontFamily: 'var(--font-title)' }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') void handleNameSave();
+                        if (e.key === 'Escape') {
+                          setNameValue(displayName);
+                          setEditingName(false);
+                        }
                       }}
-                    >
-                      Cancel
-                    </Button>
+                      autoFocus
+                    />
+                    <div className='flex items-center gap-1'>
+                      <Button
+                        size='sm'
+                        onClick={handleNameSave}
+                        disabled={isUpdating}
+                      >
+                        <Save className='size-4' />
+                      </Button>
+                      <Button
+                        size='sm'
+                        variant='ghost'
+                        onClick={() => {
+                          setNameValue(displayName);
+                          setEditingName(false);
+                        }}
+                      >
+                        <X className='size-4' />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div>
-                  {displayDescription ? (
-                    <div
+                ) : (
+                  <h1 className='flex items-center gap-2 text-3xl leading-tight font-semibold'>
+                    {/* Clickable Icon with Color */}
+                    {canEdit ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className='flex items-center gap-0 transition-opacity hover:opacity-80'>
+                            {iconValue ? (
+                              (() => {
+                                const IconComp = getDynamicIcon(iconValue);
+                                if (!IconComp)
+                                  return (
+                                    <Users className='text-muted-foreground size-6' />
+                                  );
+                                return (
+                                  <IconComp
+                                    className='size-6'
+                                    style={{ color: colorValue || undefined }}
+                                  />
+                                );
+                              })()
+                            ) : (
+                              <div className='border-muted-foreground/50 flex size-6 items-center justify-center rounded border-2 border-dashed'>
+                                <Plus className='text-muted-foreground size-3' />
+                              </div>
+                            )}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className='w-80' align='start'>
+                          <div className='space-y-4'>
+                            <div>
+                              <h4 className='mb-2 text-sm font-medium'>
+                                Team Icon
+                              </h4>
+                              <IconPicker
+                                value={iconValue}
+                                onValueChange={handleIconChange}
+                                placeholder='Select team icon'
+                                className='h-8 w-full'
+                              />
+                            </div>
+                            <div>
+                              <h4 className='mb-2 text-sm font-medium'>
+                                Team Color
+                              </h4>
+                              <div className='flex flex-wrap gap-2'>
+                                {DEFAULT_COLORS.map(colorOption => (
+                                  <button
+                                    key={colorOption}
+                                    type='button'
+                                    className={`size-8 rounded-md border-2 transition-all ${
+                                      colorValue === colorOption
+                                        ? 'border-foreground scale-110'
+                                        : 'border-border hover:scale-105'
+                                    }`}
+                                    style={{ backgroundColor: colorOption }}
+                                    onClick={() =>
+                                      handleColorChange(colorOption)
+                                    }
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      iconValue &&
+                      (() => {
+                        const IconComp = getDynamicIcon(iconValue);
+                        if (!IconComp) return null;
+                        return (
+                          <IconComp
+                            className='size-6'
+                            style={{ color: colorValue || undefined }}
+                          />
+                        );
+                      })()
+                    )}
+                    <span
                       className={cn(
-                        'prose prose-sm text-muted-foreground max-w-none transition-colors',
-                        canEdit && 'hover:text-foreground cursor-pointer',
+                        'transition-colors',
+                        canEdit && 'hover:text-muted-foreground cursor-pointer',
                       )}
                       onClick={() => {
                         if (!canEdit) return;
-                        setDescriptionValue(displayDescription);
-                        setEditingDescription(true);
+                        setNameValue(displayName);
+                        setEditingName(true);
                       }}
                     >
-                      <RichEditor
-                        value={displayDescription}
-                        onChange={() => {}}
-                        mode='compact'
-                        disabled={true}
-                      />
+                      {displayName}
+                    </span>
+                  </h1>
+                )}
+              </div>
+
+              {/* Description */}
+              <div className='mb-2'>
+                {editingDescription ? (
+                  <div className='space-y-4'>
+                    <RichEditor
+                      value={descriptionValue}
+                      onChange={setDescriptionValue}
+                      placeholder='Add a description...'
+                      mode='compact'
+                    />
+                    <div className='flex items-center gap-3'>
+                      <Button
+                        onClick={handleDescriptionSave}
+                        disabled={isUpdating}
+                      >
+                        <Save className='mr-2 size-4' />
+                        Save
+                      </Button>
+                      <Button
+                        variant='outline'
+                        onClick={() => {
+                          setDescriptionValue(displayDescription);
+                          setEditingDescription(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
                     </div>
-                  ) : canEdit ? (
-                    <button
-                      className='text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base'
-                      onClick={() => {
-                        setDescriptionValue(displayDescription);
-                        setEditingDescription(true);
-                      }}
-                    >
-                      Add a description...
-                    </button>
-                  ) : (
-                    <p className='text-muted-foreground text-sm'>
-                      No description provided.
-                    </p>
-                  )}
+                  </div>
+                ) : (
+                  <div>
+                    {displayDescription ? (
+                      <div
+                        className={cn(
+                          'prose prose-sm text-muted-foreground max-w-none transition-colors',
+                          canEdit && 'hover:text-foreground cursor-pointer',
+                        )}
+                        onClick={() => {
+                          if (!canEdit) return;
+                          setDescriptionValue(displayDescription);
+                          setEditingDescription(true);
+                        }}
+                      >
+                        <RichEditor
+                          value={displayDescription}
+                          onChange={() => {}}
+                          mode='compact'
+                          disabled={true}
+                        />
+                      </div>
+                    ) : canEdit ? (
+                      <button
+                        className='text-muted-foreground hover:text-foreground border-muted-foreground/20 hover:border-muted-foreground/40 w-full rounded-lg border-2 border-dashed bg-transparent p-4 text-left text-base'
+                        onClick={() => {
+                          setDescriptionValue(displayDescription);
+                          setEditingDescription(true);
+                        }}
+                      >
+                        Add a description...
+                      </button>
+                    ) : (
+                      <p className='text-muted-foreground text-sm'>
+                        No description provided.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Properties */}
+              <TooltipProvider>
+                <div className='mt-4 mb-2 flex max-w-4xl flex-wrap items-center gap-2'>
+                  {/* Identifier */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className='text-muted-foreground hover:bg-muted/50 flex h-8 items-center gap-1.5 rounded-md border px-2.5 font-mono text-sm transition-colors'>
+                        {team?.key}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side='bottom'>Identifier</TooltipContent>
+                  </Tooltip>
+
+                  {/* Members */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className='text-muted-foreground hover:bg-muted/50 flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors'>
+                        <UsersRound className='size-3.5' />
+                        <span>{teamMembers?.length ?? 0}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side='bottom'>Members</TooltipContent>
+                  </Tooltip>
+
+                  {/* Created */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className='text-muted-foreground hover:bg-muted/50 flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors'>
+                        <Clock className='size-3.5' />
+                        <span>
+                          {formatDateHuman(new Date(team?._creationTime || 0))}
+                        </span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side='bottom'>Created</TooltipContent>
+                  </Tooltip>
                 </div>
-              )}
+              </TooltipProvider>
             </div>
+            {/* end max-w-5xl */}
 
             {/* Team Content Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className='flex w-full'>
-                <TabsTrigger asChild value='members'>
-                  <div className='flex items-center gap-1'>
-                    <span className='truncate'>Members</span>
-                    <span className='text-muted-foreground text-xs'>
-                      {teamMembers.length}
-                    </span>
+              <div className='space-y-2 px-3 sm:px-4'>
+                <div className='overflow-x-auto overflow-y-hidden'>
+                  <TabsList>
+                    <TabsTrigger value='members'>
+                      Members
+                      <span className='text-muted-foreground text-xs'>
+                        {teamMembers?.length ?? 0}
+                      </span>
+                    </TabsTrigger>
+                    <TabsTrigger value='issues'>
+                      Issues
+                      <span className='text-muted-foreground text-xs'>
+                        {teamIssuesData?.total || 0}
+                      </span>
+                    </TabsTrigger>
+                    <TabsTrigger value='projects'>
+                      Projects
+                      <span className='text-muted-foreground text-xs'>
+                        {teamProjects.length}
+                      </span>
+                    </TabsTrigger>
+                    <TabsTrigger value='documents'>Documents</TabsTrigger>
+                    <TabsTrigger value='activity'>Activity</TabsTrigger>
+                  </TabsList>
+                </div>
+
+                {/* Tab-specific controls */}
+                {activeTab === 'members' && (
+                  <div className='flex items-center gap-2'>
+                    <div className='relative'>
+                      {deferredMemberSearch !== memberSearchText ? (
+                        <Loader2 className='text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 animate-spin' />
+                      ) : (
+                        <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2' />
+                      )}
+                      <Input
+                        placeholder='Search members...'
+                        value={memberSearchText}
+                        onChange={e => setMemberSearchText(e.target.value)}
+                        className='h-6 w-40 pl-7 text-xs'
+                      />
+                    </div>
                     {canEdit && (
                       <Button
                         onClick={() => setShowAddMemberDialog(true)}
-                        className='hidden h-5 gap-1 px-0 text-xs sm:flex'
+                        className='h-6 gap-1 text-xs'
                         variant='outline'
+                        size='sm'
                       >
                         <Plus className='size-3' />
+                        Add
                       </Button>
                     )}
                   </div>
-                </TabsTrigger>
-                <TabsTrigger asChild value='issues'>
-                  <div className='flex items-center gap-1'>
-                    <span className='truncate'>Issues</span>
-                    <span className='text-muted-foreground text-xs'>
-                      {teamIssuesData?.total || 0}
-                    </span>
+                )}
+                {activeTab === 'projects' && canEdit && (
+                  <CreateProjectDialog
+                    orgSlug={orgSlug}
+                    defaultStates={{ teamId: team?._id }}
+                    className='h-6 text-xs'
+                  />
+                )}
+                {activeTab === 'issues' && (
+                  <div className='flex items-center gap-2'>
+                    <div className='relative'>
+                      {deferredIssueSearch !== issueSearchText ? (
+                        <Loader2 className='text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 animate-spin' />
+                      ) : (
+                        <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2' />
+                      )}
+                      <Input
+                        placeholder='Search issues...'
+                        value={issueSearchText}
+                        onChange={e => setIssueSearchText(e.target.value)}
+                        className='h-6 w-40 pl-7 text-xs'
+                      />
+                    </div>
+                    <div className='border-border flex items-center rounded-md border'>
+                      <Button
+                        variant={
+                          issueViewMode === 'kanban' ? 'secondary' : 'ghost'
+                        }
+                        size='sm'
+                        className='h-6 rounded-r-none px-2'
+                        onClick={() => setIssueViewMode('kanban')}
+                      >
+                        <Columns3 className='size-3.5' />
+                      </Button>
+                      <Button
+                        variant={
+                          issueViewMode === 'table' ? 'secondary' : 'ghost'
+                        }
+                        size='sm'
+                        className='h-6 rounded-l-none px-2'
+                        onClick={() => setIssueViewMode('table')}
+                      >
+                        <LayoutList className='size-3.5' />
+                      </Button>
+                    </div>
                     {canEdit && (
-                      <div className='hidden sm:block'>
-                        <CreateIssueDialog
-                          orgSlug={orgSlug}
-                          defaultStates={{ teamId: team?._id }}
-                          className='h-5 gap-1 px-0 text-xs'
-                        />
-                      </div>
+                      <CreateIssueDialog
+                        orgSlug={orgSlug}
+                        defaultStates={{ teamId: team?._id }}
+                        className='h-6 text-xs'
+                      />
                     )}
                   </div>
-                </TabsTrigger>
-                <TabsTrigger asChild value='projects'>
-                  <div className='flex items-center gap-1'>
-                    <span className='truncate'>Projects</span>
-                    <span className='text-muted-foreground text-xs'>
-                      {teamProjects.length}
-                    </span>
-                    {canEdit && (
-                      <div className='hidden sm:block'>
-                        <CreateProjectDialog
-                          orgSlug={orgSlug}
-                          defaultStates={{ teamId: team?._id }}
-                          className='h-5 gap-1 px-0 text-xs'
-                        />
-                      </div>
-                    )}
-                  </div>
-                </TabsTrigger>
-                <TabsTrigger asChild value='documents'>
-                  <div className='flex items-center gap-1'>
-                    <span className='truncate'>Documents</span>
-                  </div>
-                </TabsTrigger>
-                <TabsTrigger asChild value='activity'>
-                  <div className='flex items-center gap-1'>
-                    <span className='truncate'>Activity</span>
-                  </div>
-                </TabsTrigger>
-              </TabsList>
+                )}
+              </div>
 
               {/* Members Tab */}
               <TabsContent value='members'>
-                <div className='rounded-lg border'>
-                  <MembersList
-                    members={teamMembers}
-                    onRemoveMember={canEdit ? handleRemoveMember : undefined}
-                    removePending={isUpdating}
-                    canEdit={canEdit}
-                  />
+                <div className='px-3 sm:px-4'>
+                  <div className='rounded-lg border'>
+                    <MembersList
+                      members={filteredMembers}
+                      onRemoveMember={canEdit ? handleRemoveMember : undefined}
+                      removePending={isUpdating}
+                      canEdit={canEdit}
+                    />
+                  </div>
                 </div>
               </TabsContent>
 
               {/* Issues Tab */}
               <TabsContent value='issues'>
-                <div className='rounded-lg border'>
-                  {teamIssuesData?.issues &&
-                  teamIssuesData.issues.length > 0 ? (
-                    <IssuesTable
-                      orgSlug={orgSlug}
-                      issues={teamIssuesData.issues}
-                      states={states}
-                      priorities={priorities}
-                      teams={teams}
-                      projects={projects}
-                      onPriorityChange={handlePriorityChange}
-                      onAssigneesChange={handleAssigneesChange}
-                      onTeamChange={handleIssueTeamChange}
-                      onProjectChange={handleIssueProjectChange}
-                      onDelete={handleIssueDelete}
-                      deletePending={isUpdatingIssues}
-                      isUpdatingAssignees={isUpdatingIssues}
-                      onAssignmentStateChange={handleAssignmentStateChange}
-                      isUpdatingAssignmentStates={isUpdatingIssues}
-                      currentUserId={user?._id || ''}
-                      canChangeAll={user?.role === 'admin'}
-                      activeFilter='all'
-                    />
+                {teamIssuesData === undefined ? (
+                  issueViewMode === 'kanban' ? (
+                    <KanbanSkeleton />
                   ) : (
-                    <div className='flex items-center justify-center py-12'>
-                      <div className='text-center'>
-                        <div className='mb-4 flex justify-center'>
-                          <Target className='text-muted-foreground/50 h-16 w-16' />
+                    <div className='px-3 sm:px-4'>
+                      <div className='rounded-lg border p-4'>
+                        <div className='space-y-3'>
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <div
+                              key={i}
+                              className='bg-muted/60 h-8 animate-pulse rounded'
+                            />
+                          ))}
                         </div>
-                        <h3 className='mb-2 text-lg font-semibold'>
-                          No issues found
-                        </h3>
-                        <p className='text-muted-foreground mb-6'>
-                          This team doesn&apos;t have any issues yet.
-                        </p>
                       </div>
                     </div>
-                  )}
-                </div>
+                  )
+                ) : (
+                  <AnimatePresence mode='wait' initial={false}>
+                    {issueViewMode === 'kanban' ? (
+                      <motion.div
+                        key='kanban'
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className='flex-1 overflow-hidden'
+                      >
+                        <IssuesKanban
+                          orgSlug={orgSlug}
+                          issues={teamIssuesData.issues}
+                          states={states}
+                          priorities={priorities}
+                          teams={teams}
+                          projects={projects}
+                          currentUserId={user?._id || ''}
+                          onStateChange={(_issueId, assignmentId, stateId) => {
+                            void handleAssignmentStateChange(
+                              assignmentId,
+                              stateId,
+                            );
+                          }}
+                          onPriorityChange={handlePriorityChange}
+                          onAssigneesChange={(issueId, ids) => {
+                            void handleAssigneesChange(issueId, ids);
+                          }}
+                          onTeamChange={handleIssueTeamChange}
+                          onProjectChange={handleIssueProjectChange}
+                          onDelete={handleIssueDelete}
+                          deletePending={isUpdatingIssues}
+                        />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key='table'
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className='px-3 sm:px-4'
+                      >
+                        {teamIssuesData.issues.length > 0 ? (
+                          <div className='rounded-lg border'>
+                            <IssuesTable
+                              orgSlug={orgSlug}
+                              issues={teamIssuesData.issues}
+                              states={states}
+                              priorities={priorities}
+                              teams={teams}
+                              projects={projects}
+                              onPriorityChange={handlePriorityChange}
+                              onAssigneesChange={handleAssigneesChange}
+                              onTeamChange={handleIssueTeamChange}
+                              onProjectChange={handleIssueProjectChange}
+                              onDelete={handleIssueDelete}
+                              deletePending={isUpdatingIssues}
+                              isUpdatingAssignees={isUpdatingIssues}
+                              onAssignmentStateChange={
+                                handleAssignmentStateChange
+                              }
+                              isUpdatingAssignmentStates={isUpdatingIssues}
+                              currentUserId={user?._id || ''}
+                              canChangeAll={user?.role === 'admin'}
+                              activeFilter='all'
+                            />
+                          </div>
+                        ) : (
+                          <div className='flex items-center justify-center py-12'>
+                            <div className='text-center'>
+                              <div className='mb-4 flex justify-center'>
+                                <Target className='text-muted-foreground/50 h-16 w-16' />
+                              </div>
+                              <h3 className='mb-2 text-lg font-semibold'>
+                                No issues found
+                              </h3>
+                              <p className='text-muted-foreground mb-6'>
+                                This team doesn&apos;t have any issues yet.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                )}
               </TabsContent>
 
               {/* Projects Tab */}
               <TabsContent value='projects'>
-                <div className='rounded-lg border'>
-                  {teamProjects && teamProjects.length > 0 ? (
-                    <ProjectsTable
-                      orgSlug={orgSlug}
-                      projects={teamProjects.map(project => ({
-                        ...project,
-                        id: project._id,
-                        icon: project.icon,
-                        color: project.color,
-                        statusId: project.status?._id,
-                        statusName: project.status?.name,
-                        statusColor: project.status?.color,
-                        statusIcon: project.status?.icon,
-                        statusType: project.status?.type,
-                        updatedAt: new Date(project._creationTime),
-                        createdAt: new Date(project._creationTime),
-                      }))}
-                      statuses={statuses.map(s => ({ ...s, id: s._id }))}
-                      teams={teams.map(t => ({ ...t, id: t._id }))}
-                      onStatusChange={handleStatusChange}
-                      onTeamChange={handleProjectTeamChange}
-                      onLeadChange={handleProjectLeadChange}
-                      onDelete={handleProjectDelete}
-                      deletePending={isUpdatingProjects}
-                    />
-                  ) : (
-                    <div className='flex items-center justify-center py-12'>
-                      <div className='text-center'>
-                        <div className='mb-4 flex justify-center'>
-                          <FolderOpen className='text-muted-foreground/50 h-16 w-16' />
+                <div className='px-3 sm:px-4'>
+                  <div className='rounded-lg border'>
+                    {teamProjects && teamProjects.length > 0 ? (
+                      <ProjectsTable
+                        orgSlug={orgSlug}
+                        projects={teamProjects.map(project => ({
+                          ...project,
+                          id: project._id,
+                          icon: project.icon,
+                          color: project.color,
+                          statusId: project.status?._id,
+                          statusName: project.status?.name,
+                          statusColor: project.status?.color,
+                          statusIcon: project.status?.icon,
+                          statusType: project.status?.type,
+                          updatedAt: new Date(project._creationTime),
+                          createdAt: new Date(project._creationTime),
+                        }))}
+                        statuses={statuses.map(s => ({ ...s, id: s._id }))}
+                        teams={teams.map(t => ({ ...t, id: t._id }))}
+                        onStatusChange={handleStatusChange}
+                        onTeamChange={handleProjectTeamChange}
+                        onLeadChange={handleProjectLeadChange}
+                        onDelete={handleProjectDelete}
+                        deletePending={isUpdatingProjects}
+                      />
+                    ) : (
+                      <div className='flex items-center justify-center py-12'>
+                        <div className='text-center'>
+                          <div className='mb-4 flex justify-center'>
+                            <FolderOpen className='text-muted-foreground/50 h-16 w-16' />
+                          </div>
+                          <h3 className='mb-2 text-lg font-semibold'>
+                            No projects found
+                          </h3>
+                          <p className='text-muted-foreground mb-6'>
+                            This team doesn&apos;t have any projects yet.
+                          </p>
                         </div>
-                        <h3 className='mb-2 text-lg font-semibold'>
-                          No projects found
-                        </h3>
-                        <p className='text-muted-foreground mb-6'>
-                          This team doesn&apos;t have any projects yet.
-                        </p>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </TabsContent>
 
               <TabsContent value='documents'>
-                <div className='rounded-lg border'>
-                  {teamDocuments && teamDocuments.length > 0 ? (
-                    <div className='divide-y'>
-                      {teamDocuments.map(doc => (
-                        <Link
-                          key={doc._id}
-                          href={`/${orgSlug}/documents/${doc._id}`}
-                          className='hover:bg-muted/50 flex items-center gap-3 px-3 py-2 transition-colors'
-                        >
-                          <FileText className='text-muted-foreground size-4 flex-shrink-0' />
-                          <div className='min-w-0 flex-1'>
-                            <div className='truncate text-sm font-medium'>
-                              {doc.title}
+                <div className='px-3 sm:px-4'>
+                  <div className='rounded-lg border'>
+                    {teamDocuments && teamDocuments.length > 0 ? (
+                      <div className='divide-y'>
+                        {teamDocuments.map(doc => (
+                          <Link
+                            key={doc._id}
+                            href={`/${orgSlug}/documents/${doc._id}`}
+                            className='hover:bg-muted/50 flex items-center gap-3 px-3 py-2 transition-colors'
+                          >
+                            <FileText className='text-muted-foreground size-4 flex-shrink-0' />
+                            <div className='min-w-0 flex-1'>
+                              <div className='truncate text-sm font-medium'>
+                                {doc.title}
+                              </div>
+                              <div className='text-muted-foreground text-xs'>
+                                {doc.author?.name || doc.author?.email}
+                              </div>
                             </div>
-                            <div className='text-muted-foreground text-xs'>
-                              {doc.author?.name || doc.author?.email}
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className='flex items-center justify-center py-12'>
-                      <div className='text-center'>
-                        <div className='mb-4 flex justify-center'>
-                          <FileText className='text-muted-foreground/50 h-16 w-16' />
-                        </div>
-                        <h3 className='mb-2 text-lg font-semibold'>
-                          No documents found
-                        </h3>
-                        <p className='text-muted-foreground mb-6'>
-                          This team doesn&apos;t have any documents yet.
-                        </p>
+                          </Link>
+                        ))}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className='flex items-center justify-center py-12'>
+                        <div className='text-center'>
+                          <div className='mb-4 flex justify-center'>
+                            <FileText className='text-muted-foreground/50 h-16 w-16' />
+                          </div>
+                          <h3 className='mb-2 text-lg font-semibold'>
+                            No documents found
+                          </h3>
+                          <p className='text-muted-foreground mb-6'>
+                            This team doesn&apos;t have any documents yet.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </TabsContent>
 
               <TabsContent value='activity'>
-                {team?._id ? (
-                  <TeamActivityFeed orgSlug={orgSlug} teamId={team._id} />
-                ) : null}
+                <div className='px-3 sm:px-4'>
+                  {team?._id ? (
+                    <TeamActivityFeed orgSlug={orgSlug} teamId={team._id} />
+                  ) : null}
+                </div>
               </TabsContent>
             </Tabs>
           </div>
@@ -1349,7 +1831,7 @@ export default function TeamViewPage() {
         <AddMemberDialog
           orgSlug={orgSlug}
           teamId={team._id}
-          existingMemberIds={new Set(teamMembers.map(m => m.userId))}
+          existingMemberIds={new Set((teamMembers ?? []).map(m => m.userId))}
           onClose={() => setShowAddMemberDialog(false)}
         />
       )}

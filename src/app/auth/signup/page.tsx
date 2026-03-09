@@ -58,8 +58,10 @@ function SignupForm() {
     setIsLoading(true);
 
     try {
+      const normalizedEmail = values.email.trim().toLowerCase();
+
       const result = await authClient.signUp.email({
-        email: values.email,
+        email: normalizedEmail,
         password: values.password,
         name: values.username,
         username: values.username,
@@ -67,6 +69,15 @@ function SignupForm() {
 
       if (result.error) {
         throw result.error;
+      }
+
+      const signInResult = await authClient.signIn.email({
+        email: normalizedEmail,
+        password: values.password,
+      });
+
+      if (signInResult.error) {
+        throw signInResult.error;
       }
 
       toast.success('Account created!');

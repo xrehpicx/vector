@@ -1,44 +1,40 @@
 # Key Features
 
-## Authentication & User Management
+## Authentication and Access
 
-- Google OAuth (organisation-scoped)
-- Post-signup flow to link Discord
-- Role assignment (Member, Lead, Admin) through the Admin UI
+- Better Auth integration backed by Convex user data
+- Username, email/password, and email OTP support in the current auth setup
+- First-admin bootstrap flow through `/setup-admin`
+- Organization, team, and project-scoped permission handling
+- Custom roles plus built-in owner/admin/member roles
 
-## Project & Hierarchy Management
+## Project Management
 
-- Admin UI to create/manage Teams & Projects
-- Define hierarchy: assign Leads per project
-- Each Project record stores members list + Lead
+- Teams, projects, and issues in the same application
+- Dense detail views with inline property editing
+- Kanban and table views for issue management
+- Issue priorities, assignment states, assignees, teams, and projects
+- Project and team detail pages with scoped activity and membership management
 
-## Real-time Notifications
+## Documents and Activity
 
-- Discord bot relays comment/issue events to project channels
-- Web-UI toast & inbox for mentions / assignments
+- Rich document editor with markdown, mentions, slash commands, and collaboration-oriented UI
+- Activity feeds for issues, teams, projects, and documents
+- Organization settings for workflow states, priorities, members, and roles
 
-## On-boarding & Organisation Switching
+## Notifications
 
-1.  **New signup → create organisation**
-    1.  User signs up ➜ redirected to **organisation setup** wizard.
-    2.  Wizard collects _org name_, _slug_ (+ optional logo).
-    3.  Upon completion the user becomes **admin** of the new org (`member.role = "admin"`).
-    4.  Default project settings are seeded; user lands on **Dashboard**.
+- In-app notification inbox and preferences
+- Optional SMTP-based email notifications
+- Optional browser push notifications via VAPID keys
 
-2.  **Invite to existing org → new platform user**
-    1.  User receives invitation email, clicks link.
-    2.  Completes minimal signup (password, name).
-    3.  Invitation is accepted ⇒ they become **member** of the inviting org.
-    4.  No personal organisation is created.
+## Onboarding and Membership
 
-3.  **Invite to existing org → existing platform user**
-    1.  Logged-in user clicks invite link.
-    2.  Invitation accepted; new `member` row is created in that org.
-    3.  UI switches active organisation to the newly joined one.
-    4.  User can toggle between organisations via org-switcher (uses Better-Auth `organization.setActive`).
+- Local bootstrap flow for the first administrator
+- Organization setup flow for new deployments
+- Member invitation flows through the organization UI
 
-## Future Enhancements
+## Notes
 
-- Support for additional communication channels (Slack, Teams).
-- Analytics dashboard for notification / activity metrics.
-- Customizable response templates per project.
+- Migration-phase ideas and legacy implementation notes live under `docs/migration/` and `archive/`.
+- Those files are historical reference material and should not be treated as the current product contract.

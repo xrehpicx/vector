@@ -4,25 +4,22 @@ Maintaining strict type safety is a core principle of this project. This guide o
 
 ## Type Inference over Hard-coding
 
-Derive types from your Drizzle schema whenever possible using `InferInsertModel` or `InferSelectModel`. This ensures that your types stay in sync with your database schema automatically.
+Derive types from Convex-generated types and query return types whenever possible. This keeps the frontend and backend aligned with the actual schema and function outputs.
 
 ```typescript
-import { type InferInsertModel } from 'drizzle-orm';
-import { project } from '@/db/schema';
+import { FunctionReturnType } from 'convex/server';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 
-type ProjectInsert = InferInsertModel<typeof project>;
+type Project = FunctionReturnType<
+  typeof api.organizations.queries.listProjects
+>[number];
 
-// Good: This type stays in sync with the database schema.
-export type CreateProjectParams = Omit<
-  ProjectInsert,
-  'id' | 'createdAt' | 'updatedAt'
->;
-
-// Bad: This interface must be updated manually if the schema changes.
-interface CreateProjectParamsManual {
-  name: string;
-  // ... other properties
+function loadProject(projectId: Id<'projects'>) {
+  return projectId;
 }
+
+// Good: both types stay aligned with generated backend types.
 ```
 
 ## Avoid Unsafe Types

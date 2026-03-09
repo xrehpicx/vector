@@ -330,7 +330,7 @@ import { useRequirePermission } from '@/hooks/use-permission-boundary';
 export default function MembersPage() {
   const { isLoading } = useRequirePermission(
     orgSlug,
-    PERMISSIONS.ORG_MANAGE_MEMBERS
+    PERMISSIONS.ORG_MANAGE_MEMBERS,
   );
 
   if (isLoading) return <LoadingSpinner />;

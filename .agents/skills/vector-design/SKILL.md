@@ -107,6 +107,27 @@ For inline micro-edits:
 
 Do not add success toasts for routine field changes. The changed value is the confirmation.
 
+### 6. Default loader choices are explicit
+
+Use the loading primitive that matches the job:
+
+- content or layout is still loading: use `Skeleton` components shaped like the final UI
+- indeterminate action/loading indicator with no meaningful placeholder shape: use `BarsSpinner` from `src/components/bars-spinner.tsx`
+
+Do not introduce a different spinner component unless the existing `BarsSpinner` is clearly the wrong fit.
+
+### 7. Use `GradientWaveText` for small centered explanatory callouts
+
+When a surface has a short centered line of supporting copy that explains a notable capability, hint, or "cool" behavior, prefer `GradientWaveText` from `src/components/gradient-wave-text.tsx`.
+
+Use it sparingly:
+
+- small supporting text, usually `text-xs` or `text-sm`
+- centered placements where the text can stand on its own
+- brief explanatory copy that benefits from a little extra attention
+
+Do not use it for primary headings, dense row metadata, long paragraphs, or routine helper text.
+
 ## When To Use Which Pattern
 
 ### New inline field picker
@@ -143,6 +164,7 @@ Read [references/lists-and-micro-interactions.md](./references/lists-and-micro-i
 - Detail pages often use a sticky top editing bar with compact selector clusters and subtle vertical dividers
 - Empty states are used sparingly; operational screens should bias toward tables and direct controls
 - Motion should be short and structural: `layout`, small Y offsets, `duration: 0.2`
+- Centered supporting copy that highlights a notable capability can use `GradientWaveText`, but keep it short and secondary
 
 ## Anti-Patterns
 
@@ -152,6 +174,8 @@ Read [references/lists-and-micro-interactions.md](./references/lists-and-micro-i
 - Do not use success toasts for normal inline property changes
 - Do not create separate edit screens for row-level metadata
 - Do not use loading text where a skeleton or existing value can carry the transition
+- Do not add ad hoc spinners when `src/components/bars-spinner.tsx` already fits the need
+- Do not use `GradientWaveText` as a decorative replacement for ordinary labels or body copy
 - Do not create a brand-new row layout if an issues/member/project row already solves it
 
 ## Ship Checklist

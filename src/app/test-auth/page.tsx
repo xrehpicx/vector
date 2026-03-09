@@ -38,7 +38,9 @@ function SignInForm() {
 
     try {
       const formData = new FormData(e.currentTarget);
-      const email = String(formData.get('email') ?? '');
+      const email = String(formData.get('email') ?? '')
+        .trim()
+        .toLowerCase();
       const password = String(formData.get('password') ?? '');
       const name = String(formData.get('name') ?? '').trim();
 
@@ -55,6 +57,17 @@ function SignInForm() {
 
       if (result.error) {
         throw result.error;
+      }
+
+      if (name) {
+        const signInResult = await authClient.signIn.email({
+          email,
+          password,
+        });
+
+        if (signInResult.error) {
+          throw signInResult.error;
+        }
       }
     } catch (error) {
       console.error('Sign in error:', error);

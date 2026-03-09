@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useOptimisticValue } from '@/hooks/use-optimistic';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -125,7 +124,7 @@ export function VisibilitySelector({
 }: VisibilitySelectorProps) {
   const [open, setOpen] = useState(false);
   const { viewOnly } = useAccess();
-  const [displayValue, setOptimisticValue] = useOptimisticValue(value);
+  const displayValue = value;
 
   const hasSelection = Boolean(displayValue);
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
@@ -174,7 +173,6 @@ export function VisibilitySelector({
                     value={option.label}
                     onSelect={() => {
                       if (!viewOnly) {
-                        setOptimisticValue(option.value);
                         onValueChange(option.value);
                         setOpen(false);
                       }

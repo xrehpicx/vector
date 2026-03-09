@@ -1,6 +1,12 @@
 'use client';
 
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { OrgSidebar, OrgOptionsDropdown } from '@/components/organization';
@@ -99,8 +105,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + '/');
 
+  // Redirect unauthenticated users to login with return URL
+  useEffect(() => {
+    if (user === null) {
+      window.location.href = `/auth/login?redirectTo=${encodeURIComponent(pathname)}`;
+    }
+  }, [user, pathname]);
+
   // Don't render until we have the data
-  if (user === undefined || organization === undefined) {
+  if (user === undefined || user === null || organization === undefined) {
     return (
       <div className='bg-secondary flex h-screen'>
         <aside className='hidden w-56 lg:block'>

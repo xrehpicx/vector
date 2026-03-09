@@ -80,8 +80,8 @@ export function useConfirm(): [ConfirmFn, () => React.ReactElement | null] {
           if (!open) handleResponse(false);
         }}
       >
-        <AlertDialogContent className='gap-3 p-4 sm:max-w-sm'>
-          <AlertDialogHeader>
+        <AlertDialogContent size='sm' className='gap-2 p-3'>
+          <AlertDialogHeader className='gap-1'>
             <AlertDialogTitle className='text-sm font-semibold'>
               {options.title}
             </AlertDialogTitle>
@@ -89,7 +89,7 @@ export function useConfirm(): [ConfirmFn, () => React.ReactElement | null] {
               {options.description}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className='flex-row justify-end gap-2'>
+          <AlertDialogFooter className='mx-0 mb-0 flex-row justify-end gap-2 border-0 bg-transparent p-0'>
             <AlertDialogCancel
               size='sm'
               variant='ghost'

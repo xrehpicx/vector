@@ -6,6 +6,8 @@ updated: 2025-08-14
 
 # Convex project structure refactor plan
 
+> Historical proposal. Use the current `convex/` directory in the repository as the source of truth.
+
 This document proposes aligning `aikp/convex` to the same best-practice layout used in `arena/convex`, following the rules in `arena/.cursor/rules/convex_rules.mdc`.
 
 ## Current state (aikp)

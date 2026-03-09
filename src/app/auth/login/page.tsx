@@ -60,9 +60,8 @@ function LoginForm() {
         throw result.error;
       }
 
-      router.push(
-        `/auth/signing-in?redirectTo=${encodeURIComponent(redirectTo)}`,
-      );
+      // Full reload to pick up new session cookies
+      window.location.href = `/auth/signing-in?redirectTo=${encodeURIComponent(redirectTo)}`;
     } catch (error) {
       const message = extractAuthErrorMessage(error);
       toast.error(message);
@@ -128,6 +127,15 @@ function LoginForm() {
                 </FormItem>
               )}
             />
+
+            <div className='flex justify-end'>
+              <Link
+                href='/auth/forgot-password'
+                className='text-muted-foreground text-xs hover:underline'
+              >
+                Forgot password?
+              </Link>
+            </div>
 
             <Button type='submit' className='w-full' disabled={isLoading}>
               {isLoading ? (

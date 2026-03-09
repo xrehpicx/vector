@@ -17,6 +17,7 @@ import {
   LogOut,
   Moon,
   Settings,
+  Shield,
   Sun,
   User,
 } from 'lucide-react';
@@ -66,6 +67,12 @@ export function UserMenu() {
           <Settings className='mr-2 size-3.5' />
           <span>Settings</span>
         </DropdownMenuItem>
+        {user.role === 'platform_admin' ? (
+          <DropdownMenuItem onClick={() => router.push('/admin')}>
+            <Shield className='mr-2 size-3.5' />
+            <span>Platform Admin</span>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onClick={() => setTheme(isDark ? 'light' : 'dark')}>
           {isDark ? (
             <Sun className='mr-2 size-3.5' />

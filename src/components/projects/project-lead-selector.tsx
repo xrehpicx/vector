@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useOptimisticValue } from '@/hooks/use-optimistic';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -73,7 +72,7 @@ export function ProjectLeadSelector({
   align = 'start',
 }: ProjectLeadSelectorProps) {
   const [open, setOpen] = useState(false);
-  const [displayLead, setOptimisticLead] = useOptimisticValue(selectedLead);
+  const displayLead = selectedLead;
 
   const { viewOnly } = useAccess();
   const currentUser = useQuery(api.users.getCurrentUser);
@@ -206,7 +205,6 @@ export function ProjectLeadSelector({
                 value=''
                 onSelect={() => {
                   if (!viewOnly) {
-                    setOptimisticLead('');
                     onLeadSelect('');
                     setOpen(false);
                   }
@@ -236,7 +234,6 @@ export function ProjectLeadSelector({
                   }
                   onSelect={() => {
                     if (!viewOnly) {
-                      setOptimisticLead(member.userId);
                       onLeadSelect(member.userId);
                       setOpen(false);
                     }

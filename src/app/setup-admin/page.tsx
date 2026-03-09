@@ -101,10 +101,13 @@ export default function SetupAdminPage() {
           <CardHeader className='space-y-1 pb-4'>
             <div className='flex items-center gap-2'>
               <ShieldCheck className='h-4 w-4 text-emerald-600' />
-              <CardTitle className='text-lg'>Initial Admin Setup</CardTitle>
+              <CardTitle className='text-lg'>
+                Initial Platform Admin Setup
+              </CardTitle>
             </div>
             <CardDescription className='text-sm'>
-              Create the first administrator account to configure Vector.
+              Create the first platform administrator account to configure
+              instance-wide access rules in Vector.
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-4'>

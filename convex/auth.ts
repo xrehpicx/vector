@@ -4,16 +4,22 @@ import {
   type GenericCtx,
 } from '@convex-dev/better-auth';
 import { convex } from '@convex-dev/better-auth/plugins';
-import { betterAuth } from 'better-auth';
+import { APIError, betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
-import { username } from 'better-auth/plugins';
+import { username, emailOTP } from 'better-auth/plugins';
+import type { GenericActionCtx, GenericMutationCtx } from 'convex/server';
 import { v } from 'convex/values';
-import { components, internal } from './_generated/api';
+import { api, components, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { DataModel } from './_generated/dataModel';
 import { internalMutation, query } from './_generated/server';
 import authConfig from './auth.config';
 import authSchema from './betterAuth/schema';
+import {
+  evaluateSignupEmailAddress,
+  hasPlatformAdminUsers,
+  PLATFORM_ADMIN_ROLE,
+} from './platformAdmin/lib';
 
 const betterAuthSecret =
   process.env.BETTER_AUTH_SECRET ||
@@ -38,6 +44,18 @@ const getTrustedOrigins = () => {
 
 const authFunctions: AuthFunctions = internal.auth;
 
+const hasScheduler = (
+  ctx: GenericCtx<DataModel>,
+): ctx is GenericActionCtx<DataModel> | GenericMutationCtx<DataModel> =>
+  'scheduler' in ctx;
+
+function normalizeUserId(
+  ctx: Pick<GenericMutationCtx<DataModel>, 'db'>,
+  userId: string | null | undefined,
+): Id<'users'> | null {
+  return userId ? ctx.db.normalizeId('users', userId) : null;
+}
+
 export const authComponent = createClient<DataModel, typeof authSchema>(
   components.betterAuth,
   {
@@ -61,11 +79,12 @@ export const authComponent = createClient<DataModel, typeof authSchema>(
           await authComponent.setUserId(ctx, authUser._id, userId);
         },
         onUpdate: async (ctx, newAuthUser) => {
-          if (!newAuthUser.userId) {
+          const userId = normalizeUserId(ctx, newAuthUser.userId);
+          if (!userId) {
             return;
           }
 
-          await ctx.db.patch('users', newAuthUser.userId as Id<'users'>, {
+          await ctx.db.patch('users', userId, {
             name: newAuthUser.name,
             email: newAuthUser.email,
             image: newAuthUser.image ?? undefined,
@@ -76,11 +95,12 @@ export const authComponent = createClient<DataModel, typeof authSchema>(
           });
         },
         onDelete: async (ctx, authUser) => {
-          if (!authUser.userId) {
+          const userId = normalizeUserId(ctx, authUser.userId);
+          if (!userId) {
             return;
           }
 
-          await ctx.db.delete('users', authUser.userId as Id<'users'>);
+          await ctx.db.delete('users', userId);
         },
       },
     },
@@ -115,8 +135,63 @@ export const createAuthOptions = (
       },
     },
   },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user, context) => {
+          if (context?.path !== '/sign-up/email') {
+            return { data: user };
+          }
+
+          const hasPlatformAdmins =
+            'db' in ctx
+              ? await hasPlatformAdminUsers(ctx.db)
+              : await ctx.runQuery(api.users.adminExists, {});
+          if (!hasPlatformAdmins) {
+            return { data: user };
+          }
+
+          const restriction =
+            'db' in ctx
+              ? await evaluateSignupEmailAddress(ctx.db, user.email)
+              : await ctx.runQuery(
+                  internal.platformAdmin.queries.getSignupRestrictionPreview,
+                  {
+                    email: user.email,
+                  },
+                );
+
+          if (!restriction.blocked) {
+            return { data: user };
+          }
+
+          throw new APIError('FORBIDDEN', {
+            message:
+              restriction.reason === 'not_allowed'
+                ? 'Sign up is limited to approved email domains for this instance.'
+                : 'Temporary or blocked email domains cannot sign up to this instance.',
+          });
+        },
+      },
+    },
+  },
   plugins: [
     username(),
+    emailOTP({
+      async sendVerificationOTP({ email, otp, type }) {
+        console.log(`[otp] ${type} for ${email}: ${otp}`);
+        if (hasScheduler(ctx)) {
+          await ctx.scheduler.runAfter(0, internal.email.otp.sendOtpEmail, {
+            to: email,
+            otp,
+            type,
+          });
+        }
+      },
+      otpLength: 4,
+      expiresIn: 900,
+      allowedAttempts: 5,
+    }),
     convex({
       authConfig,
       jwksRotateOnTokenGenerationError: true,
@@ -135,11 +210,14 @@ export const setBootstrapAdminRole = internalMutation({
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAnyUserById(ctx, args.authUserId);
 
-    if (!authUser?.userId) {
+    const userId = normalizeUserId(ctx, authUser?.userId);
+    if (!userId) {
       throw new Error('Failed to locate bootstrap admin user');
     }
 
-    const userId = authUser.userId as Id<'users'>;
+    await ctx.db.patch('users', userId, {
+      role: PLATFORM_ADMIN_ROLE,
+    });
 
     return userId;
   },

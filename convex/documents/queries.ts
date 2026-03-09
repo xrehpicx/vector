@@ -59,6 +59,7 @@ export const getById = query({
 export const list = query({
   args: {
     orgSlug: v.string(),
+    folderId: v.optional(v.id('documentFolders')),
     teamId: v.optional(v.id('teams')),
     projectId: v.optional(v.id('projects')),
   },
@@ -66,7 +67,14 @@ export const list = query({
     const org = await getOrganizationBySlug(ctx, args.orgSlug);
 
     let documents;
-    if (args.teamId) {
+    if (args.folderId) {
+      documents = await ctx.db
+        .query('documents')
+        .withIndex('by_folder', q => q.eq('folderId', args.folderId!))
+        .collect();
+      // Filter to org
+      documents = documents.filter(d => d.organizationId === org._id);
+    } else if (args.teamId) {
       documents = await ctx.db
         .query('documents')
         .withIndex('by_org_team', q =>

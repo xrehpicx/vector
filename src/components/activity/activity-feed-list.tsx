@@ -551,24 +551,30 @@ function ActivityRow({
 export function ActivityFeedSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className='rounded-lg border'>
-      <div className='space-y-0'>
-        {Array.from({ length: rows }).map((_, index) => (
-          <div
-            key={index}
-            className={cn(
-              'flex items-start gap-3 px-3 py-2',
-              index > 0 && 'border-t',
-            )}
-          >
-            <Skeleton className='size-6 rounded-full' />
-            <div className='min-w-0 flex-1 space-y-2 py-0.5'>
-              <Skeleton className='h-3.5 w-3/5' />
-              <Skeleton className='h-3.5 w-2/5' />
-            </div>
-            <Skeleton className='h-3.5 w-16' />
+      <ActivityFeedSkeletonRows rows={rows} />
+    </div>
+  );
+}
+
+function ActivityFeedSkeletonRows({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className='space-y-0'>
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className={cn(
+            'flex items-start gap-3 px-3 py-2',
+            index > 0 && 'border-t',
+          )}
+        >
+          <Skeleton className='size-6 rounded-full' />
+          <div className='min-w-0 flex-1 space-y-2 py-0.5'>
+            <Skeleton className='h-3.5 w-3/5' />
+            <Skeleton className='h-3.5 w-2/5' />
           </div>
-        ))}
-      </div>
+          <Skeleton className='h-3.5 w-16' />
+        </div>
+      ))}
     </div>
   );
 }
@@ -583,9 +589,11 @@ export function ActivityFeedList({
   className,
 }: ActivityFeedListProps) {
   const [page, setPage] = useState(0);
+  const [pendingPage, setPendingPage] = useState<number | null>(null);
 
   // Reset to first page when items become empty (valid setState-during-render pattern)
   if (items.length === 0 && page !== 0) setPage(0);
+  if (items.length === 0 && pendingPage !== null) setPendingPage(null);
 
   if (status === 'LoadingFirstPage') {
     return <ActivityFeedSkeleton />;
@@ -599,21 +607,39 @@ export function ActivityFeedList({
     );
   }
 
-  const start = page * pageSize;
+  if (pendingPage !== null && pendingPage * pageSize < items.length) {
+    setPage(pendingPage);
+    setPendingPage(null);
+  }
+
+  if (
+    pendingPage !== null &&
+    status !== 'LoadingMore' &&
+    pendingPage * pageSize >= items.length
+  ) {
+    setPendingPage(null);
+  }
+
+  const activePage = pendingPage ?? page;
+  const start = activePage * pageSize;
   const end = start + pageSize;
   const pageItems = items.slice(start, end);
   const groups = groupByDay(pageItems);
+  const isLoadingNextPage =
+    pendingPage !== null && pendingPage * pageSize >= items.length;
 
   const hasMoreOnServer = status !== 'Exhausted';
   const hasNextPage = end < items.length || hasMoreOnServer;
   const totalPages = hasMoreOnServer
-    ? page + 2 // At least one more page
+    ? activePage + 2 // At least one more page
     : Math.max(1, Math.ceil(items.length / pageSize));
 
   const handleNext = () => {
     if (end >= items.length && hasMoreOnServer) {
       // Need to fetch more from server before advancing
+      setPendingPage(page + 1);
       loadMore(pageSize);
+      return;
     }
     setPage(p => p + 1);
   };
@@ -621,27 +647,31 @@ export function ActivityFeedList({
   return (
     <div className={cn('space-y-0', className)}>
       <div className='rounded-lg border'>
-        {groups.map((group, groupIndex) => (
-          <div key={group.dateKey}>
-            <div
-              className={cn(
-                'bg-background/95 text-muted-foreground sticky top-0 z-10 border-b px-3 py-1.5 text-[11px] font-medium tracking-wide uppercase backdrop-blur',
-                groupIndex === 0 && 'rounded-t-lg',
-              )}
-            >
-              {group.label}
+        {isLoadingNextPage ? (
+          <ActivityFeedSkeletonRows rows={pageSize} />
+        ) : (
+          groups.map((group, groupIndex) => (
+            <div key={group.dateKey}>
+              <div
+                className={cn(
+                  'bg-background/95 text-muted-foreground sticky top-0 z-10 border-b px-3 py-1.5 text-[11px] font-medium tracking-wide uppercase backdrop-blur',
+                  groupIndex === 0 && 'rounded-t-lg',
+                )}
+              >
+                {group.label}
+              </div>
+              {group.items.map(item => (
+                <ActivityRow key={item._id} item={item} orgSlug={orgSlug} />
+              ))}
             </div>
-            {group.items.map(item => (
-              <ActivityRow key={item._id} item={item} orgSlug={orgSlug} />
-            ))}
-          </div>
-        ))}
+          ))
+        )}
 
         {/* Pagination footer */}
         {(totalPages > 1 || hasNextPage) && (
           <div className='text-muted-foreground flex items-center justify-between border-t px-3 py-1.5 text-xs'>
             <span>
-              Page {page + 1}
+              Page {activePage + 1}
               {!hasMoreOnServer ? ` of ${totalPages}` : ''}
             </span>
             <div className='flex items-center gap-1'>
@@ -651,7 +681,7 @@ export function ActivityFeedList({
                 size='sm'
                 className='h-6 w-6 p-0'
                 onClick={() => setPage(p => p - 1)}
-                disabled={page === 0}
+                disabled={page === 0 || isLoadingNextPage}
               >
                 <ChevronLeft className='size-3.5' />
               </Button>

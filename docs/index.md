@@ -36,4 +36,5 @@ This section records major technical decisions and the reasoning behind them.
 
 - Prefer the getting-started guides and top-level repository docs for onboarding.
 - The `docs/migration/` directory is historical reference material from earlier architecture work and may not match the current contributor setup.
+- Some plan and implementation-summary files under `docs/development/` are historical notes rather than onboarding docs. Prefer the numbered guides in each section first.
 - For contribution workflow, see [CONTRIBUTING.md](../CONTRIBUTING.md).

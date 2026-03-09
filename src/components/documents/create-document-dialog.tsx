@@ -15,6 +15,7 @@ export interface CreateDocumentDialogProps {
   onDocumentCreated?: (documentId: string) => void;
   className?: string;
   defaultStates?: {
+    folderId?: string;
     teamId?: string;
     projectId?: string;
   };
@@ -37,6 +38,9 @@ export function CreateDocumentDialog({
         orgSlug,
         data: {
           title: 'Untitled',
+          folderId: defaultStates?.folderId
+            ? (defaultStates.folderId as Id<'documentFolders'>)
+            : undefined,
           teamId: defaultStates?.teamId
             ? (defaultStates.teamId as Id<'teams'>)
             : undefined,

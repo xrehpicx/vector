@@ -1,5 +1,7 @@
 # UI-Level Permission System Implementation Summary
 
+> Historical implementation summary. For current guidance, use [07-permission-handling.md](./07-permission-handling.md) and [../architecture/03-authentication-and-permissions.md](../architecture/03-authentication-and-permissions.md).
+
 ## ✅ What Was Implemented
 
 ### 1. **Permission Check for Status Change Button** (Original Request)
@@ -120,7 +122,7 @@ Added permission checks for ALL interactive elements in the issue view page:
 const { isAllowed: canEditTeam } = usePermissionCheck(
   orgSlug,
   PERMISSIONS.TEAM_EDIT,
-  { orgSlug, teamId: team?._id }
+  { orgSlug, teamId: team?._id },
 );
 
 const canEdit = !!(user && team && (team.leadId === user._id || canEditTeam));
@@ -134,7 +136,7 @@ const canEdit = !!(user && team && (team.leadId === user._id || canEditTeam));
 const { isAllowed: canEditProject } = usePermissionCheck(
   params.orgSlug,
   PERMISSIONS.PROJECT_EDIT,
-  { orgSlug: params.orgSlug, projectId: project?._id }
+  { orgSlug: params.orgSlug, projectId: project?._id },
 );
 
 const canEdit = !!(
@@ -153,7 +155,7 @@ The simple function you requested that returns a boolean:
 ```tsx
 const { isAllowed, isLoading } = usePermissionCheck(
   orgSlug,
-  PERMISSIONS.ISSUE_EDIT
+  PERMISSIONS.ISSUE_EDIT,
 );
 ```
 
@@ -241,7 +243,7 @@ const { isAllowed } = usePermissionCheck(orgSlug, PERMISSIONS.ISSUE_EDIT);
 
 ### **Enhanced Files**
 
-- `src/lib/permissions.ts` - Added utility functions
+- `convex/_shared/permissions.ts` and related permission helpers - shared permission constants and supporting logic
 - `docs/development/07-permission-handling.md` - Complete rewrite
 - `docs/architecture/03-authentication-and-permissions.md` - Updated examples
 

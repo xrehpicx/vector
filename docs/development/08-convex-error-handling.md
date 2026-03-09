@@ -142,16 +142,8 @@ If migrating from generic `Error` to `ConvexError`:
 3. Standardize error message format to UPPER_SNAKE_CASE
 4. Test error handling on both client and server
 
-## Updated Files
+## Notes
 
-The following files have been updated to use proper ConvexError handling:
+Backend code has since been reorganized into domain directories such as `convex/issues/*`, `convex/projects/*`, `convex/teams/*`, `convex/organizations/*`, and `convex/roles/index.ts`.
 
-- `convex/organizations.ts` - All organization-related functions
-- `convex/users.ts` - User management functions
-- `convex/roles.ts` - Role and permission functions
-- `convex/permissions.ts` - Permission checking functions
-- `convex/issues.ts` - Issue management (already using ConvexError)
-- `convex/projects.ts` - Project management (already using ConvexError)
-- `convex/teams.ts` - Team management (already using ConvexError)
-
-All functions now properly throw `ConvexError` instead of generic `Error` for expected application failures.
+Use this document for the error-handling pattern itself, not as an exact inventory of touched files.

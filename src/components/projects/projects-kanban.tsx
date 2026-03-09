@@ -24,6 +24,14 @@ import type { Status } from './project-selectors';
 import { StatusSelector } from './project-selectors';
 import { ProjectLeadSelector } from './project-lead-selector';
 
+const STATUS_ORDER = [
+  'backlog',
+  'planned',
+  'in_progress',
+  'completed',
+  'canceled',
+];
+
 export interface ProjectsKanbanProps {
   orgSlug: string;
   projects: ReadonlyArray<ProjectRowData>;
@@ -40,76 +48,30 @@ export function ProjectsKanban({
   onLeadChange,
 }: ProjectsKanbanProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [optimisticMoves, setOptimisticMoves] = useState<Map<string, string>>(
-    new Map(),
-  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     }),
   );
-
-  // Sort statuses by type order
-  const statusOrder = [
-    'backlog',
-    'planned',
-    'in_progress',
-    'completed',
-    'canceled',
-  ];
   const sortedStatuses = React.useMemo(
     () =>
       [...statuses].sort(
-        (a, b) => statusOrder.indexOf(a.type) - statusOrder.indexOf(b.type),
+        (a, b) => STATUS_ORDER.indexOf(a.type) - STATUS_ORDER.indexOf(b.type),
       ),
     [statuses],
   );
-
-  // Apply optimistic overrides
-  const displayProjects = React.useMemo(() => {
-    if (optimisticMoves.size === 0) return projects;
-    return projects.map(project => {
-      const newStatusId = optimisticMoves.get(project.id);
-      if (!newStatusId || newStatusId === project.statusId) return project;
-      const newStatus = statuses.find(s => s._id === newStatusId);
-      if (!newStatus) return project;
-      return {
-        ...project,
-        statusId: newStatus._id,
-        statusName: newStatus.name,
-        statusColor: newStatus.color,
-        statusIcon: newStatus.icon,
-        statusType: newStatus.type,
-      };
-    });
-  }, [projects, optimisticMoves, statuses]);
-
-  // Clear optimistic moves when server data catches up
-  React.useEffect(() => {
-    if (optimisticMoves.size === 0) return;
-    setOptimisticMoves(prev => {
-      const next = new Map(prev);
-      for (const [projectId, targetStatusId] of prev) {
-        const project = projects.find(p => p.id === projectId);
-        if (project && project.statusId === targetStatusId) {
-          next.delete(projectId);
-        }
-      }
-      return next.size === prev.size ? prev : next;
-    });
-  }, [projects, optimisticMoves]);
 
   // Group projects by status
   const columns = React.useMemo(() => {
     return sortedStatuses.map(status => ({
       status,
-      projects: displayProjects.filter(p => p.statusId === status._id),
+      projects: projects.filter(p => p.statusId === status._id),
     }));
-  }, [sortedStatuses, displayProjects]);
+  }, [sortedStatuses, projects]);
 
   const activeProject = activeId
-    ? (displayProjects.find(p => p.id === activeId) ?? null)
+    ? (projects.find(p => p.id === activeId) ?? null)
     : null;
 
   function handleDragStart(event: DragStartEvent) {
@@ -129,7 +91,6 @@ export function ProjectsKanban({
     const targetStatus = sortedStatuses.find(s => s._id === targetStatusId);
     if (!targetStatus || project.statusId === targetStatusId) return;
 
-    setOptimisticMoves(prev => new Map(prev).set(projectId, targetStatusId));
     onStatusChange(projectId, targetStatusId);
   }
 

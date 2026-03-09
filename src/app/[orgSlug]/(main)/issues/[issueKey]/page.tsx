@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Circle, Save, X, Pencil } from 'lucide-react';
+import { ArrowLeft, Circle, Save, X, Pencil, Trash2 } from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -36,7 +37,8 @@ import {
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { IssueActivityFeed } from '@/components/activity/issue-activity-feed';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
-import { useOptimisticValue } from '@/hooks/use-optimistic';
+import { useConfirm } from '@/hooks/use-confirm';
+import { updateQuery } from '@/lib/optimistic-updates';
 
 interface IssueViewPageProps {
   params: Promise<{ orgSlug: string; issueKey: string }>;
@@ -112,6 +114,7 @@ function IssueLoadingSkeleton() {
 }
 
 export default function IssueViewPage({ params }: IssueViewPageProps) {
+  const router = useRouter();
   const [resolvedParams, setResolvedParams] = useState<{
     orgSlug: string;
     issueKey: string;
@@ -137,6 +140,8 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
   const [isUpdatingDescription, setIsUpdatingDescription] = useState(false);
   const [isUpdatingEstimates, setIsUpdatingEstimates] = useState(false);
+  const [isDeletingIssue, setIsDeletingIssue] = useState(false);
+  const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
 
   const issue = useQuery(
     api.issues.queries.getByKey,
@@ -144,12 +149,11 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
       ? { orgSlug: resolvedParams.orgSlug, issueKey: resolvedParams.issueKey }
       : 'skip',
   );
-  const [displayTitle, setOptimisticTitle] = useOptimisticValue(
-    issue?.title ?? '',
-  );
-  const [displayDescription, setOptimisticDescription] = useOptimisticValue(
-    issue?.description ?? '',
-  );
+  const issueQueryArgs = resolvedParams
+    ? { orgSlug: resolvedParams.orgSlug, issueKey: resolvedParams.issueKey }
+    : null;
+  const displayTitle = issue?.title ?? '';
+  const displayDescription = issue?.description ?? '';
 
   const states = useQuery(
     api.organizations.queries.listIssueStates,
@@ -172,25 +176,155 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
   );
 
-  const updateTitleMutation = useMutation(api.issues.mutations.updateTitle);
+  const updateTitleMutation = useMutation(
+    api.issues.mutations.updateTitle,
+  ).withOptimisticUpdate((store, args) => {
+    if (!issueQueryArgs) return;
+    updateQuery(
+      store,
+      api.issues.queries.getByKey,
+      issueQueryArgs,
+      current => ({
+        ...current,
+        title: args.title,
+      }),
+    );
+  });
   const updateDescriptionMutation = useMutation(
     api.issues.mutations.updateDescription,
-  );
+  ).withOptimisticUpdate((store, args) => {
+    if (!issueQueryArgs) return;
+    updateQuery(
+      store,
+      api.issues.queries.getByKey,
+      issueQueryArgs,
+      current => ({
+        ...current,
+        description: args.description ?? undefined,
+      }),
+    );
+  });
   const updateEstimatesMutation = useMutation(
     api.issues.mutations.updateEstimatedTimes,
   );
-  const changeTeamMutation = useMutation(api.issues.mutations.changeTeam);
-  const changeProjectMutation = useMutation(api.issues.mutations.changeProject);
+  const deleteIssueMutation = useMutation(api.issues.mutations.deleteIssue);
+  const changeTeamMutation = useMutation(
+    api.issues.mutations.changeTeam,
+  ).withOptimisticUpdate((store, args) => {
+    if (!issueQueryArgs) return;
+    updateQuery(
+      store,
+      api.issues.queries.getByKey,
+      issueQueryArgs,
+      current => ({
+        ...current,
+        teamId: args.teamId ?? undefined,
+      }),
+    );
+  });
+  const changeProjectMutation = useMutation(
+    api.issues.mutations.changeProject,
+  ).withOptimisticUpdate((store, args) => {
+    if (!issueQueryArgs) return;
+    const nextProject =
+      projects?.find(
+        project => String(project._id) === String(args.projectId),
+      ) ?? null;
+    updateQuery(
+      store,
+      api.issues.queries.getByKey,
+      issueQueryArgs,
+      current => ({
+        ...current,
+        projectId: args.projectId ?? undefined,
+        project: nextProject,
+      }),
+    );
+  });
   const changePriorityMutation = useMutation(
     api.issues.mutations.changePriority,
-  );
+  ).withOptimisticUpdate((store, args) => {
+    if (!issueQueryArgs) return;
+    const nextPriority =
+      priorities?.find(
+        priority => String(priority._id) === String(args.priorityId),
+      ) ?? null;
+    updateQuery(
+      store,
+      api.issues.queries.getByKey,
+      issueQueryArgs,
+      current => ({
+        ...current,
+        priorityId: args.priorityId,
+        priority: nextPriority,
+      }),
+    );
+  });
   const changeAssignmentStateMutation = useMutation(
     api.issues.mutations.changeAssignmentState,
-  );
+  ).withOptimisticUpdate((store, args) => {
+    if (!issue) return;
+    const nextState = states?.find(
+      state => String(state._id) === String(args.stateId),
+    );
+    updateQuery(
+      store,
+      api.issues.queries.getAssignments,
+      { issueId: issue._id },
+      current =>
+        current.map(assignment =>
+          String(assignment._id) === String(args.assignmentId)
+            ? {
+                ...assignment,
+                stateId: args.stateId,
+                state: nextState
+                  ? {
+                      _id: nextState._id,
+                      _creationTime:
+                        assignment.state?._creationTime ??
+                        nextState._creationTime ??
+                        0,
+                      organizationId: nextState.organizationId,
+                      name: nextState.name,
+                      type: nextState.type,
+                      color: nextState.color,
+                      icon: nextState.icon,
+                      position: nextState.position,
+                    }
+                  : null,
+              }
+            : assignment,
+        ),
+    );
+  });
   const changeVisibilityMutation = useMutation(
     api.issues.mutations.changeVisibility,
-  );
-  const updateIssueParentMutation = useMutation(api.issues.mutations.update);
+  ).withOptimisticUpdate((store, args) => {
+    if (!issueQueryArgs) return;
+    updateQuery(
+      store,
+      api.issues.queries.getByKey,
+      issueQueryArgs,
+      current => ({
+        ...current,
+        visibility: args.visibility,
+      }),
+    );
+  });
+  const updateIssueParentMutation = useMutation(
+    api.issues.mutations.update,
+  ).withOptimisticUpdate((store, args) => {
+    if (!issueQueryArgs) return;
+    updateQuery(
+      store,
+      api.issues.queries.getByKey,
+      issueQueryArgs,
+      current => ({
+        ...current,
+        parentIssueId: args.data.parentIssueId,
+      }),
+    );
+  });
 
   const assignments = useQuery(
     api.issues.queries.getAssignments,
@@ -224,6 +358,10 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     resolvedParams?.orgSlug || '',
     PERMISSIONS.ISSUE_RELATION_UPDATE,
   );
+  const { isAllowed: canDeleteIssue } = usePermissionCheck(
+    resolvedParams?.orgSlug || '',
+    PERMISSIONS.ISSUE_DELETE,
+  );
 
   useEffect(() => {
     if (assignments && assignments.length > 0) {
@@ -256,7 +394,6 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     const nextTitle = titleValue.trim();
     if (!nextTitle) return;
     setIsUpdatingTitle(true);
-    setOptimisticTitle(nextTitle);
     setTitleValue(nextTitle);
     setEditingTitle(false);
     try {
@@ -273,7 +410,6 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     if (!user) return;
     const nextDescription = descriptionValue.trim();
     setIsUpdatingDescription(true);
-    setOptimisticDescription(nextDescription);
     setDescriptionValue(nextDescription);
     setEditingDescription(false);
     try {
@@ -346,10 +482,29 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     });
   };
 
+  const handleDeleteIssue = async () => {
+    if (!issue || !resolvedParams || !canDeleteIssue) return;
+    const ok = await confirmDelete({
+      title: 'Delete issue',
+      description:
+        'This will permanently delete the issue and cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    setIsDeletingIssue(true);
+    try {
+      await deleteIssueMutation({ issueId: issue._id });
+      router.push(`/${resolvedParams.orgSlug}/issues`);
+    } finally {
+      setIsDeletingIssue(false);
+    }
+  };
+
   return (
     <div className='bg-background h-full overflow-y-auto'>
       {/* Page Grid: main area + sidebar */}
-      <div className='flex h-full flex-col lg:flex-row'>
+      <div className='flex min-h-full flex-col lg:flex-row'>
         {/* LEFT COLUMN - Main Content */}
         <div className='min-w-0 flex-1'>
           {/* Header */}
@@ -465,6 +620,23 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                   displayMode='iconWhenUnselected'
                   className='border-none bg-transparent shadow-none'
                 />
+              </PermissionAwareSelector>
+              <div className='bg-muted-foreground/20 h-4 w-px' />
+              <PermissionAwareSelector
+                orgSlug={resolvedParams.orgSlug}
+                permission={PERMISSIONS.ISSUE_DELETE}
+                fallbackMessage="You don't have permission to delete this issue"
+              >
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='text-destructive hover:bg-destructive/10 hover:text-destructive h-6 gap-1 px-2'
+                  disabled={!canDeleteIssue || isDeletingIssue}
+                  onClick={() => void handleDeleteIssue()}
+                >
+                  <Trash2 className='size-3.5' />
+                  <span className='hidden sm:inline'>Delete</span>
+                </Button>
               </PermissionAwareSelector>
             </div>
           </div>
@@ -935,6 +1107,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
           </div>
         </div>
       </div>
+      <ConfirmDeleteDialog />
     </div>
   );
 }

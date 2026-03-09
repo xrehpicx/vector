@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useOptimisticValue } from '@/hooks/use-optimistic';
 // UI primitives
 import { Button } from '@/components/ui/button';
 import {
@@ -132,7 +131,7 @@ export function TeamSelector({
 }: TeamSelectorProps & { align?: 'start' | 'center' | 'end' }) {
   const [open, setOpen] = useState(false);
   const { viewOnly } = useAccess();
-  const [displayTeam, setOptimisticTeam] = useOptimisticValue(selectedTeam);
+  const displayTeam = selectedTeam;
 
   const hasSelection = displayTeam !== '';
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
@@ -177,7 +176,6 @@ export function TeamSelector({
                 value=''
                 onSelect={() => {
                   if (!viewOnly) {
-                    setOptimisticTeam('');
                     onTeamSelect('');
                     setOpen(false);
                   }
@@ -208,7 +206,6 @@ export function TeamSelector({
                     value={team.name}
                     onSelect={() => {
                       if (!viewOnly) {
-                        setOptimisticTeam(teamId);
                         onTeamSelect(teamId);
                         setOpen(false);
                       }

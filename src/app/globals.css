@@ -228,6 +228,181 @@
   );
 }
 
+/* Document editor prose refinements (Linear-inspired) */
+.document-prose .tiptap {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 450;
+  line-height: 24px;
+  letter-spacing: -0.1px;
+  color: var(--foreground);
+}
+
+.document-prose .tiptap > *:first-child {
+  margin-top: 0;
+}
+
+.document-prose .tiptap h1 {
+  font-family: var(--font-sans);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 38.4px;
+  letter-spacing: -0.1px;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.document-prose .tiptap h2 {
+  font-family: var(--font-sans);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: 0.05px;
+  margin-top: 1.75rem;
+  margin-bottom: 0.375rem;
+}
+
+.document-prose .tiptap h3 {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: 0.1px;
+  margin-top: 1.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.document-prose .tiptap p {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.document-prose .tiptap ul,
+.document-prose .tiptap ol {
+  padding-left: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.document-prose .tiptap ul li,
+.document-prose .tiptap ol li {
+  margin-bottom: 0.125rem;
+}
+
+.document-prose .tiptap ul li::marker {
+  color: var(--muted-foreground);
+}
+
+.document-prose .tiptap ol li::marker {
+  color: var(--muted-foreground);
+  font-size: 0.9em;
+}
+
+.document-prose .tiptap code,
+.document-prose .tiptap.prose code,
+.document-prose .tiptap.prose-sm code {
+  font-family:
+    'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace !important;
+  font-size: 0.9375em;
+  font-weight: 450;
+  letter-spacing: -0.1px;
+  background-color: var(--muted);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.document-prose .tiptap pre {
+  background-color: var(--muted);
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+.document-prose .tiptap pre code,
+.document-prose .tiptap.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.9375em;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+
+.document-prose .tiptap blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.document-prose .tiptap hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+
+.document-prose .tiptap a:not(.mention-chip) {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.document-prose .tiptap a:not(.mention-chip):hover {
+  text-decoration-thickness: 2px;
+}
+
+.document-prose .tiptap img {
+  border-radius: 8px;
+  margin: 1rem 0;
+  max-width: 100%;
+}
+
+.document-prose .tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  caption-side: bottom;
+  font-size: 0.875rem;
+}
+
+.document-prose .tiptap tr {
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.15s;
+}
+
+.document-prose .tiptap tbody tr:last-child {
+  border-bottom: none;
+}
+
+.document-prose .tiptap tbody tr:hover {
+  background-color: color-mix(in oklch, var(--muted) 50%, transparent);
+}
+
+.document-prose .tiptap th {
+  height: 2.5rem;
+  padding: 0.5rem;
+  text-align: left;
+  vertical-align: middle;
+  font-weight: 500;
+  font-size: 0.875em;
+  color: var(--foreground);
+  white-space: nowrap;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.document-prose .tiptap td {
+  padding: 0.5rem;
+  vertical-align: middle;
+  border: none;
+}
+
+.document-prose .tiptap strong {
+  font-weight: 600;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

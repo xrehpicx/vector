@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import { useQuery } from '@/lib/convex';
 import { api } from '@/lib/convex';
+import { usePathname } from 'next/navigation';
 import { UserSettingsSidebar } from '@/components/settings/user-settings-sidebar';
 import { UserMenu } from '@/components/user-menu';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,19 +18,19 @@ interface SettingsLayoutProps {
 export default function SettingsLayout({ children }: SettingsLayoutProps) {
   const userQuery = useQuery(api.users.currentUser);
   const user = userQuery.data;
+  const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   useEffect(() => {
     if (userQuery.isError) {
-      // Handle error case
       console.error('Error loading user:', userQuery.error);
       return;
     }
 
     if (!userQuery.isPending && user === null) {
-      redirect('/auth/login');
+      redirect(`/auth/login?redirectTo=${encodeURIComponent(pathname)}`);
     }
-  }, [user, userQuery.isPending, userQuery.isError, userQuery.error]);
+  }, [user, userQuery.isPending, userQuery.isError, userQuery.error, pathname]);
 
   if (userQuery.isPending) {
     return (

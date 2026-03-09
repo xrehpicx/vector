@@ -1,59 +1,64 @@
 # Local Setup
 
-This guide walks through the current local development setup for Vector.
+This guide walks through the current local development workflow for Vector.
 
 ## Prerequisites
 
-- Node.js `24.x`
+- Node.js `>=20.19.0`
 - `pnpm`
 - A local Convex development deployment
 
 ## Installation
 
-1.  **Install dependencies**
+1. **Install dependencies**
 
-    ```bash
-    pnpm install
-    ```
+   ```bash
+   pnpm install
+   ```
 
-2.  **Set up environment variables**
+2. **Create local environment variables**
 
-    Copy the sample environment file to a new `.env.local` file:
+   ```bash
+   cp sample.env .env.local
+   ```
 
-    ```bash
-    cp sample.env .env.local
-    ```
+3. **Update `.env.local`**
 
-    Update the values in `.env.local` for your local environment. See [Environment Variables](./02-environment-variables.md) for details.
+   Minimum local app setup usually includes:
+   - `NEXT_PUBLIC_APP_URL=http://localhost:3000`
+   - `NEXT_PUBLIC_SITE_URL=http://localhost:3000`
+   - `BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000`
+   - `BETTER_AUTH_SECRET=<your-secret>`
+   - `NEXT_PUBLIC_CONVEX_URL=<your-local-convex-url>`
+   - `CONVEX_SITE_URL=http://127.0.0.1:3211`
+   - `NEXT_PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3211`
 
-3.  **Start Convex**
+   See [Environment Variables](./02-environment-variables.md) for the full breakdown.
 
-    Run the local Convex backend in a separate terminal:
+4. **Start Convex**
 
-    ```bash
-    pnpm run convex:dev
-    ```
+   ```bash
+   pnpm run convex:dev
+   ```
 
-    This handles local Convex development and keeps generated files up to date.
+   Keep this running while you work on Convex functions or schema changes so generated bindings stay current.
 
-4.  **Start Next.js**
+5. **Start Next.js**
 
-    In another terminal, start the app:
+   ```bash
+   pnpm run dev
+   ```
 
-    ```bash
-    pnpm dev
-    ```
+6. **Open the app**
 
-    The application will be available at [http://localhost:3000](http://localhost:3000).
+   Visit [http://localhost:3000](http://localhost:3000).
 
-5.  **Bootstrap the first admin**
+7. **Bootstrap the first admin**
 
-    On a fresh local instance, open [http://localhost:3000/setup-admin](http://localhost:3000/setup-admin) to create the initial administrator account.
-
----
+   On a fresh local instance, open [http://localhost:3000/setup-admin](http://localhost:3000/setup-admin) to create the initial administrator account.
 
 ## Notes
 
 - `pnpm run project:setup` is available as a lightweight bootstrap helper for dependencies and Git hooks.
-- If you change Convex functions or schema, keep `pnpm run convex:dev` running so generated bindings stay current.
 - Optional SMTP settings can be left unset during local development.
+- Optional VAPID settings are only needed if you want browser push notifications locally.

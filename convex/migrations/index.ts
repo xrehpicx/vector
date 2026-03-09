@@ -7,6 +7,7 @@ import {
   resolveIssueScope,
   snapshotForIssue,
 } from '../activities/lib';
+import { buildIssueSearchTextFromIssue } from '../issues/search';
 import {
   createDefaultProjectRoles,
   createDefaultTeamRoles,
@@ -15,12 +16,12 @@ import {
   syncTeamRoleAssignment,
 } from '../roles';
 
-const knownPermissions = new Set<Permission>(PERMISSION_VALUES);
+const knownPermissions = new Set<string>(PERMISSION_VALUES);
 
 function assertKnownPermission(
   permission: string,
 ): asserts permission is Permission {
-  if (!knownPermissions.has(permission as Permission)) {
+  if (!knownPermissions.has(permission)) {
     throw new ConvexError(`UNKNOWN_PERMISSION:${permission}`);
   }
 }
@@ -413,6 +414,30 @@ export const backfillActivityEvents = internalMutation({
     return {
       success: true,
       inserted,
+    };
+  },
+});
+
+export const backfillIssueSearchText = internalMutation({
+  args: {},
+  handler: async ctx => {
+    const issues = await ctx.db.query('issues').collect();
+    let updated = 0;
+
+    for (const issue of issues) {
+      const searchText = buildIssueSearchTextFromIssue(issue);
+      if (issue.searchText === searchText) {
+        continue;
+      }
+
+      await ctx.db.patch('issues', issue._id, { searchText });
+      updated += 1;
+    }
+
+    return {
+      success: true,
+      scanned: issues.length,
+      updated,
     };
   },
 });

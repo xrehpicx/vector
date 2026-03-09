@@ -1,5 +1,7 @@
 # Convex Migration Documentation
 
+> Historical reference only. This directory documents the earlier migration from legacy architecture to the current Convex-based stack. It should not be treated as the source of truth for current setup or contributor workflow.
+
 > **Goal:** Migrate the AIKP code-base from Better-Auth + Drizzle/PostgreSQL + tRPC + S3 **to** Convex Auth + Convex Database + Convex Functions + Convex Storage **without altering any UI/UX or visual design**.
 
 ## Overview

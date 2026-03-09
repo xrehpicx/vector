@@ -1,24 +1,32 @@
 # API and Routing
 
-This document covers conventions for creating tRPC routers and API endpoints.
+This document covers current routing and backend-boundary conventions.
 
-## tRPC Routers
+## App Router Conventions
 
-- **File Naming**: All tRPC router source files must have the `.router.ts` suffix (e.g., `project.router.ts`). This is important for automatic code generation and tooling.
-- **Static Imports**: Always use static `import` statements at the top of your router files. Avoid dynamic `await import()` as it prevents proper type checking and tree-shaking.
+- Organization-scoped application routes live under `/[orgSlug]/...`.
+- Global routes such as auth and bootstrap flows live outside the org segment.
+- Use route handlers under `src/app/api/...` only for HTTP boundaries such as auth callbacks or file proxying.
 
-  ```typescript
-  // Good
-  import { projectRouter } from './project.router';
+Examples:
 
-  // Bad
-  const projectRouter = await import('./project.router');
-  ```
+- `src/app/[orgSlug]/(main)/issues/page.tsx`
+- `src/app/[orgSlug]/(main)/projects/[projectKey]/project-view-client.tsx`
+- `src/app/api/auth/[...all]/route.ts`
 
-## Route Convention
+## Convex Backend Conventions
 
-- **Organization-Scoped Routes**: All routes that belong to a specific organization should be nested under the `/[orgId]/` dynamic segment in the App Router.
-  - Example: `/<orgId>/dashboard`, `/<orgId>/projects/[projectId]`
-- **Global Routes**: Routes that are not specific to an organization (e.g., user profile settings, authentication pages) should live outside of the `/[orgId]/` segment.
-  - Example: `/settings/profile`, `/auth/login`
-- **Proxy**: The `src/proxy.ts` file contains logic to protect organization-scoped routes and redirect unauthenticated users to the login page.
+- Group backend functions by domain under `convex/<domain>/...`.
+- Use `queries.ts` for reads and `mutations.ts` for writes within a domain.
+- Keep shared backend helpers under `convex/_shared/...`.
+- Prefer using generated API references (`api.*`) instead of hand-rolled request layers.
+
+## Route Protection
+
+- `src/proxy.ts` handles high-level route protection and auth redirects.
+- Fine-grained authorization must still be enforced in Convex backend code.
+
+## Naming
+
+- Use `orgSlug` in routes and route params where the URL is organization-scoped.
+- Prefer resource keys in URLs when the product already exposes them, for example `issueKey`, `projectKey`, or `teamKey`.

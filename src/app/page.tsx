@@ -28,6 +28,8 @@ export default function Home() {
       // Authenticated
       if (hasOrganizations && userOrgs?.[0]?.slug) {
         redirect(`/${userOrgs[0].slug}/issues`);
+      } else if (user?.role === 'platform_admin') {
+        redirect('/admin');
       } else {
         redirect('/org-setup');
       }

@@ -132,10 +132,14 @@ For loading:
 - match the eventual row layout
 - avoid `Loading...` text for row collections
 
+If a list surface needs a compact indeterminate loader outside the row skeleton state, use `BarsSpinner` from `src/components/bars-spinner.tsx` as the default spinner.
+
 For empty states:
 
 - keep them simple
 - use them only when there is truly no operational content to show
+
+If an empty or transitional centered state includes one short line explaining a useful capability, shortcut, or interesting system behavior, `GradientWaveText` from `src/components/gradient-wave-text.tsx` is the default emphasis treatment for that small supporting text.
 
 Operational screens should default to rows, not giant empty-state illustrations.
 

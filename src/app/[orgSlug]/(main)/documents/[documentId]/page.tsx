@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +14,9 @@ import {
   VisibilitySelector,
   type VisibilityState,
 } from '@/components/ui/visibility-selector';
+import { UserAvatar } from '@/components/user-avatar';
+import { UserProfilePopover } from '@/components/user-profile-popover';
+import { MentionClickHandler } from '@/components/mention-click-handler';
 import { withIds } from '@/lib/convex-helpers';
 import type { Id } from '@/convex/_generated/dataModel';
 import { usePermissionCheck } from '@/components/ui/permission-aware';
@@ -33,11 +36,15 @@ function DocumentLoadingSkeleton() {
             <Skeleton className='h-4 w-20' />
           </div>
         </div>
-        <div className='mx-auto max-w-3xl px-6 py-10'>
+        <div className='mx-auto max-w-[720px] px-6 py-12 sm:px-8'>
+          <Skeleton className='mb-2 h-8 w-2/3' />
+          <Skeleton className='mb-8 h-3 w-40' />
           <div className='space-y-3'>
             <Skeleton className='h-4 w-full' />
             <Skeleton className='h-4 w-5/6' />
             <Skeleton className='h-4 w-4/5' />
+            <Skeleton className='mt-6 h-4 w-full' />
+            <Skeleton className='h-4 w-3/4' />
           </div>
         </div>
       </div>
@@ -62,6 +69,36 @@ function extractTitle(markdown: string): string | null {
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
+
+const HEARTBEAT_INTERVAL = 15_000; // 15 seconds
+
+function useDocumentPresence(documentId: string | null) {
+  const heartbeatMutation = useMutation(api.documents.presence.heartbeat);
+  const leaveMutation = useMutation(api.documents.presence.leave);
+  const viewers = useQuery(
+    api.documents.presence.getViewers,
+    documentId ? { documentId: documentId as Id<'documents'> } : 'skip',
+  );
+
+  useEffect(() => {
+    if (!documentId) return;
+    const docId = documentId as Id<'documents'>;
+
+    // Initial heartbeat
+    void heartbeatMutation({ documentId: docId });
+
+    const interval = setInterval(() => {
+      void heartbeatMutation({ documentId: docId });
+    }, HEARTBEAT_INTERVAL);
+
+    return () => {
+      clearInterval(interval);
+      void leaveMutation({ documentId: docId });
+    };
+  }, [documentId, heartbeatMutation, leaveMutation]);
+
+  return viewers ?? [];
+}
 
 export default function DocumentDetailPage({
   params,
@@ -97,6 +134,7 @@ export default function DocumentDetailPage({
   const teams = teamsData ? withIds(teamsData) : [];
 
   const updateMutation = useMutation(api.documents.mutations.update);
+  const viewers = useDocumentPresence(resolvedParams?.documentId ?? null);
 
   const { isAllowed: canEdit } = usePermissionCheck(
     resolvedParams?.orgSlug || '',
@@ -217,16 +255,22 @@ export default function DocumentDetailPage({
     <div className='bg-background h-full overflow-y-auto'>
       <div className='h-full'>
         {/* Slim header bar */}
-        <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 flex items-center justify-between border-b px-2 backdrop-blur'>
-          <div className='flex h-8 items-center gap-2'>
+        <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 flex items-center justify-between border-b px-2 backdrop-blur'>
+          <div className='flex h-8 items-center gap-1.5'>
             <MobileNavTrigger />
             <Link
               href={`/${resolvedParams.orgSlug}/documents`}
-              className='text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors'
+              className='text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs transition-colors'
             >
               <ArrowLeft className='size-3' />
               <span className='hidden sm:inline'>Documents</span>
             </Link>
+            <span className='text-muted-foreground/50 hidden text-xs sm:inline'>
+              /
+            </span>
+            <span className='text-foreground hidden max-w-48 truncate text-xs font-medium sm:inline'>
+              {document.title || 'Untitled'}
+            </span>
             <TeamSelector
               teams={teams}
               selectedTeam={document.teamId || ''}
@@ -236,17 +280,50 @@ export default function DocumentDetailPage({
             />
           </div>
 
-          <div className='flex items-center gap-1.5'>
+          <div className='flex items-center gap-2'>
+            {/* Live viewers */}
+            {viewers.length > 0 && (
+              <div className='flex -space-x-1.5'>
+                {viewers.slice(0, 5).map(viewer =>
+                  viewer ? (
+                    <UserProfilePopover
+                      key={viewer._id}
+                      name={viewer.name}
+                      email={viewer.email}
+                      image={viewer.image}
+                      userId={viewer._id}
+                      side='bottom'
+                      align='end'
+                    >
+                      <button type='button' className='cursor-pointer'>
+                        <UserAvatar
+                          name={viewer.name}
+                          email={viewer.email}
+                          image={viewer.image}
+                          userId={viewer._id}
+                          size='sm'
+                          className='ring-background size-5 ring-[1.5px]'
+                        />
+                      </button>
+                    </UserProfilePopover>
+                  ) : null,
+                )}
+                {viewers.length > 5 && (
+                  <div className='ring-background bg-muted text-muted-foreground flex size-5 items-center justify-center rounded-full text-[9px] ring-[1.5px]'>
+                    +{viewers.length - 5}
+                  </div>
+                )}
+              </div>
+            )}
+
             {saveStatus === 'saving' && (
               <span className='text-muted-foreground flex items-center gap-1 text-xs'>
                 <Loader2 className='size-3 animate-spin' />
-                Saving
               </span>
             )}
             {saveStatus === 'saved' && (
               <span className='text-muted-foreground flex items-center gap-1 text-xs'>
                 <Check className='size-3' />
-                Saved
               </span>
             )}
             <span className='text-muted-foreground hidden text-xs sm:inline'>
@@ -264,19 +341,23 @@ export default function DocumentDetailPage({
         </div>
 
         {/* Full-page editor */}
-        <div className='mx-auto max-w-3xl px-6 py-8 sm:px-8 sm:py-12'>
-          <RichEditor
-            value={contentValue}
-            onChange={handleChange}
-            mode='full'
-            disabled={!canEdit}
-            placeholder='Start writing... Use headings, lists, and more.'
-            orgSlug={resolvedParams.orgSlug}
-            className='notion-editor'
-          />
+        <div className='mx-auto max-w-[720px] px-6 py-10 sm:px-8 sm:py-14'>
+          <MentionClickHandler>
+            <div className='document-prose'>
+              <RichEditor
+                value={contentValue}
+                onChange={handleChange}
+                mode='full'
+                disabled={!canEdit}
+                placeholder='Start writing... Use headings, lists, and more.'
+                orgSlug={resolvedParams.orgSlug}
+                className='notion-editor'
+              />
+            </div>
+          </MentionClickHandler>
 
           {/* Activity Feed */}
-          <div className='mt-16 border-t pt-8'>
+          <div className='mt-20 border-t pt-8'>
             <DocumentActivityFeed
               orgSlug={resolvedParams.orgSlug}
               documentId={document._id}

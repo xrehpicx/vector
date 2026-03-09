@@ -44,10 +44,40 @@ export default defineSchema({
   })
     .index('email', ['email'])
     .index('phone', ['phone'])
+    .index('by_role', ['role'])
     .index('by_username', ['username'])
     .searchIndex('by_name_email_username', {
       searchField: 'name',
     }),
+
+  siteSettings: defineTable({
+    signupBlockedEmailDomains: v.optional(v.array(v.string())),
+    signupAllowedEmailDomains: v.optional(v.array(v.string())),
+    signupDisposableDomainSync: v.optional(
+      v.object({
+        lastStartedAt: v.optional(v.number()),
+        lastSyncedAt: v.optional(v.number()),
+        lastFailureAt: v.optional(v.number()),
+        lastFailureMessage: v.optional(v.string()),
+        totalRulesCount: v.number(),
+        fetchedCount: v.number(),
+        insertedCount: v.number(),
+        updatedCount: v.number(),
+        deletedCount: v.number(),
+        skippedCount: v.number(),
+      }),
+    ),
+  }),
+
+  signupEmailDomainRules: defineTable({
+    domain: v.string(),
+    type: v.union(v.literal('blocked'), v.literal('allowed')),
+    source: v.union(v.literal('manual'), v.literal('upstream_disposable')),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_source', ['source'])
+    .index('by_type_domain', ['type', 'domain']),
 
   // Organizations (equivalent to Drizzle 'organization' table)
   organizations: defineTable({
@@ -381,6 +411,7 @@ export default defineSchema({
     sequenceNumber: v.number(), // monotonic per team
     title: v.string(),
     description: v.optional(v.string()),
+    searchText: v.optional(v.string()),
     priorityId: v.optional(v.id('issuePriorities')),
     teamId: v.optional(v.id('teams')),
     projectId: v.optional(v.id('projects')),
@@ -416,6 +447,10 @@ export default defineSchema({
     .searchIndex('search_title', {
       searchField: 'title',
       filterFields: ['organizationId'],
+    })
+    .searchIndex('search_text', {
+      searchField: 'searchText',
+      filterFields: ['organizationId', 'projectId', 'teamId'],
     }),
 
   // Issue assignees (equivalent to Drizzle 'issueAssignee' table)
@@ -477,10 +512,19 @@ export default defineSchema({
     payload: v.optional(v.any()),
   }).index('by_issue', ['issueId']),
 
+  documentFolders: defineTable({
+    organizationId: v.id('organizations'),
+    name: v.string(),
+    description: v.optional(v.string()),
+    color: v.optional(v.string()),
+    createdBy: v.id('users'),
+  }).index('by_organizationId', ['organizationId']),
+
   documents: defineTable({
     organizationId: v.id('organizations'),
     title: v.string(),
     content: v.optional(v.string()),
+    folderId: v.optional(v.id('documentFolders')),
     teamId: v.optional(v.id('teams')),
     projectId: v.optional(v.id('projects')),
     createdBy: v.id('users'),
@@ -495,6 +539,7 @@ export default defineSchema({
     ),
   })
     .index('by_organizationId', ['organizationId'])
+    .index('by_folder', ['folderId'])
     .index('by_team', ['teamId'])
     .index('by_project', ['projectId'])
     .index('by_org_team', ['organizationId', 'teamId'])
@@ -503,6 +548,14 @@ export default defineSchema({
       searchField: 'title',
       filterFields: ['organizationId'],
     }),
+
+  documentPresence: defineTable({
+    documentId: v.id('documents'),
+    userId: v.id('users'),
+    lastSeen: v.number(),
+  })
+    .index('by_document', ['documentId'])
+    .index('by_document_user', ['documentId', 'userId']),
 
   activityEvents: defineTable({
     organizationId: v.id('organizations'),

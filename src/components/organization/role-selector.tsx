@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useOptimisticValue } from '@/hooks/use-optimistic';
 import { OrgRoleBadge } from '@/components/organization/role-badge';
 import { useMutation } from 'convex/react';
 import { api } from '@/lib/convex';
@@ -20,7 +19,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { Check } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { updateOrgMemberRole, updateQuery } from '@/lib/optimistic-updates';
 
 import type { Id } from '../../../convex/_generated/dataModel';
 
@@ -48,22 +47,28 @@ export function RoleSelector({
 }: RoleSelectorProps) {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [displayRole, setOptimisticRole] = useOptimisticValue(currentRole);
-  const router = useRouter();
-  const mutation = useMutation(api.organizations.mutations.updateMemberRole);
+  const displayRole = currentRole;
+  const mutation = useMutation(
+    api.organizations.mutations.updateMemberRole,
+  ).withOptimisticUpdate((store, args) => {
+    updateQuery(
+      store,
+      api.organizations.queries.listMembersWithRoles,
+      { orgSlug: args.orgSlug },
+      current => updateOrgMemberRole(current, String(args.userId), args.role),
+    );
+  });
 
   const handleSelect = async (role: RoleValue) => {
     if (role === displayRole) return;
 
     try {
-      setOptimisticRole(role);
       setIsLoading(true);
       await mutation({
         orgSlug,
         userId: userId as Id<'users'>,
         role,
       });
-      router.refresh();
       setOpen(false);
     } catch (error) {
       console.error('Failed to update role:', error);

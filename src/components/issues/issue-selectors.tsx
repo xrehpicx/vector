@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useOptimisticValue } from '@/hooks/use-optimistic';
 
 // UI primitives
 import { Button } from '@/components/ui/button';
@@ -136,8 +135,7 @@ export function ProjectSelector({
 }: ProjectSelectorProps & { align?: 'start' | 'center' | 'end' }) {
   const [open, setOpen] = useState(false);
   const { viewOnly } = useAccess();
-  const [displayProject, setOptimisticProject] =
-    useOptimisticValue(selectedProject);
+  const displayProject = selectedProject;
 
   // Always render selector even when no projects to make the control discoverable.
 
@@ -184,7 +182,6 @@ export function ProjectSelector({
                 value=''
                 onSelect={() => {
                   if (!viewOnly) {
-                    setOptimisticProject('');
                     onProjectSelect('');
                     setOpen(false);
                   }
@@ -214,7 +211,6 @@ export function ProjectSelector({
                     value={project.name}
                     onSelect={() => {
                       if (!viewOnly) {
-                        setOptimisticProject(project._id);
                         onProjectSelect(project._id);
                         setOpen(false);
                       }
@@ -273,7 +269,7 @@ export function StateSelector({
 }: StateSelectorProps & { align?: 'start' | 'center' | 'end' }) {
   const [open, setOpen] = useState(false);
   const { viewOnly } = useAccess();
-  const [displayState, setOptimisticState] = useOptimisticValue(selectedState);
+  const displayState = selectedState;
 
   // Transform states from API into combobox-friendly structure
   const stateOptions = states.map(s => ({
@@ -343,7 +339,6 @@ export function StateSelector({
                     value={state.label}
                     onSelect={() => {
                       if (!viewOnly) {
-                        setOptimisticState(state.value);
                         onStateSelect(state.value);
                         setOpen(false);
                       }
@@ -409,8 +404,7 @@ export function PrioritySelector({
 }: PrioritySelectorProps & { align?: 'start' | 'center' | 'end' }) {
   const [open, setOpen] = useState(false);
   const { viewOnly } = useAccess();
-  const [displayPriority, setOptimisticPriority] =
-    useOptimisticValue(selectedPriority);
+  const displayPriority = selectedPriority;
 
   if (priorities.length === 0) return null;
 
@@ -455,7 +449,6 @@ export function PrioritySelector({
                     value={priority.name}
                     onSelect={() => {
                       if (!viewOnly) {
-                        setOptimisticPriority(priority._id);
                         onPrioritySelect(priority._id);
                         setOpen(false);
                       }
@@ -524,21 +517,25 @@ export function AssigneeSelector({
   align = 'start',
 }: AssigneeSelectorProps & { align?: 'start' | 'center' | 'end' }) {
   const [open, setOpen] = useState(false);
+  const displayAssignee = selectedAssignee || '';
+  const displayAssignees = selectedAssignees;
 
   if (members.length === 0) return null;
 
   const hasSelection = multiple
-    ? selectedAssignees.length > 0
-    : (selectedAssignee || '') !== '';
+    ? displayAssignees.length > 0
+    : displayAssignee !== '';
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
 
   const handleSelect = (userId: string) => {
     if (multiple && onAssigneesSelect) {
-      const isSelected = selectedAssignees.includes(userId);
+      const isSelected = displayAssignees.includes(userId);
+      const nextAssignees = isSelected
+        ? displayAssignees.filter(id => id !== userId)
+        : [...displayAssignees, userId];
+      onAssigneesSelect(nextAssignees);
       if (isSelected) {
-        onAssigneesSelect(selectedAssignees.filter(id => id !== userId));
-      } else {
-        onAssigneesSelect([...selectedAssignees, userId]);
+        return;
       }
       // Keep popover open for multiple selection
     } else if (onAssigneeSelect) {
@@ -549,16 +546,16 @@ export function AssigneeSelector({
 
   const getDisplayText = () => {
     if (multiple) {
-      if (selectedAssignees.length === 0) return 'Assignees';
-      if (selectedAssignees.length === 1) {
-        const member = members.find(m => m.userId === selectedAssignees[0]);
+      if (displayAssignees.length === 0) return 'Assignees';
+      if (displayAssignees.length === 1) {
+        const member = members.find(m => m.userId === displayAssignees[0]);
         return member?.user?.name || '1 assignee';
       }
-      return `${selectedAssignees.length} assignees`;
+      return `${displayAssignees.length} assignees`;
     } else {
-      if (!selectedAssignee) return 'Assignee';
+      if (!displayAssignee) return 'Assignee';
       return (
-        members.find(m => m.userId === selectedAssignee)?.user?.name ||
+        members.find(m => m.userId === displayAssignee)?.user?.name ||
         'Assignee'
       );
     }
@@ -584,38 +581,32 @@ export function AssigneeSelector({
           <CommandList>
             <CommandEmpty>No member found.</CommandEmpty>
             <CommandGroup>
-              <CommandItem
-                value=''
-                onSelect={() => {
-                  if (!canManageAll && currentUserId !== '') return; // cannot unassign others
-                  if (multiple && onAssigneesSelect) {
-                    onAssigneesSelect([]);
+              {multiple && (
+                <CommandItem
+                  value=''
+                  onSelect={() => {
+                    if (!canManageAll && currentUserId !== '') return; // cannot unassign others
+                    onAssigneesSelect?.([]);
                     setOpen(false);
-                  } else {
-                    handleSelect('');
-                  }
-                }}
-                disabled={!canManageAll && currentUserId !== ''}
-                className={cn(
-                  !canManageAll &&
-                    currentUserId !== '' &&
-                    'pointer-events-none opacity-50',
-                )}
-              >
-                <Check
+                  }}
+                  disabled={!canManageAll && currentUserId !== ''}
                   className={cn(
-                    'mr-2 h-4 w-4',
-                    multiple
-                      ? selectedAssignees.length === 0
-                        ? 'opacity-100'
-                        : 'opacity-0'
-                      : (selectedAssignee || '') === ''
+                    !canManageAll &&
+                      currentUserId !== '' &&
+                      'pointer-events-none opacity-50',
+                  )}
+                >
+                  <Check
+                    className={cn(
+                      'mr-2 h-4 w-4',
+                      displayAssignees.length === 0
                         ? 'opacity-100'
                         : 'opacity-0',
-                  )}
-                />
-                Unassign all
-              </CommandItem>
+                    )}
+                  />
+                  Unassign all
+                </CommandItem>
+              )}
               {members.map(member => (
                 <CommandItem
                   key={member.userId}
@@ -628,10 +619,10 @@ export function AssigneeSelector({
                     className={cn(
                       'mr-2 h-4 w-4',
                       multiple
-                        ? selectedAssignees.includes(member.userId)
+                        ? displayAssignees.includes(member.userId)
                           ? 'opacity-100'
                           : 'opacity-0'
-                        : (selectedAssignee || '') === member.userId
+                        : displayAssignee === member.userId
                           ? 'opacity-100'
                           : 'opacity-0',
                     )}
