@@ -9,18 +9,22 @@ import { NotificationClientBootstrap } from '@/components/notifications/notifica
 import { getToken } from '@/lib/auth-server';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/theme-provider';
+import { FontProvider } from '@/components/font-provider';
 
-const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
+const geist = Geist({
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+});
 
 const urbanist = Urbanist({
-  variable: '--font-title',
+  variable: '--font-urbanist',
   subsets: ['latin'],
 });
 
 const poppins = Poppins({
-  variable: '--font-body',
+  variable: '--font-poppins',
   subsets: ['latin'],
-  weight: ['400'],
+  weight: ['400', '500', '600', '700'],
 });
 
 export const metadata: Metadata = {
@@ -37,23 +41,25 @@ export default async function RootLayout({
   return (
     <html
       lang='en'
-      className={cn('font-sans', geist.variable)}
+      className={cn(geist.variable, urbanist.variable, poppins.variable)}
       suppressHydrationWarning
     >
-      <body className={`${urbanist.variable} ${poppins.variable} antialiased`}>
+      <body className='antialiased'>
         <ThemeProvider
           attribute='class'
           defaultTheme='light'
           disableTransitionOnChange
         >
-          <TopLoaderProvider />
-          <ErrorBoundary>
-            <ConvexAuthProvider initialToken={await getToken()}>
-              <NotificationClientBootstrap />
-              {children}
-              <Toaster />
-            </ConvexAuthProvider>
-          </ErrorBoundary>
+          <FontProvider>
+            <TopLoaderProvider />
+            <ErrorBoundary>
+              <ConvexAuthProvider initialToken={await getToken()}>
+                <NotificationClientBootstrap />
+                {children}
+                <Toaster />
+              </ConvexAuthProvider>
+            </ErrorBoundary>
+          </FontProvider>
         </ThemeProvider>
       </body>
     </html>

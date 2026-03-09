@@ -8,7 +8,13 @@ import {
   DropdownMenuItem,
   DropdownMenuGroup,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -19,17 +25,25 @@ import {
   Settings,
   Shield,
   Sun,
+  Type,
   User,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { UserAvatar } from '@/components/user-avatar';
 import { useTheme } from 'next-themes';
+import {
+  FONT_OPTIONS,
+  type FontFamily,
+  useFontFamily,
+} from '@/components/font-provider';
 
 export function UserMenu() {
   const user = useQuery(api.users.currentUser);
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { fontFamily, setFontFamily } = useFontFamily();
   const isDark = theme === 'dark';
+  const activeFont = FONT_OPTIONS.find(option => option.value === fontFamily);
 
   if (user === undefined || user === null) {
     return null;
@@ -81,6 +95,38 @@ export function UserMenu() {
           )}
           <span>{isDark ? 'Light mode' : 'Dark mode'}</span>
         </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Type className='mr-2 size-3.5' />
+            <span>Font</span>
+            <DropdownMenuShortcut className='mr-4 tracking-normal'>
+              {activeFont?.label}
+            </DropdownMenuShortcut>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className='w-44'>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Font family</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={fontFamily}
+                onValueChange={value => setFontFamily(value as FontFamily)}
+              >
+                {FONT_OPTIONS.map(option => (
+                  <DropdownMenuRadioItem
+                    key={option.value}
+                    value={option.value}
+                  >
+                    <div className='flex min-w-0 flex-col'>
+                      <span>{option.label}</span>
+                      <span className='text-muted-foreground text-xs'>
+                        {option.preview}
+                      </span>
+                    </div>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => router.push('/auth/sign-out')}>
           <LogOut className='mr-2 size-3.5' />
