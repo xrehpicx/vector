@@ -10,7 +10,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-app-sans);
   --font-title: var(--font-title);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -52,6 +52,7 @@
 }
 
 :root {
+  --font-app-sans: var(--font-urbanist);
   --radius: 0.45rem;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.141 0.005 285.823);
@@ -86,38 +87,50 @@
   --foreground: oklch(0.141 0.005 285.823);
 }
 
+html[data-font='geist'] {
+  --font-app-sans: var(--font-geist-sans);
+}
+
+html[data-font='urbanist'] {
+  --font-app-sans: var(--font-urbanist);
+}
+
+html[data-font='poppins'] {
+  --font-app-sans: var(--font-poppins);
+}
+
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.437 0.078 188.216);
-  --primary-foreground: oklch(0.984 0.014 180.72);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
+  --background: oklch(0.145 0.015 280);
+  --foreground: oklch(0.93 0.005 280);
+  --card: oklch(0.2 0.015 280);
+  --card-foreground: oklch(0.93 0.005 280);
+  --popover: oklch(0.2 0.015 280);
+  --popover-foreground: oklch(0.93 0.005 280);
+  --primary: oklch(0.55 0.1 186);
+  --primary-foreground: oklch(0.98 0.01 180);
+  --secondary: oklch(0.25 0.012 280);
+  --secondary-foreground: oklch(0.93 0.005 280);
+  --muted: oklch(0.25 0.012 280);
+  --muted-foreground: oklch(0.65 0.015 280);
+  --accent: oklch(0.25 0.012 280);
+  --accent-foreground: oklch(0.93 0.005 280);
+  --destructive: oklch(0.65 0.2 25);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --chart-1: oklch(0.855 0.138 181.071);
-  --chart-2: oklch(0.704 0.14 182.503);
-  --chart-3: oklch(0.6 0.118 184.704);
-  --chart-4: oklch(0.511 0.096 186.391);
-  --chart-5: oklch(0.437 0.078 188.216);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.704 0.14 182.503);
-  --sidebar-primary-foreground: oklch(0.277 0.046 192.524);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.55 0.1 186);
+  --chart-1: oklch(0.8 0.14 181);
+  --chart-2: oklch(0.7 0.14 182);
+  --chart-3: oklch(0.6 0.12 184);
+  --chart-4: oklch(0.5 0.1 186);
+  --chart-5: oklch(0.45 0.08 188);
+  --sidebar: oklch(0.16 0.015 280);
+  --sidebar-foreground: oklch(0.93 0.005 280);
+  --sidebar-primary: oklch(0.6 0.12 184);
+  --sidebar-primary-foreground: oklch(0.2 0.04 190);
+  --sidebar-accent: oklch(0.25 0.012 280);
+  --sidebar-accent-foreground: oklch(0.93 0.005 280);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
+  --sidebar-ring: oklch(0.55 0.1 186);
 }
 
 @keyframes tilt {
@@ -193,11 +206,11 @@
 }
 
 .dark .mention-chip {
-  background-color: oklch(0.25 0 0);
+  background-color: oklch(0.25 0.012 280);
 }
 
 .dark .mention-chip:hover {
-  background-color: oklch(0.3 0 0);
+  background-color: oklch(0.3 0.012 280);
 }
 
 .dark .mention-user::before {
@@ -230,7 +243,7 @@
 
 /* Document editor prose refinements (Linear-inspired) */
 .document-prose .tiptap {
-  font-family: var(--font-sans);
+  font-family: var(--font-app-sans);
   font-size: 15px;
   font-weight: 450;
   line-height: 24px;
@@ -243,7 +256,7 @@
 }
 
 .document-prose .tiptap h1 {
-  font-family: var(--font-sans);
+  font-family: var(--font-app-sans);
   font-size: 24px;
   font-weight: 600;
   line-height: 38.4px;
@@ -253,7 +266,7 @@
 }
 
 .document-prose .tiptap h2 {
-  font-family: var(--font-sans);
+  font-family: var(--font-app-sans);
   font-size: 19px;
   font-weight: 600;
   line-height: 28px;
@@ -263,7 +276,7 @@
 }
 
 .document-prose .tiptap h3 {
-  font-family: var(--font-sans);
+  font-family: var(--font-app-sans);
   font-size: 17px;
   font-weight: 600;
   line-height: 24px;
@@ -416,9 +429,9 @@
   h4,
   h5,
   h6 {
-    font-family: var(--font-sans);
+    font-family: var(--font-app-sans);
   }
   html {
-    @apply font-sans;
+    font-family: var(--font-app-sans);
   }
 }
