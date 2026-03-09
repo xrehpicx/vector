@@ -1,6 +1,6 @@
 import { query } from '../_generated/server';
 import { v, ConvexError } from 'convex/values';
-import type { Id, Doc } from '../_generated/dataModel';
+import type { Doc } from '../_generated/dataModel';
 import { getAuthUserId } from '../authUtils';
 import { canViewIssue, canViewTeam, canViewProject } from '../access';
 import { requireOrgPermission } from '../authz';
@@ -193,11 +193,13 @@ export const listInvites = query({
 
     await requireOrgPermission(ctx, org._id, PERMISSIONS.ORG_MANAGE_MEMBERS);
 
-    return await ctx.db
+    const invites = await ctx.db
       .query('invitations')
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
       .filter(q => q.eq(q.field('status'), 'pending'))
       .collect();
+
+    return invites.filter(invite => invite.expiresAt >= Date.now());
   },
 });
 

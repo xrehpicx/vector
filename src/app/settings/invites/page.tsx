@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
-import { Mail } from 'lucide-react';
+import { Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
 import type { Id } from '@/convex/_generated/dataModel';
 
 const header = (
@@ -26,23 +27,40 @@ export default function InvitesPage() {
   const acceptInvite = useMutation(
     api.organizations.mutations.acceptInvitation,
   );
-  const declineInvite = useMutation(api.organizations.mutations.revokeInvite);
+  const declineInvite = useMutation(
+    api.organizations.mutations.declineInvitation,
+  );
+  const [pendingAction, setPendingAction] = useState<{
+    inviteId: Id<'invitations'>;
+    type: 'accept' | 'decline';
+  } | null>(null);
+
+  const isPendingAction = (
+    inviteId: Id<'invitations'>,
+    type: 'accept' | 'decline',
+  ) => pendingAction?.inviteId === inviteId && pendingAction.type === type;
 
   const handleAccept = async (inviteId: Id<'invitations'>) => {
+    setPendingAction({ inviteId, type: 'accept' });
     try {
       await acceptInvite({ inviteId });
       toast.success('Invitation accepted');
     } catch (err) {
       toast.error((err as Error).message);
+    } finally {
+      setPendingAction(null);
     }
   };
 
   const handleDecline = async (inviteId: Id<'invitations'>) => {
+    setPendingAction({ inviteId, type: 'decline' });
     try {
       await declineInvite({ inviteId });
       toast.info('Invitation declined');
     } catch (err) {
       toast.error((err as Error).message);
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -107,16 +125,26 @@ export default function InvitesPage() {
                   size='sm'
                   className='h-6 text-xs'
                   onClick={() => handleAccept(inv._id)}
+                  disabled={pendingAction !== null}
                 >
-                  Accept
+                  {isPendingAction(inv._id, 'accept') ? (
+                    <Loader2 className='size-3 animate-spin' />
+                  ) : (
+                    'Accept'
+                  )}
                 </Button>
                 <Button
                   size='sm'
                   variant='ghost'
                   className='h-6 text-xs'
                   onClick={() => handleDecline(inv._id)}
+                  disabled={pendingAction !== null}
                 >
-                  Decline
+                  {isPendingAction(inv._id, 'decline') ? (
+                    <Loader2 className='size-3 animate-spin' />
+                  ) : (
+                    'Decline'
+                  )}
                 </Button>
               </div>
             </div>

@@ -52,7 +52,7 @@ export default function MembersSettingsPage({}: MembersSettingsPageProps) {
   return (
     <div className='bg-background h-full'>
       <div className='border-b'>
-        <div className='flex items-center p-1'>
+        <div className='flex items-center p-1 pl-9 lg:pl-1'>
           <span className='flex items-center gap-1.5 px-3 text-xs font-medium'>
             <Users className='size-3.5' />
             Members & Access

@@ -120,12 +120,23 @@ export const deliverRecipient = internalAction({
       );
     } else {
       try {
+        // Resolve relative hrefs to absolute URLs for emails
+        const baseUrl = (
+          process.env.NEXT_PUBLIC_APP_URL ||
+          process.env.NEXT_PUBLIC_SITE_URL ||
+          'http://localhost:3000'
+        ).replace(/\/$/, '');
+        const absoluteHref =
+          recipient.href && !recipient.href.startsWith('http')
+            ? `${baseUrl}${recipient.href}`
+            : recipient.href;
+
         const html = await render(
           renderNotificationEmailTemplate({
             type: event.type,
             title: recipient.title,
             body: recipient.body,
-            href: recipient.href,
+            href: absoluteHref,
             payload: event.payload,
           }),
         );

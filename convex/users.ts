@@ -405,15 +405,20 @@ export const getPendingInvitations = query({
     if (!user.email) {
       return [];
     }
+    const userEmail = user.email.toLowerCase();
 
     const invites = await ctx.db
       .query('invitations')
-      .withIndex('by_email', q => q.eq('email', user.email!))
+      .withIndex('by_email', q => q.eq('email', userEmail))
       .filter(q => q.eq(q.field('status'), 'pending'))
       .collect();
 
+    const actionableInvites = invites.filter(
+      invite => invite.expiresAt >= Date.now(),
+    );
+
     const invitesWithOrg = await Promise.all(
-      invites.map(async invite => {
+      actionableInvites.map(async invite => {
         const organization = await ctx.db.get(
           'organizations',
           invite.organizationId,

@@ -33,6 +33,7 @@ import { MembersDataTable } from '@/components/organization/members-data-table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { FunctionReturnType } from 'convex/server';
 
 type MemberRow = FunctionReturnType<
@@ -59,6 +60,7 @@ function useMemberColumns(
   isAdmin: boolean,
   currentUserId: string,
   hasCustomRoles: boolean,
+  isMobile: boolean,
 ): ColumnDef<MemberRow>[] {
   return useMemo(
     () => [
@@ -78,7 +80,7 @@ function useMemberColumns(
           const member = row.original;
           return (
             <div className='flex items-center gap-2'>
-              <Avatar className='size-6'>
+              <Avatar className='size-6 shrink-0'>
                 <AvatarFallback className='text-xs'>
                   {getInitials(member.name, member.email)}
                 </AvatarFallback>
@@ -91,7 +93,7 @@ function useMemberColumns(
                   {member.userId === currentUserId && (
                     <Badge
                       variant='secondary'
-                      className='px-1 py-0 text-[10px]'
+                      className='shrink-0 px-1 py-0 text-[10px]'
                     >
                       you
                     </Badge>
@@ -110,7 +112,7 @@ function useMemberColumns(
         id: 'role',
         accessorFn: row => row.role,
         header: 'Role',
-        size: 160,
+        ...(!isMobile && { size: 160 }),
         cell: ({ row }) => {
           const member = row.original;
           return (
@@ -140,25 +142,38 @@ function useMemberColumns(
           );
         },
       },
-      {
-        id: 'joined',
-        accessorFn: row => row._creationTime,
-        size: 100,
-        header: ({ column }) => (
-          <button
-            className='flex items-center gap-1'
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-          >
-            Joined
-            <ArrowUpDown className='size-3' />
-          </button>
-        ),
-        cell: ({ row }) => (
-          <span className='text-muted-foreground text-xs'>
-            {formatDateHuman(new Date(row.original._creationTime))}
-          </span>
-        ),
-      },
+      ...(!isMobile
+        ? [
+            {
+              id: 'joined',
+              accessorFn: (row: MemberRow) => row._creationTime,
+              size: 100,
+              header: ({
+                column,
+              }: {
+                column: {
+                  toggleSorting: (desc: boolean) => void;
+                  getIsSorted: () => false | 'asc' | 'desc';
+                };
+              }) => (
+                <button
+                  className='flex items-center gap-1'
+                  onClick={() =>
+                    column.toggleSorting(column.getIsSorted() === 'asc')
+                  }
+                >
+                  Joined
+                  <ArrowUpDown className='size-3' />
+                </button>
+              ),
+              cell: ({ row }: { row: { original: MemberRow } }) => (
+                <span className='text-muted-foreground text-xs'>
+                  {formatDateHuman(new Date(row.original._creationTime))}
+                </span>
+              ),
+            } satisfies ColumnDef<MemberRow>,
+          ]
+        : []),
       ...(isAdmin
         ? [
             {
@@ -174,7 +189,7 @@ function useMemberColumns(
           ]
         : []),
     ],
-    [orgSlug, isAdmin, currentUserId, hasCustomRoles],
+    [orgSlug, isAdmin, currentUserId, hasCustomRoles, isMobile],
   );
 }
 
@@ -230,7 +245,10 @@ function MemberActions({
   );
 }
 
-function useInviteColumns(orgSlug: string): ColumnDef<InviteRow>[] {
+function useInviteColumns(
+  orgSlug: string,
+  isMobile: boolean,
+): ColumnDef<InviteRow>[] {
   return useMemo(
     () => [
       {
@@ -241,7 +259,7 @@ function useInviteColumns(orgSlug: string): ColumnDef<InviteRow>[] {
           const invite = row.original;
           return (
             <div className='flex items-center gap-2'>
-              <Avatar className='size-6'>
+              <Avatar className='size-6 shrink-0'>
                 <AvatarFallback className='text-xs opacity-60'>
                   {getInitials('', invite.email)}
                 </AvatarFallback>
@@ -267,16 +285,20 @@ function useInviteColumns(orgSlug: string): ColumnDef<InviteRow>[] {
           <OrgRoleBadge role={row.original.role || 'member'} />
         ),
       },
-      {
-        id: 'sent',
-        accessorFn: row => row._creationTime,
-        header: 'Sent',
-        cell: ({ row }) => (
-          <span className='text-muted-foreground text-xs'>
-            {formatDateHuman(new Date(row.original._creationTime))}
-          </span>
-        ),
-      },
+      ...(!isMobile
+        ? [
+            {
+              id: 'sent',
+              accessorFn: (row: InviteRow) => row._creationTime,
+              header: 'Sent',
+              cell: ({ row }: { row: { original: InviteRow } }) => (
+                <span className='text-muted-foreground text-xs'>
+                  {formatDateHuman(new Date(row.original._creationTime))}
+                </span>
+              ),
+            } satisfies ColumnDef<InviteRow>,
+          ]
+        : []),
       {
         id: 'actions',
         header: () => <span className='sr-only'>Actions</span>,
@@ -285,7 +307,7 @@ function useInviteColumns(orgSlug: string): ColumnDef<InviteRow>[] {
         ),
       },
     ],
-    [orgSlug],
+    [orgSlug, isMobile],
   );
 }
 
@@ -362,6 +384,7 @@ export function MembersList({ orgSlug }: { orgSlug: string }) {
   const currentUser = useQuery(api.users.getCurrentUser);
   const allRoles = useQuery(api.roles.index.list, { orgSlug });
   const [showInvite, setShowInvite] = useState(false);
+  const isMobile = useIsMobile();
 
   const { isAdmin, currentUserId } = useMemo(() => {
     if (!currentUser || !members) {
@@ -381,8 +404,9 @@ export function MembersList({ orgSlug }: { orgSlug: string }) {
     isAdmin,
     currentUserId,
     hasCustomRoles,
+    isMobile,
   );
-  const inviteColumns = useInviteColumns(orgSlug);
+  const inviteColumns = useInviteColumns(orgSlug, isMobile);
 
   if (members === undefined || currentUser === undefined) {
     return (
@@ -452,8 +476,8 @@ export function MembersList({ orgSlug }: { orgSlug: string }) {
 
   return (
     <div className='flex flex-col gap-4'>
-      <div className='flex items-center justify-between'>
-        <div>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <div className='min-w-0'>
           <h3 className='text-sm font-semibold'>People</h3>
           <p className='text-muted-foreground text-xs'>
             Manage members and invitations for your organization.
@@ -463,6 +487,7 @@ export function MembersList({ orgSlug }: { orgSlug: string }) {
           <Button
             variant='outline'
             size='sm'
+            className='shrink-0'
             onClick={() => setShowInvite(true)}
           >
             <Plus className='mr-1 size-3' />

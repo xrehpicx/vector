@@ -37,6 +37,9 @@ export const revokeInvite = mutation({
     if (!invite) {
       throw new ConvexError('INVITE_NOT_FOUND');
     }
+    if (invite.status !== 'pending') {
+      throw new ConvexError('INVITE_NOT_PENDING');
+    }
 
     await requireOrgPermission(
       ctx,
@@ -44,7 +47,40 @@ export const revokeInvite = mutation({
       PERMISSIONS.ORG_MANAGE_MEMBERS,
     );
 
-    await ctx.db.patch('invitations', invite._id, { status: 'revoked' });
+    await ctx.db.patch('invitations', invite._id, {
+      status: 'revoked',
+      revokedAt: Date.now(),
+    });
+  },
+});
+
+export const declineInvitation = mutation({
+  args: {
+    inviteId: v.id('invitations'),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUser(ctx);
+    const user = await ctx.db.get('users', userId);
+    if (!user) {
+      throw new ConvexError('USER_NOT_FOUND');
+    }
+
+    const invite = await ctx.db.get('invitations', args.inviteId);
+    if (!invite) {
+      throw new ConvexError('INVITATION_NOT_FOUND');
+    }
+    if (invite.status !== 'pending') {
+      throw new ConvexError('INVITATION_NOT_PENDING');
+    }
+    if (invite.email.toLowerCase() !== user.email?.toLowerCase()) {
+      throw new ConvexError('NOT_YOUR_INVITATION');
+    }
+
+    await ctx.db.patch('invitations', invite._id, {
+      status: 'revoked',
+      revokedAt: Date.now(),
+    });
+    return { success: true } as const;
   },
 });
 

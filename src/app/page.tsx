@@ -1,13 +1,13 @@
 'use client';
 
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { useQuery } from '@/lib/convex';
-import { api } from '@/lib/convex';
+import { useQuery, api } from '@/lib/convex';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // --- Post-login redirect logic -----------------------------------------------------------
 export default function Home() {
+  const router = useRouter();
   const userQuery = useQuery(api.users.currentUser);
   const userOrgsQuery = useQuery(api.users.getOrganizations);
 
@@ -16,25 +16,33 @@ export default function Home() {
   const hasOrganizations = userOrgs && userOrgs.length > 0;
 
   useEffect(() => {
-    if (userQuery.isPending) {
-      // Still loading, don't redirect yet
+    if (userQuery.isPending || userOrgsQuery.isPending) return;
+
+    if (user === null) {
+      router.replace('/auth/login');
       return;
     }
 
-    if (user === null) {
-      // Not authenticated
-      redirect('/auth/login');
-    } else {
-      // Authenticated
-      if (hasOrganizations && userOrgs?.[0]?.slug) {
-        redirect(`/${userOrgs[0].slug}/issues`);
-      } else if (user?.role === 'platform_admin') {
-        redirect('/admin');
-      } else {
-        redirect('/org-setup');
-      }
+    // User already has orgs — go to first one
+    if (hasOrganizations && userOrgs?.[0]?.slug) {
+      router.replace(`/${userOrgs[0].slug}/issues`);
+      return;
     }
-  }, [user, hasOrganizations, userOrgs, userQuery.isPending]);
+
+    if (user?.role === 'platform_admin') {
+      router.replace('/admin');
+      return;
+    }
+
+    router.replace('/org-setup');
+  }, [
+    user,
+    hasOrganizations,
+    router,
+    userOrgs,
+    userQuery.isPending,
+    userOrgsQuery.isPending,
+  ]);
 
   return (
     <div className='flex h-screen w-full items-center justify-center'>
