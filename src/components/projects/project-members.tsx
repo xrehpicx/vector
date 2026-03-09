@@ -32,6 +32,7 @@ import { FunctionReturnType } from 'convex/server';
 import { Id } from '@/convex/_generated/dataModel';
 import { useConfirm } from '@/hooks/use-confirm';
 import { UserAvatar } from '@/components/user-avatar';
+import { toast } from 'sonner';
 
 /**
  * Section component that renders the list of project members and allows adding/removing members.
@@ -94,6 +95,12 @@ export function ProjectMembersSection({
     });
   }, [members, searchQuery]);
 
+  const allMembersAdded =
+    orgMembers.length > 0 &&
+    orgMembers.every(member =>
+      members.some(projectMember => projectMember.userId === member.userId),
+    );
+
   if (members === undefined) {
     return (
       <div className='space-y-4'>
@@ -133,23 +140,21 @@ export function ProjectMembersSection({
           />
           {canEdit && (
             <div className='border-t px-3 py-1.5'>
-              <Button
-                onClick={() => setShowAddMemberDialog(true)}
-                className='h-6 gap-1 text-xs'
-                variant='ghost'
-                size='sm'
-                disabled={
-                  orgMembers.filter(
-                    member =>
-                      !members.some(
-                        projectMember => projectMember.userId === member.userId,
-                      ),
-                  ).length === 0
-                }
-              >
-                <Plus className='size-3' />
-                Add member
-              </Button>
+              {allMembersAdded ? (
+                <span className='text-muted-foreground block py-0.5 text-xs'>
+                  All organization members are in this project
+                </span>
+              ) : (
+                <Button
+                  onClick={() => setShowAddMemberDialog(true)}
+                  className='h-6 gap-1 text-xs'
+                  variant='ghost'
+                  size='sm'
+                >
+                  <Plus className='size-3' />
+                  Add member
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -164,27 +169,7 @@ export function ProjectMembersSection({
               Add project members to get started.
             </p>
             {canEdit && (
-              <Button
-                onClick={() => setShowAddMemberDialog(true)}
-                disabled={
-                  orgMembers.filter(
-                    member =>
-                      !members.some(
-                        projectMember => projectMember.userId === member.userId,
-                      ),
-                  ).length === 0
-                }
-                title={
-                  orgMembers.filter(
-                    member =>
-                      !members.some(
-                        projectMember => projectMember.userId === member.userId,
-                      ),
-                  ).length === 0
-                    ? 'All organization members are already in this project'
-                    : ''
-                }
-              >
+              <Button onClick={() => setShowAddMemberDialog(true)}>
                 <Plus className='mr-2 size-3' />
                 Add member
               </Button>
@@ -193,10 +178,11 @@ export function ProjectMembersSection({
         </div>
       )}
 
-      {showAddMemberDialog && (
+      {projectId && (
         <AddMemberDialog
+          open={showAddMemberDialog}
           orgSlug={orgSlug}
-          projectKey={projectKey}
+          projectId={projectId}
           existingMemberIds={new Set(members.map(m => m.userId))}
           onClose={() => setShowAddMemberDialog(false)}
         />
@@ -210,13 +196,15 @@ export function ProjectMembersSection({
 // Add Member Dialog
 // ------------------------------
 function AddMemberDialog({
+  open,
   orgSlug,
-  projectKey,
+  projectId,
   existingMemberIds,
   onClose,
 }: {
+  open: boolean;
   orgSlug: string;
-  projectKey: string;
+  projectId: Id<'projects'>;
   existingMemberIds: Set<string>;
   onClose: () => void;
 }) {
@@ -227,12 +215,6 @@ function AddMemberDialog({
       orgSlug,
     }) ?? [];
 
-  const project = useQuery(api.projects.queries.getByKey, {
-    orgSlug,
-    projectKey,
-  });
-  const projectId = project?._id;
-
   const addMemberMutation = useMutation(api.projects.mutations.addMember);
 
   const availableMembers = orgMembers.filter(
@@ -240,7 +222,6 @@ function AddMemberDialog({
   );
 
   const handleAdd = async (userId: string) => {
-    if (!projectId) return;
     setAddingUserId(userId);
     try {
       await addMemberMutation({
@@ -249,16 +230,18 @@ function AddMemberDialog({
         role: 'member',
       });
       onClose();
+    } catch (error: unknown) {
+      console.error(error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to add member: ${errorMessage}`);
     } finally {
       setAddingUserId(null);
     }
   };
 
   return (
-    <ResponsiveDialog
-      open
-      onOpenChange={(isOpen: boolean) => !isOpen && onClose()}
-    >
+    <ResponsiveDialog open={open} onOpenChange={o => !o && onClose()}>
       <ResponsiveDialogContent
         showCloseButton={false}
         className='gap-0 p-0 sm:max-w-sm'
