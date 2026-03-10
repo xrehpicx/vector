@@ -2,6 +2,7 @@ import { createTool, type ToolCtx } from '@convex-dev/agent';
 import { z } from 'zod';
 import { internal } from '../_generated/api';
 import type { Id } from '../_generated/dataModel';
+import { searchAvailableIcons } from './icons';
 import type { AssistantPageContext } from './lib';
 
 type AssistantToolCtx = ToolCtx & {
@@ -20,6 +21,29 @@ export const listWorkspaceReferenceData: any = createTool({
       orgSlug: ctx.currentPageContext.orgSlug,
       userId: ctx.userId,
     });
+  },
+});
+
+export const searchIcons: any = createTool({
+  description:
+    'Search available icons by keyword. Use this to find valid icon values before setting an icon on a team, project, document, or folder. Returns matching icon values, labels, and categories.',
+  args: z.object({
+    query: z
+      .string()
+      .describe(
+        'Search keyword (e.g. "rocket", "fire", "target", "git", "star")',
+      ),
+    limit: z.number().int().positive().max(20).optional(),
+  }),
+  handler: async (
+    _ctx: AssistantToolCtx,
+    args: { query: string; limit?: number },
+  ) => {
+    const results = searchAvailableIcons(args.query, args.limit ?? 10);
+    return {
+      icons: results,
+      hint: 'Use the "value" field when setting an icon on an entity.',
+    };
   },
 });
 
@@ -306,7 +330,7 @@ export const getProject: any = createTool({
 
 export const createProject: any = createTool({
   description:
-    'Create a project. On a team page, team scope defaults from the current page.',
+    'Create a project. On a team page, team scope defaults from the current page. Use searchIcons to find a valid icon value before setting one.',
   args: z.object({
     key: z.string().min(1),
     name: z.string().min(1),
@@ -314,6 +338,8 @@ export const createProject: any = createTool({
     teamKey: z.string().optional(),
     statusName: z.string().optional(),
     visibility: z.enum(['private', 'organization', 'public']).optional(),
+    icon: z.string().optional().describe('Icon value from searchIcons'),
+    color: z.string().optional().describe('Hex color (e.g. "#6366f1")'),
   }),
   handler: async (ctx: AssistantToolCtx, args) => {
     return await ctx.runMutation(internal.ai.internal.createProject, {
@@ -327,7 +353,7 @@ export const createProject: any = createTool({
 
 export const updateProject: any = createTool({
   description:
-    'Update a project. If projectKey is omitted, defaults to the current project page.',
+    'Update a project. If projectKey is omitted, defaults to the current project page. Use searchIcons to find a valid icon value before setting one.',
   args: z.object({
     projectKey: z.string().optional(),
     name: z.string().optional(),
@@ -337,6 +363,16 @@ export const updateProject: any = createTool({
     visibility: z.enum(['private', 'organization', 'public']).optional(),
     startDate: z.string().nullable().optional(),
     dueDate: z.string().nullable().optional(),
+    icon: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Icon value from searchIcons. Pass null to clear.'),
+    color: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Hex color. Pass null to clear.'),
   }),
   handler: async (ctx: AssistantToolCtx, args) => {
     return await ctx.runMutation(internal.ai.internal.updateProject, {
@@ -397,14 +433,15 @@ export const getTeam: any = createTool({
 });
 
 export const createTeam: any = createTool({
-  description: 'Create a team in the current organization.',
+  description:
+    'Create a team in the current organization. Use searchIcons to find a valid icon value before setting one.',
   args: z.object({
     key: z.string().min(1),
     name: z.string().min(1),
     description: z.string().optional(),
     visibility: z.enum(['private', 'organization', 'public']).optional(),
-    icon: z.string().optional(),
-    color: z.string().optional(),
+    icon: z.string().optional().describe('Icon value from searchIcons'),
+    color: z.string().optional().describe('Hex color (e.g. "#6366f1")'),
   }),
   handler: async (ctx: AssistantToolCtx, args) => {
     return await ctx.runMutation(internal.ai.internal.createTeam, {
@@ -417,14 +454,22 @@ export const createTeam: any = createTool({
 
 export const updateTeam: any = createTool({
   description:
-    'Update a team. If teamKey is omitted, defaults to the current team page.',
+    'Update a team. If teamKey is omitted, defaults to the current team page. Use searchIcons to find a valid icon value before setting one.',
   args: z.object({
     teamKey: z.string().optional(),
     name: z.string().optional(),
     description: z.string().optional(),
     visibility: z.enum(['private', 'organization', 'public']).optional(),
-    icon: z.string().nullable().optional(),
-    color: z.string().nullable().optional(),
+    icon: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Icon value from searchIcons. Pass null to clear.'),
+    color: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Hex color. Pass null to clear.'),
   }),
   handler: async (ctx: AssistantToolCtx, args) => {
     return await ctx.runMutation(internal.ai.internal.updateTeam, {
@@ -626,10 +671,12 @@ export const unassignIssue: any = createTool({
 // ──── Document folder management ────
 
 export const createFolder: any = createTool({
-  description: 'Create a document folder for organizing documents.',
+  description:
+    'Create a document folder for organizing documents. Use searchIcons to find a valid icon value before setting one.',
   args: z.object({
     name: z.string().min(1).describe('Folder name'),
     description: z.string().optional(),
+    icon: z.string().optional().describe('Icon value from searchIcons'),
     color: z.string().optional().describe('Hex color for the folder'),
   }),
   handler: async (ctx: AssistantToolCtx, args) => {
@@ -642,11 +689,17 @@ export const createFolder: any = createTool({
 });
 
 export const updateFolder: any = createTool({
-  description: 'Update a document folder name, description, or color.',
+  description:
+    'Update a document folder name, description, icon, or color. Use searchIcons to find a valid icon value before setting one.',
   args: z.object({
     folderId: z.string().describe('Folder ID'),
     name: z.string().optional(),
     description: z.string().nullable().optional(),
+    icon: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Icon value from searchIcons. Pass null to clear.'),
     color: z.string().nullable().optional(),
   }),
   handler: async (ctx: AssistantToolCtx, args) => {

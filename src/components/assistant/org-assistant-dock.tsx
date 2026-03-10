@@ -13,8 +13,12 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useConvexAuth } from 'convex/react';
 import { useAction, useMutation, useQuery } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
-import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import {
+  AssistantInput,
+  type AssistantInputHandle,
+  type MentionRef,
+} from './assistant-input';
 import { GradientWaveText } from '@/components/gradient-wave-text';
 import { BarsSpinner } from '@/components/bars-spinner';
 import { cn } from '@/lib/utils';
@@ -102,10 +106,10 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
   const cancelPendingAction = useMutation(api.ai.mutations.cancelPendingAction);
   const clearThreadHistory = useAction(api.ai.actions.clearThreadHistory);
 
-  const [draft, setDraft] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [confirmAction, ConfirmActionDialog] = useConfirm();
+  const inputRef = useRef<AssistantInputHandle>(null);
 
   const threadId = threadRow?.threadId;
   const uiMessages = useUIMessages(
@@ -263,11 +267,20 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
     pendingThreadIdRef.current = null;
   }
 
-  const handleSend = async () => {
-    const prompt = draft.trim();
-    if (!prompt || isSending) return;
+  const handleSend = async (text: string, mentions: MentionRef[]) => {
+    if (isSending) return false;
 
-    setDraft('');
+    // Build prompt: include mention context if any
+    let prompt = text.trim();
+    if (!prompt) return false;
+
+    if (mentions.length > 0) {
+      const mentionContext = mentions
+        .map(m => `[${m.type}:${m.label}](${m.href})`)
+        .join(', ');
+      prompt = `${prompt}\n\n[Referenced: ${mentionContext}]`;
+    }
+
     setIsExpanded(true);
     setIsSending(true);
 
@@ -279,12 +292,13 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
       }
       pendingThreadIdRef.current = ensuredThreadId;
       await sendMessage({ orgSlug, pageContext, prompt });
+      return true;
     } catch (error) {
       pendingThreadIdRef.current = null;
-      setDraft(prompt);
       toast.error(
         error instanceof Error ? error.message : 'Failed to send message',
       );
+      return false;
     } finally {
       setIsSending(false);
     }
@@ -322,7 +336,6 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
 
     try {
       await clearThreadHistory({ orgSlug });
-      setDraft('');
       setIsExpanded(false);
     } catch (error) {
       toast.error(
@@ -479,22 +492,16 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
           {/* Input bar */}
           <motion.div
             layout
-            className='border-border/60 bg-background/96 pointer-events-auto rounded-full border p-1 shadow-sm backdrop-blur-xl'
+            className='border-border/60 bg-background/96 pointer-events-auto overflow-hidden rounded-2xl border p-1 shadow-sm backdrop-blur-xl'
           >
             <div className='flex items-end gap-1'>
-              <Textarea
-                value={draft}
-                onChange={event => setDraft(event.target.value)}
+              <AssistantInput
+                ref={inputRef}
+                orgSlug={orgSlug}
+                onSubmit={handleSend}
                 onFocus={() => setIsExpanded(true)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    void handleSend();
-                  }
-                }}
-                rows={1}
-                placeholder='Ask anything or tell me what to do...'
-                className='min-h-9 resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none focus-visible:ring-0'
+                disabled={isSending}
+                className='min-h-9 flex-1'
               />
               <div className='flex shrink-0 items-center gap-1 p-1'>
                 {hasMessages ? (
@@ -510,8 +517,8 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
                 <Button
                   size='sm'
                   className='size-8 rounded-full p-0'
-                  onClick={() => void handleSend()}
-                  disabled={isSending || !draft.trim()}
+                  disabled={isSending}
+                  onClick={() => inputRef.current?.submit()}
                 >
                   {isSending || threadRow?.threadStatus === 'pending' ? (
                     <BarsSpinner size={14} />

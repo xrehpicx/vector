@@ -1,5 +1,6 @@
 import { query } from '../_generated/server';
 import { v } from 'convex/values';
+import { canViewDocument } from '../access';
 import { getOrganizationBySlug } from '../authz';
 
 export const searchEntities = query({
@@ -10,53 +11,67 @@ export const searchEntities = query({
   },
   handler: async (ctx, args) => {
     if (!args.query.trim())
-      return { users: [], teams: [], projects: [], issues: [] };
+      return { users: [], teams: [], projects: [], issues: [], documents: [] };
 
     const org = await getOrganizationBySlug(ctx, args.orgSlug);
     const limit = args.limit ?? 5;
     const q = args.query.trim();
 
     // Run ALL searches in parallel
-    const [userResults, teams, projects, issuesByTitle, issuesByText] =
-      await Promise.all([
-        // Users: search by name
-        ctx.db
-          .query('users')
-          .withSearchIndex('by_name_email_username', s => s.search('name', q))
-          .take(limit * 3),
+    const [
+      userResults,
+      teams,
+      projects,
+      issuesByTitle,
+      issuesByText,
+      documents,
+    ] = await Promise.all([
+      // Users: search by name
+      ctx.db
+        .query('users')
+        .withSearchIndex('by_name_email_username', s => s.search('name', q))
+        .take(limit * 3),
 
-        // Teams: search by name (scoped to org via search index filter)
-        ctx.db
-          .query('teams')
-          .withSearchIndex('search_name', s =>
-            s.search('name', q).eq('organizationId', org._id),
-          )
-          .take(limit),
+      // Teams: search by name (scoped to org via search index filter)
+      ctx.db
+        .query('teams')
+        .withSearchIndex('search_name', s =>
+          s.search('name', q).eq('organizationId', org._id),
+        )
+        .take(limit),
 
-        // Projects: search by name (scoped to org via search index filter)
-        ctx.db
-          .query('projects')
-          .withSearchIndex('search_name', s =>
-            s.search('name', q).eq('organizationId', org._id),
-          )
-          .take(limit),
+      // Projects: search by name (scoped to org via search index filter)
+      ctx.db
+        .query('projects')
+        .withSearchIndex('search_name', s =>
+          s.search('name', q).eq('organizationId', org._id),
+        )
+        .take(limit),
 
-        // Issues: search by title
-        ctx.db
-          .query('issues')
-          .withSearchIndex('search_title', s =>
-            s.search('title', q).eq('organizationId', org._id),
-          )
-          .take(limit),
+      // Issues: search by title
+      ctx.db
+        .query('issues')
+        .withSearchIndex('search_title', s =>
+          s.search('title', q).eq('organizationId', org._id),
+        )
+        .take(limit),
 
-        // Issues: search by searchText
-        ctx.db
-          .query('issues')
-          .withSearchIndex('search_text', s =>
-            s.search('searchText', q).eq('organizationId', org._id),
-          )
-          .take(limit),
-      ]);
+      // Issues: search by searchText
+      ctx.db
+        .query('issues')
+        .withSearchIndex('search_text', s =>
+          s.search('searchText', q).eq('organizationId', org._id),
+        )
+        .take(limit),
+
+      // Documents: search by title (scoped to org via search index filter)
+      ctx.db
+        .query('documents')
+        .withSearchIndex('search_title', s =>
+          s.search('title', q).eq('organizationId', org._id),
+        )
+        .take(limit),
+    ]);
 
     // Filter users to org members using per-user index lookup (not .collect())
     const memberChecks = await Promise.all(
@@ -110,6 +125,13 @@ export const searchEntities = query({
       stateColor: issueStates[idx]?.color ?? undefined,
     }));
 
+    const visibleDocuments = [];
+    for (const document of documents) {
+      if (await canViewDocument(ctx, document)) {
+        visibleDocuments.push(document);
+      }
+    }
+
     return {
       users,
       teams: teams.map(t => ({
@@ -127,6 +149,12 @@ export const searchEntities = query({
         color: p.color,
       })),
       issues,
+      documents: visibleDocuments.map(d => ({
+        _id: d._id,
+        title: d.title,
+        icon: d.icon,
+        color: d.color,
+      })),
     };
   },
 });

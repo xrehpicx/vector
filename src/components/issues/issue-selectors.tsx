@@ -18,6 +18,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -38,6 +39,9 @@ import { getDynamicIcon, DynamicIcon } from '@/lib/dynamic-icons';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { FunctionReturnType } from 'convex/server';
+import type { Id } from '@/convex/_generated/dataModel';
+import { useOptimisticValue } from '@/hooks/use-optimistic';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 // Icons
 import {
@@ -78,6 +82,9 @@ export type Priority = FunctionReturnType<
   typeof api.organizations.queries.listIssuePriorities
 >[number];
 export type Issue = FunctionReturnType<typeof api.issues.queries.list>[number];
+type ParentIssueSearchResult = FunctionReturnType<
+  typeof api.issues.queries.searchParentOptions
+>;
 
 // ---------------------------------------------------------------------------
 // Display variant for how the button shows icon/label
@@ -1603,6 +1610,8 @@ interface IssueSelectorProps {
   trigger?: React.ReactElement;
   className?: string;
   excludeIssueId?: string; // Exclude this issue from the list (to prevent self-reference)
+  relatedProjectId?: string;
+  relatedTeamId?: string;
   /** Position of the popover relative to its trigger. */
   align?: 'start' | 'center' | 'end';
 }
@@ -1615,29 +1624,47 @@ export function IssueSelector({
   trigger,
   className,
   excludeIssueId,
+  relatedProjectId,
+  relatedTeamId,
   align = 'start',
 }: IssueSelectorProps & { align?: 'start' | 'center' | 'end' }) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const { viewOnly } = useAccess();
+  const [displayIssue, setOptimisticIssue] = useOptimisticValue(selectedIssue);
+  const [optimisticSelectedIssue, setOptimisticSelectedIssue] =
+    useState<ParentIssueSearchResult['selectedIssue']>(null);
+  const debouncedQuery = useDebouncedValue(searchQuery.trim(), 150);
 
-  // Fetch issues from the organization
-  const issuesData = useQuery(api.issues.queries.list, {
+  const issueOptionsData = useQuery(api.issues.queries.searchParentOptions, {
     orgSlug,
-    parentIssueId: 'root', // Only fetch top-level issues as potential parents
+    query: debouncedQuery || undefined,
+    limit: 5,
+    excludeIssueId: excludeIssueId
+      ? (excludeIssueId as Id<'issues'>)
+      : undefined,
+    selectedIssueId: displayIssue ? (displayIssue as Id<'issues'>) : undefined,
+    relatedProjectId: relatedProjectId
+      ? (relatedProjectId as Id<'projects'>)
+      : undefined,
+    relatedTeamId: relatedTeamId ? (relatedTeamId as Id<'teams'>) : undefined,
   });
 
-  const issues = issuesData ?? [];
+  const availableIssues = issueOptionsData?.results ?? [];
+  const selectedIssueObj: ParentIssueSearchResult['selectedIssue'] =
+    (optimisticSelectedIssue?._id === displayIssue
+      ? optimisticSelectedIssue
+      : null) ??
+    (displayIssue ? issueOptionsData?.selectedIssue : null) ??
+    availableIssues.find(issue => issue._id === displayIssue) ??
+    null;
+  const isLoadingResults = open && issueOptionsData === undefined;
+  const isDebouncing = searchQuery.trim() !== debouncedQuery;
+  const showLoadingState = isLoadingResults || isDebouncing;
+  const visibleIssues = showLoadingState ? [] : availableIssues;
 
-  // Filter out the excluded issue (to prevent setting an issue as its own parent)
-  const availableIssues = excludeIssueId
-    ? issues.filter(issue => issue._id !== excludeIssueId)
-    : issues;
-
-  const hasSelection = selectedIssue !== '';
+  const hasSelection = displayIssue !== '';
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
-
-  // Get selected issue data
-  const selectedIssueObj = availableIssues.find(i => i._id === selectedIssue);
   const currentName = selectedIssueObj ? selectedIssueObj.key : 'No parent';
 
   const DefaultBtn = (
@@ -1652,18 +1679,32 @@ export function IssueSelector({
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={nextOpen => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          setSearchQuery('');
+        }
+      }}
+    >
       <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
       <PopoverContent align={align} className='w-96 p-0'>
-        <Command>
-          <CommandInput placeholder='Search parent issue...' className='h-9' />
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder='Search parent issue...'
+            className='h-9'
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+          />
           <CommandList>
-            <CommandEmpty>No issue found.</CommandEmpty>
             <CommandGroup>
               <CommandItem
                 value=''
                 onSelect={() => {
                   if (!viewOnly) {
+                    setOptimisticSelectedIssue(null);
+                    setOptimisticIssue('');
                     onIssueSelect('');
                     setOpen(false);
                   }
@@ -1673,7 +1714,7 @@ export function IssueSelector({
                 <Check
                   className={cn(
                     'mr-2 h-4 w-4',
-                    selectedIssue === '' ? 'opacity-100' : 'opacity-0',
+                    displayIssue === '' ? 'opacity-100' : 'opacity-0',
                   )}
                 />
                 None
@@ -1683,7 +1724,26 @@ export function IssueSelector({
                   </span>
                 )}
               </CommandItem>
-              {availableIssues.map(issue => {
+              {showLoadingState &&
+                Array.from({ length: 5 }).map((_, index) => (
+                  <div
+                    key={`parent-issue-skeleton-${index}`}
+                    className='flex items-center gap-2 px-2 py-1.5'
+                  >
+                    <Skeleton className='h-4 w-4 rounded-sm' />
+                    <div className='flex min-w-0 flex-1 items-center gap-2'>
+                      <Skeleton className='h-3 w-3 rounded-full' />
+                      <Skeleton className='h-4 w-14' />
+                      <Skeleton className='h-4 flex-1' />
+                    </div>
+                  </div>
+                ))}
+              {!showLoadingState && visibleIssues.length === 0 && (
+                <div className='text-muted-foreground px-2 py-6 text-center text-sm'>
+                  No issue found.
+                </div>
+              )}
+              {visibleIssues.map(issue => {
                 const priorityColor = issue.priority?.color || '#94a3b8';
                 const PriorityIcon = issue.priority?.icon
                   ? getDynamicIcon(issue.priority.icon)
@@ -1695,6 +1755,8 @@ export function IssueSelector({
                     value={`${issue.key} ${issue.title}`}
                     onSelect={() => {
                       if (!viewOnly) {
+                        setOptimisticSelectedIssue(issue);
+                        setOptimisticIssue(issue._id);
                         onIssueSelect(issue._id);
                         setOpen(false);
                       }
@@ -1704,7 +1766,7 @@ export function IssueSelector({
                     <Check
                       className={cn(
                         'mr-2 h-4 w-4',
-                        selectedIssue === issue._id
+                        displayIssue === issue._id
                           ? 'opacity-100'
                           : 'opacity-0',
                       )}

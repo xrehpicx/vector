@@ -4,6 +4,7 @@ import type { Id, Doc, DataModel } from '../_generated/dataModel';
 import { getAuthUserId } from '../authUtils';
 import { canViewIssue, canViewProject, canViewTeam } from '../access';
 import { isDefined } from '../_shared/typeGuards';
+import { buildIssueSearchTextFromIssue } from './search';
 
 export const getByKey = query({
   args: {
@@ -275,30 +276,43 @@ function dedupeIssues(issues: readonly Doc<'issues'>[]) {
   return Array.from(new Map(issues.map(issue => [issue._id, issue])).values());
 }
 
-async function collectScopedIssues(ctx: QueryCtx, scope: IssueListScope) {
+async function collectScopedIssues(
+  ctx: QueryCtx,
+  scope: IssueListScope,
+  limit?: number,
+) {
+  const scopedLimit = limit ? Math.max(limit, 1) : undefined;
+
   if (scope.projectId) {
-    const issues = await ctx.db
+    const projectQuery = ctx.db
       .query('issues')
       .withIndex('by_project', q => q.eq('projectId', scope.projectId!))
-      .order('desc')
-      .collect();
+      .order('desc');
+    const issues = scopedLimit
+      ? await projectQuery.take(scopedLimit)
+      : await projectQuery.collect();
 
-    const legacyIssues = scope.projectKey
-      ? (
-          await ctx.db
-            .query('issues')
-            .withIndex('by_organization', q =>
-              q.eq('organizationId', scope.organizationId),
-            )
-            .order('desc')
-            .collect()
-        ).filter(
-          issue =>
-            !issue.projectId && issue.key.startsWith(`${scope.projectKey}-`),
+    let legacyIssues: Doc<'issues'>[] = [];
+    if (scope.projectKey) {
+      const legacyQuery = ctx.db
+        .query('issues')
+        .withIndex('by_organization', q =>
+          q.eq('organizationId', scope.organizationId),
         )
-      : [];
+        .order('desc');
+      const recentOrgIssues = scopedLimit
+        ? await legacyQuery.take(Math.max(scopedLimit * 5, 25))
+        : await legacyQuery.collect();
+      legacyIssues = recentOrgIssues.filter(
+        issue =>
+          !issue.projectId && issue.key.startsWith(`${scope.projectKey}-`),
+      );
+    }
 
-    const scopedIssues = dedupeIssues([...issues, ...legacyIssues]);
+    const scopedIssues = dedupeIssues([...issues, ...legacyIssues]).slice(
+      0,
+      scopedLimit,
+    );
 
     return scope.teamId
       ? scopedIssues.filter(issue => issue.teamId === scope.teamId)
@@ -306,20 +320,24 @@ async function collectScopedIssues(ctx: QueryCtx, scope: IssueListScope) {
   }
 
   if (scope.teamId) {
-    return await ctx.db
+    const teamQuery = ctx.db
       .query('issues')
       .withIndex('by_team', q => q.eq('teamId', scope.teamId!))
-      .order('desc')
-      .collect();
+      .order('desc');
+    return scopedLimit
+      ? await teamQuery.take(scopedLimit)
+      : await teamQuery.collect();
   }
 
-  return await ctx.db
+  const orgQuery = ctx.db
     .query('issues')
     .withIndex('by_organization', q =>
       q.eq('organizationId', scope.organizationId),
     )
-    .order('desc')
-    .collect();
+    .order('desc');
+  return scopedLimit
+    ? await orgQuery.take(scopedLimit)
+    : await orgQuery.collect();
 }
 
 async function collectIssueCandidates(
@@ -555,6 +573,176 @@ async function buildIssueCounts(
 
   return counts;
 }
+
+function buildParentIssueOption(
+  issue: Doc<'issues'>,
+  priorityMap: Map<Id<'issuePriorities'>, Doc<'issuePriorities'>>,
+) {
+  const priority = issue.priorityId ? priorityMap.get(issue.priorityId) : null;
+
+  return {
+    _id: issue._id,
+    key: issue.key,
+    title: issue.title,
+    priority: priority
+      ? {
+          _id: priority._id,
+          name: priority.name,
+          color: priority.color,
+          icon: priority.icon,
+        }
+      : null,
+  };
+}
+
+function matchesParentIssueSearch(issue: Doc<'issues'>, searchQuery?: string) {
+  const normalizedQuery = searchQuery?.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+
+  const haystack = (
+    issue.searchText ?? buildIssueSearchTextFromIssue(issue)
+  ).toLowerCase();
+
+  return haystack.includes(normalizedQuery);
+}
+
+async function collectParentIssueCandidates(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+  searchQuery?: string,
+  relatedProjectId?: Id<'projects'>,
+  relatedTeamId?: Id<'teams'>,
+  limit = 5,
+) {
+  const scopes: IssueListScope[] = [];
+
+  if (relatedProjectId) {
+    scopes.push({
+      organizationId,
+      projectId: relatedProjectId,
+      teamId: relatedTeamId,
+    });
+  }
+
+  if (relatedTeamId) {
+    scopes.push({
+      organizationId,
+      teamId: relatedTeamId,
+    });
+  }
+
+  scopes.push({ organizationId });
+
+  const issuesByScope = await Promise.all(
+    scopes.map(scope =>
+      searchQuery
+        ? collectIssueCandidates(ctx, scope, searchQuery)
+        : collectScopedIssues(ctx, scope, Math.max(limit * 3, 10)),
+    ),
+  );
+
+  return dedupeIssues(issuesByScope.flat()).filter(
+    issue => !issue.parentIssueId,
+  );
+}
+
+export const searchParentOptions = query({
+  args: {
+    orgSlug: v.string(),
+    query: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    excludeIssueId: v.optional(v.id('issues')),
+    selectedIssueId: v.optional(v.id('issues')),
+    relatedProjectId: v.optional(v.id('projects')),
+    relatedTeamId: v.optional(v.id('teams')),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError('UNAUTHORIZED');
+    }
+
+    const org = await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
+      .first();
+
+    if (!org) {
+      throw new ConvexError('ORGANIZATION_NOT_FOUND');
+    }
+
+    const membership = await ctx.db
+      .query('members')
+      .withIndex('by_org_user', q =>
+        q.eq('organizationId', org._id).eq('userId', userId),
+      )
+      .first();
+
+    if (!membership) {
+      throw new ConvexError('FORBIDDEN');
+    }
+
+    const limit = Math.min(args.limit ?? 5, 5);
+    const searchQuery = args.query?.trim();
+    const access = await buildIssueVisibilityAccess(ctx, userId, org._id);
+
+    const selectedIssueDoc = args.selectedIssueId
+      ? await ctx.db.get('issues', args.selectedIssueId)
+      : null;
+    const selectedIssue =
+      selectedIssueDoc &&
+      selectedIssueDoc.organizationId === org._id &&
+      canUserViewIssueFromAccess(access, selectedIssueDoc)
+        ? selectedIssueDoc
+        : null;
+
+    const candidateIssues = (
+      await collectParentIssueCandidates(
+        ctx,
+        org._id,
+        searchQuery,
+        args.relatedProjectId,
+        args.relatedTeamId,
+        limit,
+      )
+    ).filter(issue => {
+      if (args.excludeIssueId && issue._id === args.excludeIssueId) {
+        return false;
+      }
+
+      if (!canUserViewIssueFromAccess(access, issue)) {
+        return false;
+      }
+
+      return matchesParentIssueSearch(issue, searchQuery);
+    });
+
+    const visibleResults =
+      selectedIssue &&
+      !searchQuery &&
+      !candidateIssues.some(issue => issue._id === selectedIssue._id)
+        ? [selectedIssue, ...candidateIssues].slice(0, limit)
+        : candidateIssues.slice(0, limit);
+
+    const priorityIds = Array.from(
+      new Set(
+        [selectedIssue, ...visibleResults]
+          .map(issue => issue?.priorityId)
+          .filter((id): id is Id<'issuePriorities'> => Boolean(id)),
+      ),
+    );
+    const priorityMap = await loadDocMap(ctx, 'issuePriorities', priorityIds);
+
+    return {
+      selectedIssue: selectedIssue
+        ? buildParentIssueOption(selectedIssue, priorityMap)
+        : null,
+      results: visibleResults.map(issue =>
+        buildParentIssueOption(issue, priorityMap),
+      ),
+    };
+  },
+});
 
 export const list = query({
   args: {

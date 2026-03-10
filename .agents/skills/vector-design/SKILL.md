@@ -48,6 +48,7 @@ Read extra references only when needed:
 - Dialog anatomy: [references/dialogs.md](./references/dialogs.md)
 - Dense rows and inline actions: [references/lists-and-micro-interactions.md](./references/lists-and-micro-interactions.md)
 - Optimistic selector behavior: [optimistic.md](./optimistic.md)
+- Scalable popover selectors: [references/scalable-selectors.md](./references/scalable-selectors.md)
 
 ## Non-Negotiable Patterns
 
@@ -142,6 +143,19 @@ Copy an existing selector and keep these pieces aligned:
 - `displayMode` support if the trigger needs to collapse to icon-only
 
 Read [optimistic.md](./optimistic.md) before implementing it.
+
+### Dynamic list inside a popover or combobox
+
+Treat any selector backed by issue/member/project/team/document data as potentially unbounded.
+
+The default pattern is:
+
+- show at most 5 recent related results before the user types
+- switch to server-backed search once the user types
+- keep the rendered list capped at 5 results
+- do not ship a selector that downloads and renders the full org list into `Command`
+
+Use [references/scalable-selectors.md](./references/scalable-selectors.md) when the backing dataset can grow.
 
 ### New creation flow
 

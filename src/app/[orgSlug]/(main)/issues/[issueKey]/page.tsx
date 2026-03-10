@@ -578,6 +578,8 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                         canChangeProject ? handleParentIssueChange : () => {}
                       }
                       excludeIssueId={issue._id}
+                      relatedProjectId={issue.projectId || ''}
+                      relatedTeamId={issue.teamId || ''}
                       displayMode='iconWhenUnselected'
                       className='border-none bg-transparent shadow-none'
                     />

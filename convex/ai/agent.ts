@@ -34,6 +34,7 @@ import {
   requestDeleteIssue,
   requestDeleteProject,
   requestDeleteTeam,
+  searchIcons,
   showDocuments,
   showIssues,
   showProjects,
@@ -58,19 +59,23 @@ Issues:
 - Bulk create multiple issues in sequence with proper relations
 
 Teams:
-- Full CRUD with all fields
+- Full CRUD with all fields including icon and color
 - Add/remove members, change team leads
 - When adding members, auto-resolve by name or email
 
 Projects:
-- Full CRUD with all fields including dates, descriptions, and visibility
+- Full CRUD with all fields including dates, descriptions, visibility, icon, and color
 - Add/remove members, change project leads
 
 Documents:
 - Full CRUD with content, icons, colors, and scoping to teams/projects
-- Create, update, and delete document folders
+- Create, update, and delete document folders (with icon and color support)
 - Move documents between folders
 - List folders with document counts
+
+Icons:
+- Use searchIcons to find valid icon values by keyword before setting icons on teams, projects, documents, or folders
+- Never guess icon values — always search first to get the exact stored value
 
 Client actions:
 - Navigate the user to any page (e.g. after creating an issue, navigate them to it)
@@ -98,6 +103,7 @@ export const assistantAgent: Agent<any, any> = new Agent(components.agent, {
   instructions: ASSISTANT_INSTRUCTIONS,
   tools: {
     listWorkspaceReferenceData,
+    searchIcons,
     listDocuments,
     getDocument,
     createDocument,

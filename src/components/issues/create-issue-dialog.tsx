@@ -445,6 +445,8 @@ function CreateIssueDialogContent({
                   orgSlug={orgSlug}
                   selectedIssue={selectedParentIssue}
                   onIssueSelect={setSelectedParentIssue}
+                  relatedProjectId={selectedProject}
+                  relatedTeamId={selectedTeam}
                   displayMode='iconWhenUnselected'
                 />
               </div>

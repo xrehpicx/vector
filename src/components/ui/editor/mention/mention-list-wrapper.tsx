@@ -104,6 +104,17 @@ const MentionListWrapper = forwardRef<
       });
     }
 
+    for (const doc of searchResults.documents ?? []) {
+      items.push({
+        id: doc._id,
+        label: doc.title,
+        type: 'document',
+        href: `/${orgSlug}/documents/${doc._id}`,
+        icon: doc.icon ?? undefined,
+        color: doc.color ?? undefined,
+      });
+    }
+
     return items;
   }, [searchResults, orgSlug]);
 

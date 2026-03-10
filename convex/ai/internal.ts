@@ -1217,6 +1217,8 @@ export const createProject = internalMutation({
         v.literal('public'),
       ),
     ),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const organization = await requireOrgForAssistant(
@@ -1285,6 +1287,8 @@ export const createProject = internalMutation({
       statusId: status?._id ?? undefined,
       createdBy: args.userId,
       visibility: args.visibility ?? 'organization',
+      icon: args.icon,
+      color: args.color,
     });
 
     await ctx.db.insert('projectMembers', {
@@ -1322,6 +1326,8 @@ export const updateProject = internalMutation({
     ),
     startDate: v.optional(v.union(v.string(), v.null())),
     dueDate: v.optional(v.union(v.string(), v.null())),
+    icon: v.optional(v.union(v.string(), v.null())),
+    color: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const organization = await requireOrgForAssistant(
@@ -1385,6 +1391,8 @@ export const updateProject = internalMutation({
       ...(args.dueDate !== undefined
         ? { dueDate: args.dueDate ?? undefined }
         : {}),
+      ...(args.icon !== undefined ? { icon: args.icon ?? undefined } : {}),
+      ...(args.color !== undefined ? { color: args.color ?? undefined } : {}),
     });
 
     return {
@@ -2521,6 +2529,7 @@ export const createFolder = internalMutation({
     userId: v.id('users'),
     name: v.string(),
     description: v.optional(v.string()),
+    icon: v.optional(v.string()),
     color: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -2543,6 +2552,7 @@ export const createFolder = internalMutation({
       organizationId: organization._id,
       name: args.name.trim(),
       description: args.description?.trim(),
+      icon: args.icon,
       color: args.color,
       createdBy: args.userId,
     });
@@ -2562,6 +2572,7 @@ export const updateFolder = internalMutation({
     folderId: v.string(),
     name: v.optional(v.string()),
     description: v.optional(v.union(v.string(), v.null())),
+    icon: v.optional(v.union(v.string(), v.null())),
     color: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
@@ -2593,6 +2604,7 @@ export const updateFolder = internalMutation({
       ...(args.description !== undefined
         ? { description: args.description ?? undefined }
         : {}),
+      ...(args.icon !== undefined ? { icon: args.icon ?? undefined } : {}),
       ...(args.color !== undefined ? { color: args.color ?? undefined } : {}),
     });
 

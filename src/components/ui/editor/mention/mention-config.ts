@@ -11,9 +11,9 @@
  */
 
 import type { LucideIcon } from 'lucide-react';
-import { CheckSquare, FolderOpen, Users, User } from 'lucide-react';
+import { CheckSquare, FileText, FolderOpen, Users, User } from 'lucide-react';
 
-export type MentionTypeId = 'user' | 'team' | 'project' | 'issue';
+export type MentionTypeId = 'user' | 'team' | 'project' | 'issue' | 'document';
 
 export interface MentionTypeConfig {
   /** Unique type identifier */
@@ -80,6 +80,16 @@ export const MENTION_TYPES: MentionTypeConfig[] = [
     icon: CheckSquare,
     hrefPattern: /\/issues\/[A-Z]+-\d+/,
     cssClass: 'mention-issue',
+    textPrefix: '',
+    hashEncoding: 'icon',
+    roundIcon: false,
+  },
+  {
+    id: 'document',
+    label: 'Documents',
+    icon: FileText,
+    hrefPattern: /\/documents\/[a-z0-9]/,
+    cssClass: 'mention-document',
     textPrefix: '',
     hashEncoding: 'icon',
     roundIcon: false,
