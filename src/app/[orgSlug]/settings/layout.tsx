@@ -139,7 +139,7 @@ export default function OrgSettingsLayout({
       </Sheet>
 
       {/* Main Content */}
-      <main className='bg-background relative m-2 ml-0 flex-1 overflow-y-auto rounded-md border'>
+      <main className='bg-background relative m-2 ml-0 flex-1 overflow-y-auto rounded-md border pb-24 lg:pb-28'>
         {/* Mobile menu button */}
         <button
           onClick={() => setMobileOpen(true)}

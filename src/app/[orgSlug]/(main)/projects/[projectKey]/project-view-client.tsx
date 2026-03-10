@@ -25,6 +25,7 @@ import { ProjectLeadSelector } from '@/components/projects/project-lead-selector
 import { TeamSelector } from '@/components/teams/team-selector';
 import { ProjectMembersSection } from '@/components/projects/project-members';
 import { ProjectActivityFeed } from '@/components/activity/project-activity-feed';
+import { LinkedDocuments } from '@/components/documents/linked-documents';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import {
   usePermissionCheck,
@@ -49,6 +50,7 @@ import { IssuesKanban } from '@/components/issues/issues-kanban';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { TableSkeleton, KanbanSkeleton } from '@/components/ui/table-skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useConfirm } from '@/hooks/use-confirm';
 import {
@@ -656,15 +658,62 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
     return (
       <div className='bg-background h-full overflow-y-auto'>
         <div className='h-full'>
-          <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 flex items-center justify-between border-b px-2 backdrop-blur'>
+          {/* Header Skeleton – matches sticky header bar */}
+          <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 flex flex-wrap items-center justify-between gap-y-0 border-b px-2 backdrop-blur'>
             <div className='flex h-8 items-center gap-2'>
-              <div className='bg-muted h-4 w-16 animate-pulse rounded' />
+              <Skeleton className='h-4 w-16' />
+              <Skeleton className='size-6 rounded-md' />
+              <span className='text-muted-foreground text-sm'>/</span>
+              <Skeleton className='h-4 w-16' />
+            </div>
+            <div className='flex items-center gap-2'>
+              <Skeleton className='size-6 rounded-md' />
+              <div className='bg-muted-foreground/20 h-4 w-px' />
+              <Skeleton className='h-6 w-20' />
+              <div className='bg-muted-foreground/20 h-4 w-px' />
+              <Skeleton className='size-6 rounded-full' />
+              <div className='bg-muted-foreground/20 h-4 w-px' />
+              <Skeleton className='h-6 w-16' />
             </div>
           </div>
-          <div className='mx-auto max-w-5xl px-4 py-4'>
-            <div className='space-y-4'>
-              <div className='bg-muted h-8 w-3/4 animate-pulse rounded' />
-              <div className='bg-muted h-20 animate-pulse rounded' />
+
+          {/* Main Content Skeleton */}
+          <div className='py-3 sm:py-4'>
+            <div className='mx-auto max-w-5xl px-3 sm:px-4'>
+              <div className='mb-2 max-w-4xl space-y-2'>
+                {/* Key + date */}
+                <div className='flex items-center gap-2'>
+                  <Skeleton className='h-3 w-16' />
+                  <span className='text-muted-foreground'>•</span>
+                  <Skeleton className='h-3 w-24' />
+                </div>
+                {/* Icon + Title */}
+                <div className='flex items-center gap-2'>
+                  <Skeleton className='size-6 rounded' />
+                  <Skeleton className='h-9 w-2/3' />
+                </div>
+                {/* Description */}
+                <Skeleton className='h-4 w-3/4' />
+              </div>
+
+              {/* Properties row */}
+              <div className='mt-4 mb-2 flex max-w-4xl flex-wrap items-center gap-2'>
+                <Skeleton className='h-8 w-16 rounded-md' />
+                <Skeleton className='h-8 w-28 rounded-md' />
+                <Skeleton className='h-8 w-40 rounded-md' />
+              </div>
+
+              {/* Tabs skeleton */}
+              <div className='mt-6'>
+                <div className='flex gap-2 border-b pb-2'>
+                  <Skeleton className='h-7 w-16' />
+                  <Skeleton className='h-7 w-20' />
+                  <Skeleton className='h-7 w-20' />
+                </div>
+                <div className='mt-4'>
+                  <KanbanSkeleton />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1380,7 +1429,14 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
             {/* Activity Tab */}
             <TabsContent value='activity'>
-              <div className='px-3 sm:px-4'>
+              <div className='space-y-6 px-3 sm:px-4'>
+                {projectId && (
+                  <LinkedDocuments
+                    orgSlug={params.orgSlug}
+                    mentionType='project'
+                    entityId={projectId}
+                  />
+                )}
                 {projectId ? (
                   <ProjectActivityFeed
                     orgSlug={params.orgSlug}

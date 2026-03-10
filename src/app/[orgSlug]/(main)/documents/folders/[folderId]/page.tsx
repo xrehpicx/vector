@@ -19,7 +19,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { DynamicIcon } from '@/lib/dynamic-icons';
-import { PageSkeleton } from '@/components/ui/table-skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -170,13 +170,38 @@ export default function FolderDetailPage({ params }: FolderDetailPageProps) {
 
   if (!resolvedParams) {
     return (
-      <PageSkeleton
-        showTabs={true}
-        tabCount={1}
-        showCreateButton={true}
-        tableRows={8}
-        tableColumns={3}
-      />
+      <div className='bg-background h-full'>
+        <div className='border-b'>
+          <div className='flex items-center justify-between p-1'>
+            <div className='flex items-center gap-1'>
+              <Skeleton className='h-6 w-20' />
+              <Skeleton className='size-2 rounded-full' />
+              <Skeleton className='h-4 w-24' />
+            </div>
+            <Skeleton className='h-6 w-24' />
+          </div>
+        </div>
+        <div className='border-b px-4 py-6'>
+          <div className='flex items-start gap-6'>
+            <Skeleton className='h-24 w-20 rounded-lg' />
+            <div className='flex-1 space-y-2 pt-2'>
+              <Skeleton className='h-6 w-1/3' />
+              <Skeleton className='h-4 w-2/3' />
+            </div>
+          </div>
+        </div>
+        <div className='divide-y'>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className='flex items-center gap-2 px-3 py-2'>
+              <Skeleton className='size-4 rounded' />
+              <div className='min-w-0 flex-1 space-y-1'>
+                <Skeleton className='h-4 w-1/3' />
+                <Skeleton className='h-3 w-1/2' />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 
@@ -211,13 +236,38 @@ function FolderContent({
 
   if (documents === undefined || folders === undefined) {
     return (
-      <PageSkeleton
-        showTabs={true}
-        tabCount={1}
-        showCreateButton={true}
-        tableRows={8}
-        tableColumns={3}
-      />
+      <div className='bg-background h-full'>
+        <div className='border-b'>
+          <div className='flex items-center justify-between p-1'>
+            <div className='flex items-center gap-1'>
+              <Skeleton className='h-6 w-20' />
+              <Skeleton className='size-2 rounded-full' />
+              <Skeleton className='h-4 w-24' />
+            </div>
+            <Skeleton className='h-6 w-24' />
+          </div>
+        </div>
+        <div className='border-b px-4 py-6'>
+          <div className='flex items-start gap-6'>
+            <Skeleton className='h-24 w-20 rounded-lg' />
+            <div className='flex-1 space-y-2 pt-2'>
+              <Skeleton className='h-6 w-1/3' />
+              <Skeleton className='h-4 w-2/3' />
+            </div>
+          </div>
+        </div>
+        <div className='divide-y'>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className='flex items-center gap-2 px-3 py-2'>
+              <Skeleton className='size-4 rounded' />
+              <div className='min-w-0 flex-1 space-y-1'>
+                <Skeleton className='h-4 w-1/3' />
+                <Skeleton className='h-3 w-1/2' />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 

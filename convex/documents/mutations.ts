@@ -14,6 +14,7 @@ import {
   isValidDocumentColor,
   isValidDocumentIconName,
 } from '../_shared/document_appearance';
+import { syncDocumentMentions } from './mentions';
 
 type DocumentUpdatePatch = Partial<
   Pick<
@@ -126,6 +127,11 @@ export const create = mutation({
       });
     }
 
+    // Sync mention links from content
+    if (args.data.content) {
+      await syncDocumentMentions(ctx, documentId, org._id, args.data.content);
+    }
+
     return { documentId } as const;
   },
 });
@@ -223,6 +229,16 @@ export const update = mutation({
       patchData.visibility = args.data.visibility;
 
     await ctx.db.patch('documents', doc._id, patchData);
+
+    // Sync mention links when content changes
+    if (args.data.content !== undefined) {
+      await syncDocumentMentions(
+        ctx,
+        doc._id,
+        doc.organizationId,
+        args.data.content,
+      );
+    }
 
     const scope = resolveDocumentScope({
       ...doc,
@@ -385,6 +401,15 @@ export const remove = mutation({
       actorId: userId,
       snapshot: snapshotForDocument(doc),
     });
+
+    // Clean up mention links
+    const mentions = await ctx.db
+      .query('documentMentions')
+      .withIndex('by_document', q => q.eq('documentId', doc._id))
+      .collect();
+    for (const mention of mentions) {
+      await ctx.db.delete('documentMentions', mention._id);
+    }
 
     await ctx.db.delete('documents', doc._id);
 

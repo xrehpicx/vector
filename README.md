@@ -96,6 +96,17 @@ Vector is under active development. The top-level docs in this repository reflec
 
    `NEXT_PUBLIC_CONVEX_URL` alone is not enough for local auth helpers. The Next.js server also uses `CONVEX_SITE_URL` or `NEXT_PUBLIC_CONVEX_SITE_URL`.
 
+   If you want the assistant enabled locally, also set these in the Convex environment:
+   - `OPENROUTER_API_KEY=<your-openrouter-api-key>`
+   - `OPENROUTER_MODEL=moonshotai/kimi-k2.5:nitro` (optional override)
+
+   Example:
+
+   ```bash
+   pnpm convex env set OPENROUTER_API_KEY <your-openrouter-api-key>
+   pnpm convex env set OPENROUTER_MODEL moonshotai/kimi-k2.5:nitro
+   ```
+
 4. Start Convex in one terminal.
 
    ```bash
@@ -137,6 +148,8 @@ Optional for local development:
 - `AUTH_SECRET` as a fallback for older auth paths
 - SMTP variables if you want real email delivery instead of local logging
 - VAPID variables if you want browser push notifications
+- `OPENROUTER_API_KEY` if you want the Convex assistant enabled
+- `OPENROUTER_MODEL` to override the default assistant model
 - `CONVEX_URL` / `CONVEX_ADMIN_KEY` for migration scripts and CLI-only workflows
 
 ### Set In Next.js Environment (`.env.local`, Vercel)
@@ -165,10 +178,12 @@ Optional for local development:
 | `VAPID_PUBLIC_KEY`            | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                      |
 | `VAPID_PRIVATE_KEY`           | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                      |
 | `VAPID_SUBJECT`               | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                      |
+| `OPENROUTER_API_KEY`          | Required by `convex/ai/provider.ts` for the organization assistant and all agent responses.                                                                       |
+| `OPENROUTER_MODEL`            | Optional model override for `convex/ai/provider.ts`. Defaults to `moonshotai/kimi-k2.5:nitro`.                                                                    |
 
 `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL` have a public-looking prefix, but the current code reads them from Convex auth code rather than browser code.
 
-SMTP and VAPID settings are optional. If you leave them unset locally, the core app still runs.
+SMTP and VAPID settings are optional. If you leave them unset locally, the core app still runs. `OPENROUTER_API_KEY` is only required if you want the assistant feature to work.
 
 ### Local CLI / Convex Tooling Only
 

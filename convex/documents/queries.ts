@@ -141,6 +141,61 @@ export const list = query({
   },
 });
 
+/**
+ * Get documents that mention a given entity (user, team, project, or issue).
+ * Used on entity detail pages to show "linked documents".
+ */
+export const listByMention = query({
+  args: {
+    orgSlug: v.string(),
+    mentionType: v.union(
+      v.literal('user'),
+      v.literal('team'),
+      v.literal('project'),
+      v.literal('issue'),
+    ),
+    entityId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const org = await getOrganizationBySlug(ctx, args.orgSlug);
+
+    const mentions = await ctx.db
+      .query('documentMentions')
+      .withIndex('by_org_entity', q =>
+        q
+          .eq('organizationId', org._id)
+          .eq('mentionType', args.mentionType)
+          .eq('entityId', args.entityId),
+      )
+      .collect();
+
+    const docs = await Promise.all(
+      mentions.map(async m => {
+        const doc = await ctx.db.get('documents', m.documentId);
+        if (!doc) return null;
+        if (!(await canViewDocument(ctx, doc))) return null;
+        return {
+          _id: doc._id,
+          title: doc.title,
+          icon: doc.icon,
+          color: doc.color,
+          lastEditedAt: doc.lastEditedAt,
+          _creationTime: doc._creationTime,
+        };
+      }),
+    );
+
+    return docs.filter(Boolean) as {
+      _id: string;
+      title: string;
+      icon?: string;
+      color?: string;
+      lastEditedAt?: number;
+      _creationTime: number;
+    }[];
+  },
+});
+
 export const search = query({
   args: {
     orgSlug: v.string(),

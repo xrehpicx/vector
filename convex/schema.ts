@@ -551,6 +551,39 @@ export default defineSchema({
       filterFields: ['organizationId'],
     }),
 
+  // Actions queued by the assistant for the client to perform (navigation, open tabs, etc.)
+  assistantActions: defineTable({
+    organizationId: v.id('organizations'),
+    userId: v.id('users'),
+    type: v.string(), // 'navigate' | 'open_tab' | 'scroll_to' | 'focus' | 'copy' | 'toast'
+    payload: v.any(), // type-specific data (url, text, etc.)
+    status: v.union(
+      v.literal('pending'),
+      v.literal('done'),
+      v.literal('failed'),
+    ),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index('by_user_status', ['userId', 'status'])
+    .index('by_user_created', ['userId', 'createdAt']),
+
+  assistantThreads: defineTable({
+    organizationId: v.id('organizations'),
+    userId: v.id('users'),
+    threadId: v.string(),
+    updatedAt: v.number(),
+    threadStatus: v.string(),
+    errorMessage: v.optional(v.string()),
+    lastContextType: v.optional(v.string()),
+    lastContextPath: v.optional(v.string()),
+    lastEntityId: v.optional(v.string()),
+    lastEntityKey: v.optional(v.string()),
+    pendingAction: v.optional(v.any()),
+  })
+    .index('by_org_user', ['organizationId', 'userId'])
+    .index('by_threadId', ['threadId']),
+
   documentPresence: defineTable({
     documentId: v.id('documents'),
     userId: v.id('users'),
@@ -649,6 +682,25 @@ export default defineSchema({
     .index('by_event', ['eventId'])
     .index('by_recipient', ['recipientId'])
     .index('by_recipient_channel', ['recipientId', 'channel']),
+
+  // Tracks entities (users, teams, projects, issues) mentioned inside documents.
+  // Synced automatically when document content is saved.
+  documentMentions: defineTable({
+    documentId: v.id('documents'),
+    organizationId: v.id('organizations'),
+    // The type of entity mentioned
+    mentionType: v.union(
+      v.literal('user'),
+      v.literal('team'),
+      v.literal('project'),
+      v.literal('issue'),
+    ),
+    // The referenced entity ID (polymorphic — one of users/teams/projects/issues)
+    entityId: v.string(),
+  })
+    .index('by_document', ['documentId'])
+    .index('by_entity', ['mentionType', 'entityId'])
+    .index('by_org_entity', ['organizationId', 'mentionType', 'entityId']),
 
   pushSubscriptions: defineTable({
     userId: v.id('users'),

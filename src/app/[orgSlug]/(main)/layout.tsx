@@ -155,7 +155,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
           </div>
         </aside>
-        <main className='bg-background mx-2 mt-2 mb-14 flex-1 overflow-y-auto rounded-md border lg:mb-2 lg:ml-0'>
+        <main className='bg-background mx-2 mt-2 mb-32 flex-1 overflow-y-auto rounded-md border pb-24 lg:mb-2 lg:ml-0 lg:pb-28'>
           {children}
         </main>
       </div>
@@ -228,7 +228,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </Sheet>
 
           {/* Main content */}
-          <main className='bg-background mx-2 mt-2 mb-14 flex-1 overflow-y-auto rounded-md border lg:mb-2 lg:ml-0'>
+          <main className='bg-background mx-2 mt-2 mb-32 flex-1 overflow-y-auto rounded-md border pb-24 lg:mb-2 lg:ml-0 lg:pb-28'>
             {children}
           </main>
 

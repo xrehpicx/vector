@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { IssueActivityFeed } from '@/components/activity/issue-activity-feed';
+import { LinkedDocuments } from '@/components/documents/linked-documents';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { useConfirm } from '@/hooks/use-confirm';
 import { updateQuery } from '@/lib/optimistic-updates';
@@ -50,38 +51,36 @@ function IssueLoadingSkeleton() {
     <div className='bg-background h-full overflow-y-auto'>
       <div className='h-full'>
         <div>
-          {/* Header Skeleton */}
-          <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 flex items-center justify-between border-b px-2 backdrop-blur'>
-            <div className='flex h-8 flex-wrap items-center gap-2'>
-              <div className='text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors'>
-                <ArrowLeft className='size-3' />
-                Issues
-              </div>
-              <div className='flex items-center gap-2'>
-                <Skeleton className='h-6 w-16' />
-                <div className='bg-muted-foreground/20 h-4 w-px' />
-                <Skeleton className='h-6 w-20' />
+          {/* Header Skeleton – matches sticky header bar */}
+          <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 flex flex-wrap items-center justify-between gap-y-0 border-b px-2 backdrop-blur'>
+            <div className='flex h-8 items-center gap-2'>
+              <Skeleton className='h-4 w-12' />
+              <div className='flex items-center'>
+                <Skeleton className='size-6 rounded-md' />
+                <Skeleton className='ml-1 size-6 rounded-md' />
               </div>
               <span className='text-muted-foreground text-sm'>/</span>
-              <Skeleton className='h-4 w-12' />
+              <Skeleton className='h-4 w-16' />
             </div>
 
-            <div className='flex items-center gap-2'>
+            <div className='flex items-center'>
               <Skeleton className='h-6 w-20' />
-              <div className='bg-muted-foreground/20 h-4 w-px' />
+              <div className='bg-muted-foreground/20 mx-1 h-4 w-px' />
               <Skeleton className='h-6 w-16' />
-              <div className='bg-muted-foreground/20 h-4 w-px' />
-              <Skeleton className='h-6 w-8 rounded-full' />
+              <div className='bg-muted-foreground/20 mx-1 h-4 w-px' />
+              <Skeleton className='size-6 rounded-md' />
+              <div className='bg-muted-foreground/20 mx-1 h-4 w-px' />
+              <Skeleton className='h-6 w-16' />
             </div>
           </div>
 
           {/* Main Content Skeleton */}
-          <div className='mx-auto max-w-5xl px-4 py-4'>
+          <div className='mx-auto max-w-5xl px-3 py-3 sm:px-4 sm:py-4'>
             {/* Issue Header Skeleton */}
             <div className='mb-2 max-w-4xl space-y-2'>
               <div className='flex items-center gap-2'>
                 <Skeleton className='h-3 w-16' />
-                <span>•</span>
+                <span className='text-muted-foreground'>•</span>
                 <Skeleton className='h-3 w-24' />
               </div>
 
@@ -90,11 +89,24 @@ function IssueLoadingSkeleton() {
             </div>
 
             {/* Description Skeleton */}
-            <div className='mb-8 space-y-3'>
+            <div className='mb-6 space-y-3'>
               <Skeleton className='h-4 w-full' />
               <Skeleton className='h-4 w-5/6' />
               <Skeleton className='h-4 w-4/5' />
-              <Skeleton className='h-4 w-3/4' />
+            </div>
+
+            {/* Assignments skeleton */}
+            <div className='mb-6'>
+              <Skeleton className='mb-2 h-5 w-24' />
+              <div className='space-y-2'>
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className='flex items-center gap-2'>
+                    <Skeleton className='size-6 rounded-full' />
+                    <Skeleton className='h-4 w-28' />
+                    <Skeleton className='h-5 w-20 rounded-md' />
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Activity Section Skeleton */}
@@ -180,28 +192,26 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     api.issues.mutations.updateTitle,
   ).withOptimisticUpdate((store, args) => {
     if (!issueQueryArgs) return;
-    updateQuery(
-      store,
-      api.issues.queries.getByKey,
-      issueQueryArgs,
-      current => ({
-        ...current,
-        title: args.title,
-      }),
+    updateQuery(store, api.issues.queries.getByKey, issueQueryArgs, current =>
+      current
+        ? {
+            ...current,
+            title: args.title,
+          }
+        : current,
     );
   });
   const updateDescriptionMutation = useMutation(
     api.issues.mutations.updateDescription,
   ).withOptimisticUpdate((store, args) => {
     if (!issueQueryArgs) return;
-    updateQuery(
-      store,
-      api.issues.queries.getByKey,
-      issueQueryArgs,
-      current => ({
-        ...current,
-        description: args.description ?? undefined,
-      }),
+    updateQuery(store, api.issues.queries.getByKey, issueQueryArgs, current =>
+      current
+        ? {
+            ...current,
+            description: args.description ?? undefined,
+          }
+        : current,
     );
   });
   const updateEstimatesMutation = useMutation(
@@ -212,14 +222,13 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     api.issues.mutations.changeTeam,
   ).withOptimisticUpdate((store, args) => {
     if (!issueQueryArgs) return;
-    updateQuery(
-      store,
-      api.issues.queries.getByKey,
-      issueQueryArgs,
-      current => ({
-        ...current,
-        teamId: args.teamId ?? undefined,
-      }),
+    updateQuery(store, api.issues.queries.getByKey, issueQueryArgs, current =>
+      current
+        ? {
+            ...current,
+            teamId: args.teamId ?? undefined,
+          }
+        : current,
     );
   });
   const changeProjectMutation = useMutation(
@@ -230,15 +239,14 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
       projects?.find(
         project => String(project._id) === String(args.projectId),
       ) ?? null;
-    updateQuery(
-      store,
-      api.issues.queries.getByKey,
-      issueQueryArgs,
-      current => ({
-        ...current,
-        projectId: args.projectId ?? undefined,
-        project: nextProject,
-      }),
+    updateQuery(store, api.issues.queries.getByKey, issueQueryArgs, current =>
+      current
+        ? {
+            ...current,
+            projectId: args.projectId ?? undefined,
+            project: nextProject,
+          }
+        : current,
     );
   });
   const changePriorityMutation = useMutation(
@@ -249,15 +257,14 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
       priorities?.find(
         priority => String(priority._id) === String(args.priorityId),
       ) ?? null;
-    updateQuery(
-      store,
-      api.issues.queries.getByKey,
-      issueQueryArgs,
-      current => ({
-        ...current,
-        priorityId: args.priorityId,
-        priority: nextPriority,
-      }),
+    updateQuery(store, api.issues.queries.getByKey, issueQueryArgs, current =>
+      current
+        ? {
+            ...current,
+            priorityId: args.priorityId,
+            priority: nextPriority,
+          }
+        : current,
     );
   });
   const changeAssignmentStateMutation = useMutation(
@@ -301,28 +308,26 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     api.issues.mutations.changeVisibility,
   ).withOptimisticUpdate((store, args) => {
     if (!issueQueryArgs) return;
-    updateQuery(
-      store,
-      api.issues.queries.getByKey,
-      issueQueryArgs,
-      current => ({
-        ...current,
-        visibility: args.visibility,
-      }),
+    updateQuery(store, api.issues.queries.getByKey, issueQueryArgs, current =>
+      current
+        ? {
+            ...current,
+            visibility: args.visibility,
+          }
+        : current,
     );
   });
   const updateIssueParentMutation = useMutation(
     api.issues.mutations.update,
   ).withOptimisticUpdate((store, args) => {
     if (!issueQueryArgs) return;
-    updateQuery(
-      store,
-      api.issues.queries.getByKey,
-      issueQueryArgs,
-      current => ({
-        ...current,
-        parentIssueId: args.data.parentIssueId,
-      }),
+    updateQuery(store, api.issues.queries.getByKey, issueQueryArgs, current =>
+      current
+        ? {
+            ...current,
+            parentIssueId: args.data.parentIssueId,
+          }
+        : current,
     );
   });
 
@@ -382,11 +387,23 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     }
   }, [editingEstimates, issue?.estimatedTimes]);
 
+  useEffect(() => {
+    if (!resolvedParams || issue !== null) {
+      return;
+    }
+
+    router.replace(`/${resolvedParams.orgSlug}/issues`);
+  }, [issue, resolvedParams, router]);
+
   const estimateStates =
     states?.filter(state => ['done'].includes(state.type)) || [];
 
-  if (!resolvedParams || !issue || !states) {
+  if (!resolvedParams || issue === undefined || states === undefined) {
     return <IssueLoadingSkeleton />;
+  }
+
+  if (issue === null) {
+    return null;
   }
 
   const handleTitleSave = async () => {
@@ -907,6 +924,13 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                 </div>
               )}
             </div>
+
+            {/* Linked Documents */}
+            <LinkedDocuments
+              orgSlug={resolvedParams.orgSlug}
+              mentionType='issue'
+              entityId={issue._id}
+            />
 
             {/* Activity Feed */}
             <div>

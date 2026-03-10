@@ -141,15 +141,24 @@ function DocumentLoadingSkeleton() {
   return (
     <div className='bg-background h-full overflow-y-auto'>
       <div className='h-full'>
-        <div className='flex items-center justify-between border-b px-2'>
-          <div className='flex h-8 items-center gap-2'>
+        {/* Slim header bar – matches actual sticky header */}
+        <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 flex items-center justify-between border-b px-2 backdrop-blur'>
+          <div className='flex h-8 items-center gap-1.5'>
             <Skeleton className='h-4 w-20' />
+            <span className='text-muted-foreground/50 text-xs'>/</span>
+            <Skeleton className='size-5 rounded-sm' />
+            <Skeleton className='h-4 w-28' />
+            <Skeleton className='size-6 rounded-md' />
+          </div>
+          <div className='flex items-center gap-2'>
+            <Skeleton className='h-3 w-20' />
+            <Skeleton className='size-6 rounded-md' />
           </div>
         </div>
-        <div className='mx-auto max-w-[720px] px-6 py-12 sm:px-8'>
-          <Skeleton className='mb-2 h-8 w-2/3' />
-          <Skeleton className='mb-8 h-3 w-40' />
+        {/* Editor area */}
+        <div className='mx-auto max-w-[720px] px-6 py-10 sm:px-8 sm:py-14'>
           <div className='space-y-3'>
+            <Skeleton className='h-8 w-2/3' />
             <Skeleton className='h-4 w-full' />
             <Skeleton className='h-4 w-5/6' />
             <Skeleton className='h-4 w-4/5' />

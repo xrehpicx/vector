@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FileText, Trash2, Plus, Pencil, MoreHorizontal } from 'lucide-react';
 import { DynamicIcon } from '@/lib/dynamic-icons';
-import { PageSkeleton } from '@/components/ui/table-skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -503,13 +503,40 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
 
   if (documents === undefined || folders === undefined) {
     return (
-      <PageSkeleton
-        showTabs={true}
-        tabCount={1}
-        showCreateButton={true}
-        tableRows={8}
-        tableColumns={3}
-      />
+      <div className='bg-background h-full overflow-y-auto'>
+        {/* Header */}
+        <div className='border-b'>
+          <div className='flex items-center justify-between p-1'>
+            <div className='flex items-center gap-1'>
+              <Skeleton className='h-6 w-28 rounded-xs' />
+            </div>
+            <div className='flex items-center gap-1'>
+              <Skeleton className='h-6 w-16' />
+              <Skeleton className='h-6 w-24' />
+            </div>
+          </div>
+        </div>
+        {/* Folder books */}
+        <div className='border-b px-3 py-4 sm:px-4'>
+          <div className='flex flex-wrap gap-4'>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className='h-24 w-28 rounded-lg' />
+            ))}
+          </div>
+        </div>
+        {/* Document list */}
+        <div className='divide-y'>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className='flex items-center gap-2 px-3 py-2'>
+              <Skeleton className='size-4 rounded' />
+              <div className='min-w-0 flex-1 space-y-1'>
+                <Skeleton className='h-4 w-1/3' />
+                <Skeleton className='h-3 w-1/2' />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 
@@ -745,13 +772,28 @@ export default function DocumentsPage({ params }: DocumentsPageProps) {
 
   if (!orgSlug) {
     return (
-      <PageSkeleton
-        showTabs={true}
-        tabCount={1}
-        showCreateButton={true}
-        tableRows={8}
-        tableColumns={3}
-      />
+      <div className='bg-background h-full'>
+        <div className='border-b'>
+          <div className='flex items-center justify-between p-1'>
+            <Skeleton className='h-6 w-28 rounded-xs' />
+            <div className='flex items-center gap-1'>
+              <Skeleton className='h-6 w-16' />
+              <Skeleton className='h-6 w-24' />
+            </div>
+          </div>
+        </div>
+        <div className='divide-y'>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className='flex items-center gap-2 px-3 py-2'>
+              <Skeleton className='size-4 rounded' />
+              <div className='min-w-0 flex-1 space-y-1'>
+                <Skeleton className='h-4 w-1/3' />
+                <Skeleton className='h-3 w-1/2' />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 

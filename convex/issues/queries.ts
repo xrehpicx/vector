@@ -28,7 +28,7 @@ export const getByKey = query({
       .first();
 
     if (!issue) {
-      throw new ConvexError('ISSUE_NOT_FOUND');
+      return null;
     }
 
     if (!(await canViewIssue(ctx, issue))) {
