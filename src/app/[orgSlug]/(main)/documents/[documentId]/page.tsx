@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/popover';
 import { useOptimisticValue } from '@/hooks/use-optimistic';
 import { DEFAULT_DOCUMENT_COLORS } from '@/convex/_shared/document_appearance';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface DocumentDetailPageProps {
   params: Promise<{ orgSlug: string; documentId: string }>;
@@ -139,7 +140,11 @@ function DocumentAppearanceSelector({
 
 function DocumentLoadingSkeleton() {
   return (
-    <div className='bg-background h-full overflow-y-auto'>
+    <ScrollArea
+      className='bg-background h-full'
+      viewportClassName='overscroll-contain'
+      maskHeight={0}
+    >
       <div className='h-full'>
         {/* Slim header bar – matches actual sticky header */}
         <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 flex items-center justify-between border-b px-2 backdrop-blur'>
@@ -167,7 +172,7 @@ function DocumentLoadingSkeleton() {
           </div>
         </div>
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 
@@ -393,7 +398,11 @@ export default function DocumentDetailPage({
   };
 
   return (
-    <div className='bg-background h-full overflow-y-auto'>
+    <ScrollArea
+      className='bg-background h-full'
+      viewportClassName='overscroll-contain'
+      maskHeight={0}
+    >
       <div className='h-full'>
         {/* Slim header bar */}
         <div className='bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 flex items-center justify-between border-b px-2 backdrop-blur'>
@@ -521,6 +530,6 @@ export default function DocumentDetailPage({
           </div>
         </div>
       </div>
-    </div>
+    </ScrollArea>
   );
 }

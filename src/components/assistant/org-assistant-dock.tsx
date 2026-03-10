@@ -29,6 +29,7 @@ import { useAssistantActions } from '@/hooks/use-assistant-actions';
 import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
 import { ProgressiveBlur } from '@/components/ui/progressive-blur';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { AssistantDockMessage } from './assistant-message-renderer';
 
 type PendingAction = {
@@ -36,6 +37,31 @@ type PendingAction = {
   entityType: 'document' | 'issue' | 'project' | 'team';
   entityLabel: string;
   summary: string;
+};
+
+const CHAT_TOP_FADE_MASK =
+  'linear-gradient(to bottom, transparent 0px, rgba(0, 0, 0, 0.28) 18px, rgba(0, 0, 0, 0.8) 48px, black 76px)';
+const CHAT_PANEL_TRANSITION = {
+  height: {
+    type: 'spring' as const,
+    stiffness: 280,
+    damping: 30,
+    mass: 0.9,
+  },
+  opacity: { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const },
+  y: {
+    type: 'spring' as const,
+    stiffness: 320,
+    damping: 28,
+    mass: 0.8,
+  },
+  scale: { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const },
+};
+const CHAT_PANEL_EXIT = {
+  height: { duration: 0.16, ease: [0.4, 0, 1, 1] as const },
+  opacity: { duration: 0.12, ease: [0.4, 0, 1, 1] as const },
+  y: { duration: 0.16, ease: [0.4, 0, 1, 1] as const },
+  scale: { duration: 0.16, ease: [0.4, 0, 1, 1] as const },
 };
 
 export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
@@ -100,48 +126,58 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
   const hasMessages = messages.length > 0;
 
   // --- Scroll management ---
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevMessageCountRef = useRef(0);
   const needsInitialScrollRef = useRef(true);
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const container = scrollContainerRef.current;
-    if (!container) {
-      endRef.current?.scrollIntoView({ behavior, block: 'end' });
-      return;
-    }
-
-    const userMessages = container.querySelectorAll<HTMLElement>(
-      '[data-message-role="user"]',
-    );
-    const latestUserMessage =
-      userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
-
-    if (latestUserMessage) {
-      const containerRect = container.getBoundingClientRect();
-      const messageRect = latestUserMessage.getBoundingClientRect();
-      const messageTopInScroll =
-        messageRect.top - containerRect.top + container.scrollTop;
-      const targetTop = Math.max(
-        0,
-        Math.min(
-          messageTopInScroll - container.clientHeight * 0.45,
-          container.scrollHeight - container.clientHeight,
-        ),
-      );
-      if (behavior === 'auto') {
-        container.scrollTop = targetTop;
-      } else {
-        container.scrollTo({ top: targetTop, behavior });
-      }
-    } else if (behavior === 'auto') {
-      container.scrollTop = container.scrollHeight;
-    } else {
-      endRef.current?.scrollIntoView({ behavior, block: 'end' });
-    }
+  const getViewport = useCallback((): HTMLElement | null => {
+    const base = contentRef.current ?? endRef.current;
+    if (!base) return null;
+    return base.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
   }, []);
+
+  const scrollToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto') => {
+      const viewport = getViewport();
+      if (!viewport) {
+        endRef.current?.scrollIntoView({ behavior, block: 'end' });
+        return;
+      }
+
+      const userMessages =
+        contentRef.current?.querySelectorAll<HTMLElement>(
+          '[data-message-role="user"]',
+        ) ?? [];
+      const latestUserMessage =
+        userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
+
+      if (latestUserMessage) {
+        const viewportRect = viewport.getBoundingClientRect();
+        const messageRect = latestUserMessage.getBoundingClientRect();
+        const messageTopInScroll =
+          messageRect.top - viewportRect.top + viewport.scrollTop;
+        const targetTop = Math.max(
+          0,
+          Math.min(
+            messageTopInScroll - viewport.clientHeight * 0.45,
+            viewport.scrollHeight - viewport.clientHeight,
+          ),
+        );
+        if (behavior === 'auto') {
+          viewport.scrollTop = targetTop;
+        } else {
+          viewport.scrollTo({ top: targetTop, behavior });
+        }
+      } else if (behavior === 'auto') {
+        viewport.scrollTop = viewport.scrollHeight;
+      } else {
+        endRef.current?.scrollIntoView({ behavior, block: 'end' });
+      }
+    },
+    [getViewport],
+  );
 
   const debouncedScrollToBottom = useCallback(
     (behavior: ScrollBehavior = 'auto', delayMs = 150) => {
@@ -286,67 +322,106 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
             {isExpanded && hasMessages ? (
               <motion.div
                 key='messages'
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 6 }}
-                transition={{ duration: 0.15 }}
-                className='pointer-events-auto relative'
+                layout
+                initial={{ opacity: 0, y: 18, scale: 0.985, height: 0 }}
+                animate={{ opacity: 1, y: 0, scale: 1, height: 'auto' }}
+                exit={{
+                  opacity: 0,
+                  y: 10,
+                  scale: 0.992,
+                  height: 0,
+                  transition: CHAT_PANEL_EXIT,
+                }}
+                transition={CHAT_PANEL_TRANSITION}
+                className='pointer-events-auto relative origin-bottom will-change-transform'
               >
-                <ProgressiveBlur
-                  direction='top'
-                  blurLayers={10}
-                  blurIntensity={0.8}
-                  bgGradient
-                  bgGradientOpacity={0.4}
-                  className='pointer-events-none absolute inset-x-0 top-0 z-10 h-20 rounded-t-2xl'
-                />
-                <button
-                  type='button'
-                  onClick={() => setIsExpanded(false)}
-                  className='bg-muted/60 text-muted-foreground/60 hover:bg-muted hover:text-foreground absolute top-2 right-2 z-20 flex size-6 items-center justify-center rounded-full backdrop-blur-sm transition-colors'
-                  aria-label='Collapse chat'
-                >
-                  <ChevronsDown className='size-3.5' />
-                </button>
-                <div
-                  ref={scrollContainerRef}
-                  className='border-border/40 bg-background/90 max-h-[min(50vh,420px)] space-y-3 overflow-y-auto overscroll-contain rounded-t-2xl border-x border-t px-3 pt-14 pb-3 backdrop-blur-sm'
-                >
-                  {messages.map(message => (
-                    <div
-                      key={`${message.role}-${message.id ?? `${message.order}-${message.stepOrder}`}`}
-                      data-message-role={message.role}
-                    >
-                      <AssistantDockMessage message={message} />
+                <div className='from-background via-background/75 pointer-events-none absolute inset-x-3 -top-10 z-0 h-16 bg-gradient-to-b to-transparent blur-xl' />
+                <div className='bg-background/92 border-border/45 relative z-10 overflow-hidden rounded-t-[22px] border-x border-t shadow-[0_-18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl'>
+                  <ProgressiveBlur
+                    direction='top'
+                    blurLayers={10}
+                    blurIntensity={1}
+                    bgGradient
+                    bgGradientOpacity={1}
+                    className='pointer-events-none absolute inset-x-0 top-0 z-10 h-24'
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setIsExpanded(false)}
+                    className='bg-muted/60 text-muted-foreground/60 hover:bg-muted hover:text-foreground absolute top-2 right-2 z-20 flex size-6 items-center justify-center rounded-full backdrop-blur-sm transition-colors'
+                    aria-label='Collapse chat'
+                  >
+                    <ChevronsDown className='size-3.5' />
+                  </button>
+                  <ScrollArea
+                    className='max-h-[min(50vh,420px)]'
+                    viewportClassName='overscroll-contain'
+                    maskHeight={56}
+                  >
+                    <div ref={contentRef} className='space-y-3 px-3 pt-16 pb-3'>
+                      {messages.map(message => (
+                        <div
+                          key={`${message.role}-${message.id ?? `${message.order}-${message.stepOrder}`}`}
+                          data-message-role={message.role}
+                        >
+                          <AssistantDockMessage message={message} />
+                        </div>
+                      ))}
+                      <div ref={endRef} aria-hidden className='h-px' />
                     </div>
-                  ))}
-                  <div ref={endRef} aria-hidden className='h-px' />
+                  </ScrollArea>
                 </div>
               </motion.div>
             ) : null}
           </AnimatePresence>
 
           {/* Collapsed preview — last messages fading into page */}
-          {!isExpanded && hasMessages ? (
-            <div className='pointer-events-none relative max-h-20 overflow-hidden'>
-              <ProgressiveBlur
-                direction='top'
-                blurLayers={6}
-                blurIntensity={0.6}
-                bgGradient
-                bgGradientOpacity={0.9}
-                className='pointer-events-none absolute inset-0 z-10'
-              />
-              <div className='space-y-2 px-3 pt-2 pb-1'>
-                {messages.slice(-2).map(message => (
-                  <AssistantDockMessage
-                    key={`${message.role}-${message.id ?? `${message.order}-${message.stepOrder}`}-preview`}
-                    message={message}
+          <AnimatePresence initial={false}>
+            {!isExpanded && hasMessages ? (
+              <motion.div
+                key='preview'
+                layout
+                initial={{ opacity: 0, y: 10, scale: 0.99, height: 0 }}
+                animate={{ opacity: 1, y: 0, scale: 1, height: 'auto' }}
+                exit={{
+                  opacity: 0,
+                  y: 8,
+                  scale: 0.995,
+                  height: 0,
+                  transition: CHAT_PANEL_EXIT,
+                }}
+                transition={CHAT_PANEL_TRANSITION}
+                className='pointer-events-none relative max-h-20 origin-bottom will-change-transform'
+              >
+                <div className='from-background via-background/70 pointer-events-none absolute inset-x-3 -top-8 z-0 h-12 bg-gradient-to-b to-transparent blur-lg' />
+                <div className='bg-background/82 border-border/40 relative z-10 overflow-hidden rounded-t-[18px] border-x border-t shadow-[0_-10px_30px_rgba(15,23,42,0.06)] backdrop-blur-lg'>
+                  <ProgressiveBlur
+                    direction='top'
+                    blurLayers={6}
+                    blurIntensity={0.6}
+                    bgGradient
+                    bgGradientOpacity={0.9}
+                    className='pointer-events-none absolute inset-0 z-10'
                   />
-                ))}
-              </div>
-            </div>
-          ) : !isExpanded && !hasMessages ? (
+                  <div
+                    className='space-y-2 px-3 pt-2 pb-1'
+                    style={{
+                      maskImage: CHAT_TOP_FADE_MASK,
+                      WebkitMaskImage: CHAT_TOP_FADE_MASK,
+                    }}
+                  >
+                    {messages.slice(-2).map(message => (
+                      <AssistantDockMessage
+                        key={`${message.role}-${message.id ?? `${message.order}-${message.stepOrder}`}-preview`}
+                        message={message}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+          {!isExpanded && !hasMessages ? (
             <div className='pointer-events-none px-3 pb-1'>
               <GradientWaveText
                 speed={0.8}

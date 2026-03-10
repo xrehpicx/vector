@@ -40,6 +40,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 // ---------------------------------------------------------------------------
 // Folder colors
@@ -330,7 +331,11 @@ function FolderContent({
   };
 
   return (
-    <div className='bg-background h-full overflow-y-auto'>
+    <ScrollArea
+      className='bg-background h-full'
+      viewportClassName='overscroll-contain'
+      maskHeight={0}
+    >
       <ConfirmDeleteDialog />
       {editing && (
         <EditFolderDialog
@@ -504,6 +509,6 @@ function FolderContent({
           ))}
         </div>
       )}
-    </div>
+    </ScrollArea>
   );
 }
