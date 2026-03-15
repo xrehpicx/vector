@@ -52,6 +52,18 @@
 }
 
 :root {
+  --font-sans:
+    'Geist', 'Inter', 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-title:
+    'Urbanist', 'Avenir Next', 'Inter', 'Segoe UI', 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-body:
+    'Poppins', 'Inter', 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-geist-mono:
+    'SFMono-Regular', 'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas',
+    'Liberation Mono', monospace;
   --radius: 0.45rem;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.141 0.005 285.823);
