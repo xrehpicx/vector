@@ -37,7 +37,7 @@ interface CreateTeamDialogContentProps {
   };
 }
 
-function CreateTeamDialogContent({
+export function CreateTeamDialogContent({
   orgSlug,
   onClose,
   onSuccess,

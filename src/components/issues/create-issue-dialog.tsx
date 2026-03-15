@@ -181,7 +181,7 @@ interface CreateIssueDialogContentProps {
   };
 }
 
-function CreateIssueDialogContent({
+export function CreateIssueDialogContent({
   orgSlug,
   onClose,
   onSuccess,

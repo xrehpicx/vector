@@ -67,6 +67,12 @@ export default defineSchema({
         skippedCount: v.number(),
       }),
     ),
+    // Platform branding (white-label)
+    brandName: v.optional(v.string()),
+    brandDescription: v.optional(v.string()),
+    brandLogo: v.optional(v.id('_storage')),
+    brandThemeColor: v.optional(v.string()),
+    brandAccentColor: v.optional(v.string()),
   }),
 
   signupEmailDomainRules: defineTable({

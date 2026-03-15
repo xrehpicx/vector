@@ -87,6 +87,86 @@ export const updateSignupEmailDomainPolicy = mutation({
   },
 });
 
+export const updateBranding = mutation({
+  args: {
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    logoStorageId: v.optional(v.id('_storage')),
+    removeLogo: v.optional(v.boolean()),
+    themeColor: v.optional(v.string()),
+    accentColor: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError('UNAUTHORIZED');
+    }
+
+    await requirePlatformAdminUser(ctx.db, userId);
+
+    const settingsId = await ensureSiteSettings(ctx.db);
+    const settings = await ctx.db.get('siteSettings', settingsId);
+
+    const patch: Record<string, unknown> = {};
+
+    if (args.name !== undefined) {
+      const trimmed = args.name.trim();
+      if (trimmed.length === 0 || trimmed.length > 50) {
+        throw new ConvexError(
+          'Brand name must be between 1 and 50 characters.',
+        );
+      }
+      patch.brandName = trimmed;
+    }
+
+    if (args.description !== undefined) {
+      patch.brandDescription = args.description.trim().slice(0, 200);
+    }
+
+    if (args.removeLogo) {
+      if (settings?.brandLogo) {
+        await ctx.storage.delete(settings.brandLogo);
+      }
+      patch.brandLogo = undefined;
+    } else if (args.logoStorageId !== undefined) {
+      // Delete old logo if replacing
+      if (settings?.brandLogo) {
+        await ctx.storage.delete(settings.brandLogo);
+      }
+      patch.brandLogo = args.logoStorageId;
+    }
+
+    if (args.themeColor !== undefined) {
+      patch.brandThemeColor = args.themeColor;
+    }
+
+    if (args.accentColor !== undefined) {
+      patch.brandAccentColor = args.accentColor;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch('siteSettings', settingsId, patch);
+    }
+
+    return null;
+  },
+});
+
+export const generateBrandLogoUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async ctx => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError('UNAUTHORIZED');
+    }
+
+    await requirePlatformAdminUser(ctx.db, userId);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
 export const upsertSignupEmailDomainRulesBatch = internalMutation({
   args: {
     domains: v.array(v.string()),

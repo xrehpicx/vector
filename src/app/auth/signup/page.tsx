@@ -21,6 +21,12 @@ import Link from 'next/link';
 import { extractAuthErrorMessage } from '@/lib/auth-error-handler';
 import { authClient } from '@/lib/auth-client';
 import { toast } from 'sonner';
+import { useBranding } from '@/hooks/use-branding';
+import {
+  DEFAULT_BRANDING,
+  getContrastingTextColor,
+  resolveBrandColor,
+} from '@/lib/branding';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +52,12 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/';
+  const branding = useBranding();
+  const accentColor = resolveBrandColor(
+    branding.accentColor,
+    DEFAULT_BRANDING.accentColor,
+  );
+  const accentTextColor = getContrastingTextColor(accentColor);
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -96,11 +108,18 @@ function SignupForm() {
     <div className='flex min-h-dvh items-center justify-center px-4'>
       <div className='w-full max-w-sm'>
         <div className='mb-6 text-center'>
+          {branding.logoUrl && (
+            <img
+              src={branding.logoUrl}
+              alt={branding.name}
+              className='mx-auto mb-4 size-12 rounded-xl object-contain'
+            />
+          )}
           <h2 className='text-2xl font-semibold tracking-tight'>
             Create your account
           </h2>
           <p className='text-muted-foreground mt-1 text-sm'>
-            Get started with Vector
+            Get started with {branding.name}
           </p>
         </div>
 
@@ -171,7 +190,15 @@ function SignupForm() {
               )}
             />
 
-            <Button type='submit' className='w-full' disabled={isLoading}>
+            <Button
+              type='submit'
+              className='w-full transition-opacity hover:opacity-90'
+              disabled={isLoading}
+              style={{
+                backgroundColor: accentColor,
+                color: accentTextColor,
+              }}
+            >
               {isLoading ? (
                 <span className='flex items-center gap-2'>
                   <Loader2 className='h-4 w-4 animate-spin' />

@@ -6,6 +6,7 @@ import { ConvexAuthProvider } from '@/providers/convex-auth-provider';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Toaster } from '@/components/ui/sonner';
 import { NotificationClientBootstrap } from '@/components/notifications/notification-client-bootstrap';
+import { BrandingHead } from '@/components/branding-head';
 import { getToken } from '@/lib/auth-server';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -50,6 +51,7 @@ export default async function RootLayout({
           <ErrorBoundary>
             <ConvexAuthProvider initialToken={await getToken()}>
               <NotificationClientBootstrap />
+              <BrandingHead />
               {children}
               <Toaster />
             </ConvexAuthProvider>

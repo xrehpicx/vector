@@ -78,6 +78,27 @@ export const listSignupEmailDomainRulesPageBySource = internalQuery({
   },
 });
 
+export const getBranding = query({
+  args: {},
+  handler: async ctx => {
+    const settings = await getSiteSettings(ctx.db);
+
+    let logoUrl: string | null = null;
+    if (settings?.brandLogo) {
+      logoUrl = await ctx.storage.getUrl(settings.brandLogo);
+    }
+
+    return {
+      name: settings?.brandName ?? 'Vector',
+      description: settings?.brandDescription ?? 'Project management platform',
+      logoUrl,
+      logoStorageId: settings?.brandLogo ?? null,
+      themeColor: settings?.brandThemeColor ?? '#111827',
+      accentColor: settings?.brandAccentColor ?? '#2563eb',
+    };
+  },
+});
+
 export const getSignupRestrictionPreview = internalQuery({
   args: {
     email: v.string(),

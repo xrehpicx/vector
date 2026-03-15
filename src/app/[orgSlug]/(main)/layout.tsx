@@ -2,18 +2,23 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { OrgSidebar, OrgOptionsDropdown } from '@/components/organization';
+import { OrgAssistantDock } from '@/components/assistant/org-assistant-dock';
 import { UserMenu } from '@/components/user-menu';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { CommandMenu } from '@/components/command-menu';
+import { CommandMenuActions } from '@/components/command-menu-actions';
 import {
   CheckSquare,
   FolderOpen,
@@ -26,6 +31,15 @@ import { useQuery } from 'convex/react';
 import { api } from '@/lib/convex';
 import { useParams, usePathname } from 'next/navigation';
 import { Doc } from '@/convex/_generated/dataModel';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const SIDEBAR_MIN_WIDTH = 200;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 224; // w-56
+const SIDEBAR_STORAGE_KEY = 'vector-sidebar-width';
 
 // ---------------------------------------------------------------------------
 // Contexts
@@ -48,6 +62,63 @@ export function BottomBarSlot({ children }: { children: ReactNode }) {
   const target = useContext(BottomBarPortalContext);
   if (!target) return null;
   return createPortal(children, target);
+}
+
+// ---------------------------------------------------------------------------
+// Resizable sidebar hook
+// ---------------------------------------------------------------------------
+
+function useResizableSidebar() {
+  const [width, setWidth] = useState(() => {
+    if (typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH;
+    const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (
+        !isNaN(parsed) &&
+        parsed >= SIDEBAR_MIN_WIDTH &&
+        parsed <= SIDEBAR_MAX_WIDTH
+      ) {
+        return parsed;
+      }
+    }
+    return SIDEBAR_DEFAULT_WIDTH;
+  });
+  const isResizing = useRef(false);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const newWidth = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, e.clientX),
+      );
+      setWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  // Persist to localStorage
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, String(width));
+  }, [width]);
+
+  return { width, handleMouseDown };
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +164,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const orgSlug = params.orgSlug as string;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [portalTarget, setPortalTarget] = useState<HTMLDivElement | null>(null);
+  const { width: sidebarWidth, handleMouseDown } = useResizableSidebar();
 
   // Fetch current user and organization data
   const user = useQuery(api.users.currentUser);
@@ -116,7 +188,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
   if (user === undefined || user === null || organization === undefined) {
     return (
       <div className='bg-secondary flex h-screen'>
-        <aside className='hidden w-56 lg:block'>
+        <aside
+          className='relative hidden lg:block'
+          style={{ width: sidebarWidth }}
+        >
           <div className='flex h-full flex-col'>
             <div className='p-2'>
               <div className='bg-background flex w-full items-center justify-between rounded-md border p-1'>
@@ -172,7 +247,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <BottomBarPortalContext.Provider value={portalTarget}>
         <div className='bg-secondary flex h-screen'>
           {/* Desktop sidebar */}
-          <aside className='hidden w-56 lg:block'>
+          <aside
+            className='relative hidden lg:block'
+            style={{ width: sidebarWidth }}
+          >
             <div className='flex h-full flex-col'>
               <div className='p-2'>
                 <OrgOptionsDropdown
@@ -182,15 +260,25 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   organizations={organizations}
                 />
               </div>
-              <div className='flex-1 overflow-y-auto'>
+              <div className='min-h-0 flex-1 overflow-y-auto'>
                 <OrgSidebar orgSlug={orgSlug} />
               </div>
+              {/* Assistant dock */}
+              <OrgAssistantDock orgSlug={orgSlug} />
+              {/* User footer */}
               <div className='border-border flex items-center gap-1 border-t p-2'>
                 <div className='min-w-0 flex-1'>
                   <UserMenu />
                 </div>
                 <NotificationBell />
               </div>
+            </div>
+            {/* Resize handle */}
+            <div
+              onMouseDown={handleMouseDown}
+              className='group absolute top-0 -right-0.5 bottom-0 z-30 flex w-1.5 cursor-col-resize items-center justify-center'
+            >
+              <div className='bg-border group-hover:bg-foreground/20 group-active:bg-foreground/30 h-full w-px transition-colors' />
             </div>
           </aside>
 
@@ -217,6 +305,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     onNavigate={() => setMobileOpen(false)}
                   />
                 </div>
+                {/* Assistant dock in mobile sheet */}
+                <OrgAssistantDock orgSlug={orgSlug} />
                 <div className='border-border flex items-center gap-1 border-t p-2'>
                   <div className='min-w-0 flex-1'>
                     <UserMenu />
@@ -228,9 +318,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </Sheet>
 
           {/* Main content */}
-          <main className='bg-background mx-2 mt-2 mb-32 flex-1 overflow-y-auto rounded-md border pb-24 lg:mb-2 lg:ml-0 lg:pb-28'>
+          <main className='bg-background mx-2 mt-2 mb-32 flex-1 overflow-y-auto rounded-md border pb-24 lg:mb-2 lg:ml-0 lg:pb-2'>
             {children}
           </main>
+
+          {/* Command menu (⌘K) */}
+          <CommandMenu />
+          <CommandMenuActions />
 
           {/* Mobile bottom bar */}
           <div className='bg-background/80 fixed right-0 bottom-0 left-0 z-50 border-t backdrop-blur-lg lg:hidden'>

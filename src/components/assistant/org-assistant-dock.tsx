@@ -13,16 +13,16 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useConvexAuth } from 'convex/react';
 import { useAction, useMutation, useQuery } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
+import { useBranding } from '@/hooks/use-branding';
 import { Button } from '@/components/ui/button';
 import {
   AssistantInput,
   type AssistantInputHandle,
   type MentionRef,
 } from './assistant-input';
-import { GradientWaveText } from '@/components/gradient-wave-text';
 import { BarsSpinner } from '@/components/bars-spinner';
 import { cn } from '@/lib/utils';
-import { ArrowUp, ChevronsDown, Trash2, X } from 'lucide-react';
+import { ArrowUp, ChevronsDown, ChevronsUp, Trash2, X } from 'lucide-react';
 import {
   type UIMessage,
   optimisticallySendMessage,
@@ -50,23 +50,15 @@ const CHAT_PANEL_TRANSITION = {
     mass: 0.9,
   },
   opacity: { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const },
-  y: {
-    type: 'spring' as const,
-    stiffness: 320,
-    damping: 28,
-    mass: 0.8,
-  },
-  scale: { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const },
 };
 const CHAT_PANEL_EXIT = {
   height: { duration: 0.16, ease: [0.4, 0, 1, 1] as const },
   opacity: { duration: 0.12, ease: [0.4, 0, 1, 1] as const },
-  y: { duration: 0.16, ease: [0.4, 0, 1, 1] as const },
-  scale: { duration: 0.16, ease: [0.4, 0, 1, 1] as const },
 };
 
 export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const branding = useBranding();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   useAssistantActions(orgSlug);
@@ -79,7 +71,6 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
       }),
     [orgSlug, pathname, searchParams],
   );
-  const isSettingsPage = pathname.startsWith(`/${orgSlug}/settings`);
   const isReadyForAssistant = isAuthenticated && !isLoading;
 
   const threadRowQuery = useQuery(
@@ -270,7 +261,6 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
   const handleSend = async (text: string, mentions: MentionRef[]) => {
     if (isSending) return false;
 
-    // Build prompt: include mention context if any
     let prompt = text.trim();
     if (!prompt) return false;
 
@@ -346,189 +336,169 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
 
   return (
     <>
-      <div className='pointer-events-none fixed inset-x-0 bottom-0 z-40 lg:right-2 lg:left-[14.5rem]'>
-        <div
-          className={cn(
-            'mx-auto flex w-full max-w-2xl flex-col px-2 sm:px-3',
-            isSettingsPage ? 'pb-3 sm:pb-4' : 'pb-16 sm:pb-4',
-          )}
+      <div className='border-border flex flex-col border-t'>
+        {/* Header toggle */}
+        <button
+          type='button'
+          onClick={() => setIsExpanded(prev => !prev)}
+          className='text-muted-foreground hover:text-foreground flex items-center justify-between px-3 py-1.5 text-xs font-medium transition-colors'
         >
-          {/* Messages area — borders + progressive blur fade at top */}
-          <AnimatePresence initial={false}>
-            {isExpanded && hasMessages ? (
-              <motion.div
-                key='messages'
-                layout
-                initial={{ opacity: 0, y: 18, scale: 0.985, height: 0 }}
-                animate={{ opacity: 1, y: 0, scale: 1, height: 'auto' }}
-                exit={{
-                  opacity: 0,
-                  y: 10,
-                  scale: 0.992,
-                  height: 0,
-                  transition: CHAT_PANEL_EXIT,
-                }}
-                transition={CHAT_PANEL_TRANSITION}
-                className='pointer-events-auto relative mb-2 origin-bottom will-change-transform'
-              >
-                <div className='border-border/60 bg-background/95 relative overflow-hidden rounded-[18px] border shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl'>
-                  <button
-                    type='button'
-                    onClick={() => setIsExpanded(false)}
-                    className='bg-muted/70 text-muted-foreground/70 hover:bg-muted hover:text-foreground absolute top-3 right-3 z-20 flex size-6 items-center justify-center rounded-full transition-colors'
-                    aria-label='Collapse chat'
-                  >
-                    <ChevronsDown className='size-3.5' />
-                  </button>
-                  <ScrollArea
-                    className='h-[min(46vh,400px)] w-full'
-                    viewportClassName='overscroll-contain'
-                    maskHeight={18}
-                    viewportRef={viewportRef}
-                  >
-                    <div
-                      ref={contentRef}
-                      className='space-y-3 px-3 pt-3 pb-3 sm:px-4'
-                    >
-                      {messages.map(message => (
-                        <div
-                          key={`${message.role}-${message.id ?? `${message.order}-${message.stepOrder}`}`}
-                          data-message-role={message.role}
-                        >
-                          <AssistantDockMessage message={message} />
-                        </div>
-                      ))}
-                      <div ref={endRef} aria-hidden className='h-px' />
-                    </div>
-                  </ScrollArea>
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+          <span>{branding.name}</span>
+          <span className='flex items-center gap-1'>
+            {hasMessages && (
+              <span className='bg-foreground/10 size-1.5 rounded-full' />
+            )}
+            {isExpanded ? (
+              <ChevronsDown className='size-3' />
+            ) : (
+              <ChevronsUp className='size-3' />
+            )}
+          </span>
+        </button>
 
-          {/* Collapsed preview — last messages fading into page */}
-          <AnimatePresence initial={false}>
-            {!isExpanded && hasMessages ? (
-              <motion.div
-                key='preview'
-                layout
-                initial={{ opacity: 0, y: 10, scale: 0.99, height: 0 }}
-                animate={{ opacity: 1, y: 0, scale: 1, height: 'auto' }}
-                exit={{
-                  opacity: 0,
-                  y: 8,
-                  scale: 0.995,
-                  height: 0,
-                  transition: CHAT_PANEL_EXIT,
-                }}
-                transition={CHAT_PANEL_TRANSITION}
-                className='pointer-events-auto relative mb-2 ml-auto w-full max-w-[420px] origin-bottom cursor-pointer will-change-transform sm:max-w-[460px]'
-                onClick={() => setIsExpanded(true)}
-              >
-                <div className='border-border/50 bg-background/92 overflow-hidden rounded-[14px] border shadow-sm backdrop-blur-xl'>
-                  <div className='px-2.5 py-1.5'>
-                    {messages.slice(-1).map(message => (
-                      <AssistantDockMessage
-                        key={`${message.role}-${message.id ?? `${message.order}-${message.stepOrder}`}-preview`}
-                        message={message}
-                        compact
-                      />
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-          {!isExpanded && !hasMessages ? (
-            <div className='pointer-events-none px-3 pb-1'>
-              <GradientWaveText
-                speed={0.8}
-                repeat
-                once={false}
-                className='text-muted-foreground text-[11px]'
-              >
-                Ask me anything about this page.
-              </GradientWaveText>
-            </div>
-          ) : null}
-
-          {/* Pending action banner */}
-          {pendingAction ? (
+        {/* Expanded messages */}
+        <AnimatePresence initial={false}>
+          {isExpanded && hasMessages ? (
             <motion.div
-              layout
-              className='bg-background/96 pointer-events-auto mb-1 flex items-center gap-2 rounded-lg border border-[#cb706f]/20 px-3 py-1.5 backdrop-blur-xl'
+              key='messages'
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{
+                opacity: 0,
+                height: 0,
+                transition: CHAT_PANEL_EXIT,
+              }}
+              transition={CHAT_PANEL_TRANSITION}
+              className='relative overflow-hidden'
             >
-              <Trash2 className='size-3 text-[#cb706f]' />
-              <div className='min-w-0 flex-1'>
-                <div className='truncate text-[11px]'>
-                  {pendingAction.summary}
+              <ScrollArea
+                className='h-[min(40vh,320px)] w-full'
+                viewportClassName='overscroll-contain'
+                maskHeight={12}
+                viewportRef={viewportRef}
+              >
+                <div ref={contentRef} className='space-y-2.5 px-2 pt-1 pb-2'>
+                  {messages.map(message => (
+                    <div
+                      key={`${message.role}-${message.id ?? `${message.order}-${message.stepOrder}`}`}
+                      data-message-role={message.role}
+                    >
+                      <AssistantDockMessage message={message} />
+                    </div>
+                  ))}
+                  <div ref={endRef} aria-hidden className='h-px' />
                 </div>
-              </div>
-              <Button
-                size='sm'
-                variant='outline'
-                className='h-6 text-[11px]'
-                onClick={handleConfirmAction}
-              >
-                Confirm
-              </Button>
-              <button
-                type='button'
-                className='text-muted-foreground hover:text-foreground'
-                onClick={() => void cancelPendingAction({ orgSlug })}
-              >
-                <X className='size-3' />
-              </button>
+              </ScrollArea>
             </motion.div>
           ) : null}
+        </AnimatePresence>
 
-          {/* Error banner */}
-          {threadRow?.threadStatus === 'error' && threadRow.errorMessage ? (
-            <div className='bg-background/96 pointer-events-auto mb-1 rounded-lg border border-[#cb706f]/20 px-3 py-1.5 text-[11px] text-[#cb706f] backdrop-blur-xl'>
-              {threadRow.errorMessage}
-            </div>
+        {/* Collapsed preview — last message */}
+        <AnimatePresence initial={false}>
+          {!isExpanded && hasMessages ? (
+            <motion.div
+              key='preview'
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{
+                opacity: 0,
+                height: 0,
+                transition: CHAT_PANEL_EXIT,
+              }}
+              transition={CHAT_PANEL_TRANSITION}
+              className='cursor-pointer overflow-hidden'
+              onClick={() => setIsExpanded(true)}
+            >
+              <div className='px-2 pb-1'>
+                {messages.slice(-1).map(message => (
+                  <AssistantDockMessage
+                    key={`${message.role}-${message.id ?? `${message.order}-${message.stepOrder}`}-preview`}
+                    message={message}
+                    compact
+                  />
+                ))}
+              </div>
+            </motion.div>
           ) : null}
+        </AnimatePresence>
 
-          {/* Input bar */}
-          <motion.div
-            layout
-            className='border-border/60 bg-background/96 pointer-events-auto overflow-hidden rounded-2xl border p-1 shadow-sm backdrop-blur-xl'
+        {/* Pending action banner */}
+        {pendingAction ? (
+          <div className='mx-2 mb-1 flex items-center gap-2 rounded-md border border-[#cb706f]/20 px-2 py-1'>
+            <Trash2 className='size-3 text-[#cb706f]' />
+            <div className='min-w-0 flex-1'>
+              <div className='truncate text-[11px]'>
+                {pendingAction.summary}
+              </div>
+            </div>
+            <Button
+              size='sm'
+              variant='outline'
+              className='h-5 text-[10px]'
+              onClick={handleConfirmAction}
+            >
+              Confirm
+            </Button>
+            <button
+              type='button'
+              className='text-muted-foreground hover:text-foreground'
+              onClick={() => void cancelPendingAction({ orgSlug })}
+            >
+              <X className='size-3' />
+            </button>
+          </div>
+        ) : null}
+
+        {/* Error banner */}
+        {threadRow?.threadStatus === 'error' && threadRow.errorMessage ? (
+          <div className='mx-2 mb-1 rounded-md border border-[#cb706f]/20 px-2 py-1 text-[11px] text-[#cb706f]'>
+            {threadRow.errorMessage}
+          </div>
+        ) : null}
+
+        {/* Input bar */}
+        <div className='px-1.5 pb-1.5'>
+          <div
+            className={cn(
+              'border-border/60 bg-background/60 overflow-hidden rounded-lg border',
+            )}
           >
-            <div className='flex items-end gap-1'>
+            <div className='flex items-end gap-0.5'>
               <AssistantInput
                 ref={inputRef}
                 orgSlug={orgSlug}
                 onSubmit={handleSend}
                 onFocus={() => setIsExpanded(true)}
                 disabled={isSending}
-                className='min-h-9 flex-1'
+                className='min-h-8 flex-1 px-2 py-1.5 text-xs'
+                placeholder='Ask anything...'
               />
-              <div className='flex shrink-0 items-center gap-1 p-1'>
+              <div className='flex shrink-0 items-center gap-0.5 p-0.5'>
                 {hasMessages ? (
                   <button
                     type='button'
                     onClick={() => void handleClearHistory()}
-                    className='text-muted-foreground/40 hover:text-muted-foreground flex size-7 items-center justify-center rounded-full transition-colors'
+                    className='text-muted-foreground/40 hover:text-muted-foreground flex size-6 items-center justify-center rounded transition-colors'
                     aria-label='Clear conversation'
                   >
-                    <Trash2 className='size-3' />
+                    <Trash2 className='size-2.5' />
                   </button>
                 ) : null}
                 <Button
                   size='sm'
-                  className='size-8 rounded-full p-0'
+                  className='size-6 rounded p-0'
                   disabled={isSending}
                   onClick={() => inputRef.current?.submit()}
                 >
                   {isSending || threadRow?.threadStatus === 'pending' ? (
-                    <BarsSpinner size={14} />
+                    <BarsSpinner size={12} />
                   ) : (
-                    <ArrowUp className='size-4' />
+                    <ArrowUp className='size-3' />
                   )}
                 </Button>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
       <ConfirmActionDialog />

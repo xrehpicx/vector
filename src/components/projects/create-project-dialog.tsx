@@ -40,7 +40,7 @@ interface CreateProjectDialogContentProps {
   };
 }
 
-function CreateProjectDialogContent({
+export function CreateProjectDialogContent({
   orgSlug,
   onClose,
   onSuccess,
