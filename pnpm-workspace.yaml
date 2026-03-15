@@ -1,3 +1,6 @@
+packages:
+  - '.'
+
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - es5-ext
