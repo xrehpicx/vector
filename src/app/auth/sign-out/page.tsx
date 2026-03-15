@@ -12,20 +12,30 @@ export default function SignOutPage() {
   const router = useRouter();
   const [state, setState] = useState<SignOutState>('pending');
 
-  const attemptSignOut = useCallback(async () => {
-    setState('pending');
-    try {
-      await authClient.signOut();
-      router.push('/auth/login');
-      setTimeout(() => router.refresh(), 100);
-    } catch (error) {
-      console.error('Failed to sign out', error);
-      setState('error');
-    }
-  }, [router]);
+  const attemptSignOut = useCallback(
+    async (showPendingState = true) => {
+      if (showPendingState) {
+        setState('pending');
+      }
+
+      try {
+        await authClient.signOut();
+        router.push('/auth/login');
+        setTimeout(() => router.refresh(), 100);
+      } catch (error) {
+        console.error('Failed to sign out', error);
+        setState('error');
+      }
+    },
+    [router],
+  );
 
   useEffect(() => {
-    void attemptSignOut();
+    const timeoutId = window.setTimeout(() => {
+      void attemptSignOut(false);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [attemptSignOut]);
 
   return (

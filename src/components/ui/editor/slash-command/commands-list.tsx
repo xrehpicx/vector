@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useImperativeHandle, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import type { LucideIcon } from 'lucide-react';
 import { Ban } from 'lucide-react';
@@ -24,11 +24,7 @@ export type CommandsListHandle = {
 const CommandsList = forwardRef<CommandsListHandle, CommandsListProps>(
   ({ items, command }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset index when items change
-    useEffect(() => {
-      setSelectedIndex(0);
-    }, [items]);
+    const effectiveSelectedIndex = items[selectedIndex] ? selectedIndex : 0;
 
     const selectItem = (index: number) => {
       const item = items[index];
@@ -55,7 +51,7 @@ const CommandsList = forwardRef<CommandsListHandle, CommandsListProps>(
 
         if (event.key === 'Enter') {
           event.preventDefault();
-          selectItem(selectedIndex);
+          selectItem(effectiveSelectedIndex);
           return true;
         }
 
@@ -71,7 +67,7 @@ const CommandsList = forwardRef<CommandsListHandle, CommandsListProps>(
               key={item.title}
               type='button'
               onClick={() => selectItem(index)}
-              data-selected={selectedIndex === index || undefined}
+              data-selected={effectiveSelectedIndex === index || undefined}
               className='focus:bg-accent focus:text-accent-foreground data-[selected]:bg-accent data-[selected]:text-accent-foreground relative flex w-full cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-none'
             >
               <item.icon className='mr-2 size-4' />

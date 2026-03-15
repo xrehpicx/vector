@@ -93,6 +93,7 @@ interface GroupedIssue {
     id: string;
     name: string | null;
     email: string | null;
+    image: string | null;
   }>;
   assigneeIds: string[];
   assignments: Array<{
@@ -178,6 +179,7 @@ export function IssuesKanban({
             id: row.assigneeId,
             name: row.assigneeName ?? null,
             email: row.assigneeEmail ?? null,
+            image: row.assigneeImage ?? null,
           });
           existing.assigneeIds.push(row.assigneeId);
         }
@@ -204,6 +206,7 @@ export function IssuesKanban({
                   id: row.assigneeId,
                   name: row.assigneeName ?? null,
                   email: row.assigneeEmail ?? null,
+                  image: row.assigneeImage ?? null,
                 },
               ]
             : [],
@@ -232,6 +235,7 @@ export function IssuesKanban({
         assigneeId: issue.assignees[0]?.id ?? null,
         assigneeName: issue.assignees[0]?.name ?? null,
         assigneeEmail: issue.assignees[0]?.email ?? null,
+        assigneeImage: issue.assignees[0]?.image ?? null,
         stateId: issue.workflowStateId,
         stateIcon: issue.workflowStateIcon,
         stateColor: issue.workflowStateColor,
