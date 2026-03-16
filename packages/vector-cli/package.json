@@ -1,5 +1,5 @@
 {
-  "name": "@xrehpicx/vcli",
+  "name": "@rehpic/vcli",
   "version": "0.1.0",
   "description": "Command line interface for Vector workspaces.",
   "license": "Apache-2.0",

@@ -44,7 +44,7 @@ Use whichever form matches the user's setup:
 
 - Repo-local examples: `pnpm exec tsx src/cli/index.ts ...`
 - Installed binary examples: `vcli ...`
-- Installed package name: `@xrehpicx/vcli`
+- Installed package name: `@rehpic/vcli`
 
 ## What To Explain
 
