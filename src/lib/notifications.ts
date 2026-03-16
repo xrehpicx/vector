@@ -17,6 +17,10 @@ export async function registerNotificationServiceWorker() {
   });
 
   await navigator.serviceWorker.ready;
+
+  // Force an update check on every registration (page load / PWA open)
+  registration.update().catch(() => {});
+
   return registration;
 }
 
