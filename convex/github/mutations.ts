@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { components } from '../_generated/api';
 import type { Doc, Id } from '../_generated/dataModel';
 import {
   internalMutation,
@@ -61,6 +62,147 @@ async function getIssueStateIdByType(
     )
     .first()
     .then(state => state?._id ?? null);
+}
+
+function buildImportedPullRequestDescription(args: {
+  repoFullName: string;
+  number: number;
+  url: string;
+  body?: string | null;
+}) {
+  return [
+    `Imported from GitHub PR ${args.repoFullName}#${args.number}`,
+    args.url,
+    args.body?.trim() || null,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+async function resolveOrgMemberByGitHubIdentity(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  identity: {
+    githubUserId?: number | null;
+    githubUsername?: string | null;
+    email?: string | null;
+  },
+) {
+  const candidateUsers: Doc<'users'>[] = [];
+  const seenUserIds = new Set<string>();
+
+  const addCandidate = (user: Doc<'users'> | null) => {
+    if (!user) return;
+    const key = String(user._id);
+    if (seenUserIds.has(key)) return;
+    seenUserIds.add(key);
+    candidateUsers.push(user);
+  };
+
+  if (typeof identity.githubUserId === 'number') {
+    addCandidate(
+      await ctx.db
+        .query('users')
+        .withIndex('by_github_user_id', q =>
+          q.eq('githubUserId', identity.githubUserId!),
+        )
+        .first(),
+    );
+
+    if (candidateUsers.length === 0) {
+      const account = await ctx.runQuery(
+        components.betterAuth.adapter.findOne,
+        {
+          model: 'account',
+          where: [
+            {
+              field: 'providerId',
+              operator: 'eq',
+              value: 'github',
+            },
+            {
+              field: 'accountId',
+              operator: 'eq',
+              value: String(identity.githubUserId),
+            },
+          ],
+        },
+      );
+
+      if (account?.userId) {
+        const authUser = await ctx.runQuery(
+          components.betterAuth.adapter.findOne,
+          {
+            model: 'user',
+            select: ['userId'],
+            where: [
+              {
+                field: 'id',
+                operator: 'eq',
+                value: String(account.userId),
+              },
+            ],
+          },
+        );
+
+        const localUserId =
+          typeof authUser?.userId === 'string'
+            ? ctx.db.normalizeId('users', authUser.userId)
+            : null;
+        if (localUserId) {
+          addCandidate(await ctx.db.get('users', localUserId));
+        }
+      }
+    }
+  }
+
+  if (identity.githubUsername) {
+    addCandidate(
+      await ctx.db
+        .query('users')
+        .withIndex('by_github_username', q =>
+          q.eq('githubUsername', identity.githubUsername!),
+        )
+        .first(),
+    );
+  }
+
+  if (identity.email) {
+    addCandidate(
+      await ctx.db
+        .query('users')
+        .withIndex('email', q => q.eq('email', identity.email!))
+        .first(),
+    );
+  }
+
+  for (const candidate of candidateUsers) {
+    const membership = await ctx.db
+      .query('members')
+      .withIndex('by_org_user', q =>
+        q.eq('organizationId', organizationId).eq('userId', candidate._id),
+      )
+      .first();
+    if (!membership) continue;
+
+    if (
+      (identity.githubUserId &&
+        candidate.githubUserId !== identity.githubUserId) ||
+      (identity.githubUsername &&
+        candidate.githubUsername !== identity.githubUsername)
+    ) {
+      await ctx.db.patch('users', candidate._id, {
+        githubUserId:
+          identity.githubUserId ?? candidate.githubUserId ?? undefined,
+        githubUsername:
+          identity.githubUsername ?? candidate.githubUsername ?? undefined,
+      });
+    }
+
+    return candidate;
+  }
+
+  return null;
 }
 
 async function recordGithubLinkActivity(
@@ -204,9 +346,13 @@ async function autoAssignFromGitHubLogins(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
   issueId: Id<'issues'>,
-  githubUsernames: string[],
+  identities: Array<{
+    githubUserId?: number | null;
+    githubUsername?: string | null;
+    email?: string | null;
+  }>,
 ) {
-  if (githubUsernames.length === 0) return;
+  if (identities.length === 0) return;
 
   const issue = await ctx.db.get('issues', issueId);
   if (!issue) return;
@@ -225,22 +371,13 @@ async function autoAssignFromGitHubLogins(
     .withIndex('by_issue', q => q.eq('issueId', issueId))
     .collect();
 
-  for (const ghUsername of githubUsernames) {
-    // Find Vector user by linked GitHub username
-    const vectorUser = await ctx.db
-      .query('users')
-      .withIndex('by_github_username', q => q.eq('githubUsername', ghUsername))
-      .first();
+  for (const identity of identities) {
+    const vectorUser = await resolveOrgMemberByGitHubIdentity(
+      ctx,
+      organizationId,
+      identity,
+    );
     if (!vectorUser) continue;
-
-    // Verify user is an org member
-    const membership = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', organizationId).eq('userId', vectorUser._id),
-      )
-      .first();
-    if (!membership) continue;
 
     // Check not already assigned
     const existingAssignment = existingAssignments.find(
@@ -289,7 +426,12 @@ async function autoAssignFromGitHubLogins(
         entityType: 'issue',
         eventType: 'issue_assignees_changed',
         details: {
-          addedUserNames: [vectorUser.name ?? ghUsername],
+          addedUserNames: [
+            vectorUser.name ??
+              identity.githubUsername ??
+              identity.email ??
+              'GitHub user',
+          ],
           removedUserNames: [],
         },
         snapshot: snapshotForIssue(issue),
@@ -311,22 +453,42 @@ async function autoAssignFromPullRequest(
   const pr = await ctx.db.get('githubPullRequests', pullRequestId);
   if (!pr) return;
 
-  const githubUsernames: string[] = [];
-  if (pr.assigneeLogins) {
-    for (const login of pr.assigneeLogins) {
-      if (!githubUsernames.includes(login)) githubUsernames.push(login);
+  const identities: Array<{
+    githubUserId?: number | null;
+    githubUsername?: string | null;
+  }> = [];
+  const seenIdentities = new Set<string>();
+
+  const pushIdentity = (identity: {
+    githubUserId?: number | null;
+    githubUsername?: string | null;
+  }) => {
+    const key = `${identity.githubUserId ?? 'none'}:${identity.githubUsername ?? 'none'}`;
+    if (seenIdentities.has(key)) return;
+    seenIdentities.add(key);
+    identities.push(identity);
+  };
+
+  if (pr.assigneeLogins || pr.assigneeGitHubUserIds) {
+    const count = Math.max(
+      pr.assigneeLogins?.length ?? 0,
+      pr.assigneeGitHubUserIds?.length ?? 0,
+    );
+    for (let index = 0; index < count; index += 1) {
+      pushIdentity({
+        githubUserId: pr.assigneeGitHubUserIds?.[index] ?? null,
+        githubUsername: pr.assigneeLogins?.[index] ?? null,
+      });
     }
   }
-  if (pr.authorLogin && !githubUsernames.includes(pr.authorLogin)) {
-    githubUsernames.push(pr.authorLogin);
+  if (pr.authorLogin || pr.authorGitHubUserId) {
+    pushIdentity({
+      githubUserId: pr.authorGitHubUserId ?? null,
+      githubUsername: pr.authorLogin ?? null,
+    });
   }
 
-  await autoAssignFromGitHubLogins(
-    ctx,
-    organizationId,
-    issueId,
-    githubUsernames,
-  );
+  await autoAssignFromGitHubLogins(ctx, organizationId, issueId, identities);
 }
 
 async function autoAssignFromGitHubIssue(
@@ -338,25 +500,42 @@ async function autoAssignFromGitHubIssue(
   const githubIssue = await ctx.db.get('githubIssues', githubIssueId);
   if (!githubIssue) return;
 
-  const githubUsernames: string[] = [];
-  if (githubIssue.assigneeLogins) {
-    for (const login of githubIssue.assigneeLogins) {
-      if (!githubUsernames.includes(login)) githubUsernames.push(login);
+  const identities: Array<{
+    githubUserId?: number | null;
+    githubUsername?: string | null;
+  }> = [];
+  const seenIdentities = new Set<string>();
+
+  const pushIdentity = (identity: {
+    githubUserId?: number | null;
+    githubUsername?: string | null;
+  }) => {
+    const key = `${identity.githubUserId ?? 'none'}:${identity.githubUsername ?? 'none'}`;
+    if (seenIdentities.has(key)) return;
+    seenIdentities.add(key);
+    identities.push(identity);
+  };
+
+  if (githubIssue.assigneeLogins || githubIssue.assigneeGitHubUserIds) {
+    const count = Math.max(
+      githubIssue.assigneeLogins?.length ?? 0,
+      githubIssue.assigneeGitHubUserIds?.length ?? 0,
+    );
+    for (let index = 0; index < count; index += 1) {
+      pushIdentity({
+        githubUserId: githubIssue.assigneeGitHubUserIds?.[index] ?? null,
+        githubUsername: githubIssue.assigneeLogins?.[index] ?? null,
+      });
     }
   }
-  if (
-    githubIssue.authorLogin &&
-    !githubUsernames.includes(githubIssue.authorLogin)
-  ) {
-    githubUsernames.push(githubIssue.authorLogin);
+  if (githubIssue.authorLogin || githubIssue.authorGitHubUserId) {
+    pushIdentity({
+      githubUserId: githubIssue.authorGitHubUserId ?? null,
+      githubUsername: githubIssue.authorLogin ?? null,
+    });
   }
 
-  await autoAssignFromGitHubLogins(
-    ctx,
-    organizationId,
-    issueId,
-    githubUsernames,
-  );
+  await autoAssignFromGitHubLogins(ctx, organizationId, issueId, identities);
 }
 
 async function syncArtifactLinksForIssues(args: {
@@ -778,8 +957,10 @@ export const upsertPullRequest = internalMutation({
     isDraft: v.boolean(),
     headRefName: v.optional(v.string()),
     baseRefName: v.optional(v.string()),
+    authorGitHubUserId: v.optional(v.number()),
     authorLogin: v.optional(v.string()),
     authorAvatarUrl: v.optional(v.string()),
+    assigneeGitHubUserIds: v.optional(v.array(v.number())),
     assigneeLogins: v.optional(v.array(v.string())),
     mergedAt: v.optional(v.number()),
     closedAt: v.optional(v.number()),
@@ -796,17 +977,28 @@ export const upsertPullRequest = internalMutation({
       .first();
 
     if (existing) {
+      const previousTitle = existing.title;
+      const previousBody = existing.body ?? undefined;
       await ctx.db.patch('githubPullRequests', existing._id, {
         ...args,
         lastSyncedAt: Date.now(),
       });
-      return existing._id;
+      return {
+        pullRequestId: existing._id,
+        previousTitle,
+        previousBody,
+      } as const;
     }
 
-    return await ctx.db.insert('githubPullRequests', {
+    const pullRequestId = await ctx.db.insert('githubPullRequests', {
       ...args,
       lastSyncedAt: Date.now(),
     });
+    return {
+      pullRequestId,
+      previousTitle: undefined,
+      previousBody: undefined,
+    } as const;
   },
 });
 
@@ -821,8 +1013,10 @@ export const upsertGitHubIssue = internalMutation({
     body: v.optional(v.string()),
     url: v.string(),
     state: v.union(v.literal('open'), v.literal('closed')),
+    authorGitHubUserId: v.optional(v.number()),
     authorLogin: v.optional(v.string()),
     authorAvatarUrl: v.optional(v.string()),
+    assigneeGitHubUserIds: v.optional(v.array(v.number())),
     assigneeLogins: v.optional(v.array(v.string())),
     closedAt: v.optional(v.number()),
     lastActivityAt: v.number(),
@@ -911,6 +1105,74 @@ export const syncPullRequestLinks = internalMutation({
   },
 });
 
+export const syncLinkedIssueContentFromPullRequest = internalMutation({
+  args: {
+    organizationId: v.id('organizations'),
+    pullRequestId: v.id('githubPullRequests'),
+    repoFullName: v.string(),
+    previousTitle: v.optional(v.string()),
+    previousBody: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const pullRequest = await ctx.db.get(
+      'githubPullRequests',
+      args.pullRequestId,
+    );
+    if (!pullRequest) {
+      throw new ConvexError('PULL_REQUEST_NOT_FOUND');
+    }
+
+    const previousImportedDescription = buildImportedPullRequestDescription({
+      repoFullName: args.repoFullName,
+      number: pullRequest.number,
+      url: pullRequest.url,
+      body: args.previousBody ?? undefined,
+    });
+    const nextImportedDescription = buildImportedPullRequestDescription({
+      repoFullName: args.repoFullName,
+      number: pullRequest.number,
+      url: pullRequest.url,
+      body: pullRequest.body ?? undefined,
+    });
+
+    const links = await ctx.db
+      .query('githubArtifactLinks')
+      .withIndex('by_pr', q => q.eq('pullRequestId', args.pullRequestId))
+      .collect();
+
+    for (const link of links) {
+      if (!link.active) continue;
+      const issue = await ctx.db.get('issues', link.issueId);
+      if (!issue || issue.organizationId !== args.organizationId) continue;
+
+      const patch: Partial<Doc<'issues'>> = {};
+      if (args.previousTitle && issue.title === args.previousTitle) {
+        patch.title = pullRequest.title;
+      }
+      if (
+        (issue.description ?? '') === previousImportedDescription ||
+        issue.description === undefined
+      ) {
+        patch.description = nextImportedDescription;
+      }
+
+      if (Object.keys(patch).length === 0) continue;
+
+      await ctx.db.patch('issues', issue._id, {
+        ...patch,
+        searchText: buildIssueSearchText({
+          key: issue.key,
+          title: patch.title ?? issue.title,
+          description:
+            patch.description !== undefined
+              ? patch.description
+              : (issue.description ?? ''),
+        }),
+      });
+    }
+  },
+});
+
 export const createIssueFromPullRequestIfNeeded = internalMutation({
   args: {
     organizationId: v.id('organizations'),
@@ -967,26 +1229,14 @@ export const createIssueFromPullRequestIfNeeded = internalMutation({
         .order('asc')
         .first());
 
-    const linkedUser = pullRequest.authorLogin
-      ? await ctx.db
-          .query('users')
-          .withIndex('by_github_username', q =>
-            q.eq('githubUsername', pullRequest.authorLogin!),
-          )
-          .first()
-          .then(async user => {
-            if (!user) return null;
-            const membership = await ctx.db
-              .query('members')
-              .withIndex('by_org_user', q =>
-                q
-                  .eq('organizationId', args.organizationId)
-                  .eq('userId', user._id),
-              )
-              .first();
-            return membership ? user : null;
-          })
-      : null;
+    const linkedUser = await resolveOrgMemberByGitHubIdentity(
+      ctx,
+      args.organizationId,
+      {
+        githubUserId: pullRequest.authorGitHubUserId ?? null,
+        githubUsername: pullRequest.authorLogin ?? null,
+      },
+    );
 
     const nextNumber =
       (
@@ -1001,13 +1251,12 @@ export const createIssueFromPullRequestIfNeeded = internalMutation({
     const title =
       pullRequest.title.trim() ||
       `${repository.fullName}#${pullRequest.number}`;
-    const description = [
-      `Imported from GitHub PR ${repository.fullName}#${pullRequest.number}`,
-      pullRequest.url,
-      pullRequest.body?.trim() || null,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
+    const description = buildImportedPullRequestDescription({
+      repoFullName: repository.fullName,
+      number: pullRequest.number,
+      url: pullRequest.url,
+      body: pullRequest.body ?? undefined,
+    });
 
     const issueId = await ctx.db.insert('issues', {
       organizationId: args.organizationId,

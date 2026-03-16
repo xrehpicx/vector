@@ -571,7 +571,7 @@ async function persistPullRequestPayload(
         ? 'draft'
         : 'open';
 
-  const pullRequestId = await ctx.runMutation(
+  const upsertResult = await ctx.runMutation(
     internal.github.mutations.upsertPullRequest,
     {
       organizationId: args.organizationId,
@@ -586,8 +586,17 @@ async function persistPullRequestPayload(
       isDraft: Boolean(args.payload.draft),
       headRefName: args.payload.head?.ref ?? undefined,
       baseRefName: args.payload.base?.ref ?? undefined,
+      authorGitHubUserId:
+        typeof args.payload.user?.id === 'number'
+          ? args.payload.user.id
+          : undefined,
       authorLogin: args.payload.user?.login ?? undefined,
       authorAvatarUrl: args.payload.user?.avatar_url ?? undefined,
+      assigneeGitHubUserIds: Array.isArray(args.payload.assignees)
+        ? args.payload.assignees
+            .map((a: any) => a?.id)
+            .filter((id: unknown): id is number => typeof id === 'number')
+        : undefined,
       assigneeLogins: Array.isArray(args.payload.assignees)
         ? args.payload.assignees
             .map((a: any) => a?.login)
@@ -606,6 +615,7 @@ async function persistPullRequestPayload(
       ),
     },
   );
+  const pullRequestId = upsertResult.pullRequestId;
 
   const issueKeys = extractIssueKeysFromText(
     args.payload.title,
@@ -629,6 +639,22 @@ async function persistPullRequestPayload(
     number: args.payload.number,
     issueKeys: resolvedIssueKeys,
   });
+
+  if (
+    upsertResult.previousTitle !== undefined ||
+    upsertResult.previousBody !== undefined
+  ) {
+    await ctx.runMutation(
+      internal.github.mutations.syncLinkedIssueContentFromPullRequest,
+      {
+        organizationId: args.organizationId,
+        pullRequestId,
+        repoFullName: args.repository.fullName,
+        previousTitle: upsertResult.previousTitle,
+        previousBody: upsertResult.previousBody,
+      },
+    );
+  }
 
   return pullRequestId;
 }
@@ -657,8 +683,17 @@ async function persistGitHubIssuePayload(
       body: args.payload.body ?? undefined,
       url: args.payload.html_url,
       state: args.payload.state,
+      authorGitHubUserId:
+        typeof args.payload.user?.id === 'number'
+          ? args.payload.user.id
+          : undefined,
       authorLogin: args.payload.user?.login ?? undefined,
       authorAvatarUrl: args.payload.user?.avatar_url ?? undefined,
+      assigneeGitHubUserIds: Array.isArray(args.payload.assignees)
+        ? args.payload.assignees
+            .map((assignee: any) => assignee?.id)
+            .filter((id: unknown): id is number => typeof id === 'number')
+        : undefined,
       assigneeLogins: Array.isArray(args.payload.assignees)
         ? args.payload.assignees
             .map((assignee: any) => assignee?.login)
