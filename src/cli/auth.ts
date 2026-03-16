@@ -230,6 +230,101 @@ export async function fetchConvexToken(session: CliSession, appUrl: string) {
   };
 }
 
+type DeviceCodeResponse = {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  expires_in: number;
+  interval: number;
+};
+
+type DeviceTokenResponse = {
+  access_token?: string;
+  token_type?: string;
+  error?: string;
+};
+
+export async function requestDeviceCode(
+  appUrl: string,
+  clientId: string,
+): Promise<DeviceCodeResponse> {
+  const response = await fetch(buildUrl(appUrl, '/api/auth/device/code'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to request device code: HTTP ${response.status}`);
+  }
+
+  return (await response.json()) as DeviceCodeResponse;
+}
+
+export async function pollDeviceToken(
+  session: CliSession,
+  appUrl: string,
+  deviceCode: string,
+  clientId: string,
+  interval: number,
+  expiresIn: number,
+): Promise<CliSession> {
+  const deadline = Date.now() + expiresIn * 1000;
+  let pollInterval = interval * 1000;
+
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+    const { response, session: nextSession } = await authRequest(
+      session,
+      appUrl,
+      '/api/auth/device/token',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+          device_code: deviceCode,
+          client_id: clientId,
+        }),
+      },
+    );
+
+    session = nextSession;
+
+    if (response.ok) {
+      const data = (await response.json()) as DeviceTokenResponse;
+      if (data.access_token) {
+        // Session cookies were set by the response — return the updated session
+        return session;
+      }
+    }
+
+    let errorData: DeviceTokenResponse;
+    try {
+      errorData = (await response.json()) as DeviceTokenResponse;
+    } catch {
+      errorData = { error: `HTTP ${response.status}` };
+    }
+
+    switch (errorData.error) {
+      case 'authorization_pending':
+        break;
+      case 'slow_down':
+        pollInterval += 5000;
+        break;
+      case 'access_denied':
+        throw new Error('Authorization denied by user.');
+      case 'expired_token':
+        throw new Error('Device code expired. Please try again.');
+      default:
+        throw new Error(`Device auth error: ${errorData.error}`);
+    }
+  }
+
+  throw new Error('Device code expired. Please try again.');
+}
+
 export async function prompt(question: string) {
   const value = await text({
     message: question.replace(/:\s*$/, ''),

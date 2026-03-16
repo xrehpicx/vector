@@ -12,8 +12,10 @@ import {
   fetchAuthSession,
   loginWithPassword,
   logout,
+  pollDeviceToken,
   prompt,
   promptSecret,
+  requestDeviceCode,
   signUpWithEmail,
 } from './auth';
 import { createConvexClient, runAction, runMutation, runQuery } from './convex';
@@ -710,22 +712,56 @@ authCommand
 
 authCommand
   .command('login [identifier]')
-  .option('--password <password>', 'Password')
+  .option('--password <password>', 'Password (uses device flow if omitted)')
   .action(async (identifier, options, command) => {
     const runtime = await getRuntime(command);
-    const loginId = identifier?.trim() || (await prompt('Email or username: '));
-    const password =
-      options.password?.trim() || (await promptSecret('Password: '));
     let session = createEmptySession();
     session.appUrl = runtime.appUrl;
     session.convexUrl = runtime.convexUrl;
 
-    session = await loginWithPassword(
-      session,
-      runtime.appUrl,
-      loginId,
-      password,
-    );
+    const usePassword = Boolean(identifier || options.password);
+
+    if (usePassword) {
+      const loginId =
+        identifier?.trim() || (await prompt('Email or username: '));
+      const password =
+        options.password?.trim() || (await promptSecret('Password: '));
+      session = await loginWithPassword(
+        session,
+        runtime.appUrl,
+        loginId,
+        password,
+      );
+    } else {
+      const deviceResp = await requestDeviceCode(runtime.appUrl, 'vcli');
+      const verifyUrl = `${runtime.appUrl}${deviceResp.verification_uri}?user_code=${deviceResp.user_code}`;
+
+      console.log();
+      console.log(`  Open this URL in your browser to log in:`);
+      console.log();
+      console.log(`    ${verifyUrl}`);
+      console.log();
+      console.log(`  Or go to ${runtime.appUrl}/device and enter code:`);
+      console.log();
+      console.log(`    ${deviceResp.user_code}`);
+      console.log();
+
+      const open = await import('open').then(m => m.default).catch(() => null);
+      if (open) {
+        await open(verifyUrl).catch(() => {});
+      }
+
+      console.log('  Waiting for authorization...');
+      session = await pollDeviceToken(
+        session,
+        runtime.appUrl,
+        deviceResp.device_code,
+        'vcli',
+        deviceResp.interval,
+        deviceResp.expires_in,
+      );
+    }
+
     const authState = await fetchAuthSession(session, runtime.appUrl);
     session = authState.session;
 

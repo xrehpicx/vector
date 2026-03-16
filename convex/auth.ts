@@ -6,7 +6,7 @@ import {
 import { convex } from '@convex-dev/better-auth/plugins';
 import { APIError, betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
-import { username, emailOTP } from 'better-auth/plugins';
+import { username, emailOTP, deviceAuthorization } from 'better-auth/plugins';
 import type { GenericActionCtx, GenericMutationCtx } from 'convex/server';
 import { v } from 'convex/values';
 import { api, components, internal } from './_generated/api';
@@ -237,6 +237,12 @@ export const createAuthOptions = (
       otpLength: 4,
       expiresIn: 900,
       allowedAttempts: 5,
+    }),
+    deviceAuthorization({
+      verificationUri: '/device',
+      expiresIn: '15m',
+      interval: '3s',
+      userCodeLength: 8,
     }),
     convex({
       authConfig,

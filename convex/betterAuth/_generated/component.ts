@@ -8,7 +8,7 @@
  * @module
  */
 
-import type { FunctionReference } from "convex/server";
+import type { FunctionReference } from 'convex/server';
 
 /**
  * A utility for referencing a Convex component's exposed API.
@@ -25,8 +25,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
   {
     adapter: {
       create: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           input:
             | {
@@ -41,7 +41,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   userId?: null | string;
                   username?: null | string;
                 };
-                model: "user";
+                model: 'user';
               }
             | {
                 data: {
@@ -53,7 +53,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   userAgent?: null | string;
                   userId: string;
                 };
-                model: "session";
+                model: 'session';
               }
             | {
                 data: {
@@ -70,7 +70,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   updatedAt: number;
                   userId: string;
                 };
-                model: "account";
+                model: 'account';
               }
             | {
                 data: {
@@ -80,7 +80,21 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   updatedAt: number;
                   value: string;
                 };
-                model: "verification";
+                model: 'verification';
+              }
+            | {
+                data: {
+                  clientId?: null | string;
+                  deviceCode: string;
+                  expiresAt: number;
+                  lastPolledAt?: null | number;
+                  pollingInterval?: null | number;
+                  scope?: null | string;
+                  status: string;
+                  userCode: string;
+                  userId?: null | string;
+                };
+                model: 'deviceCode';
               }
             | {
                 data: {
@@ -89,7 +103,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   privateKey: string;
                   publicKey: string;
                 };
-                model: "jwks";
+                model: 'jwks';
               };
           onCreateHandle?: string;
           select?: Array<string>;
@@ -98,37 +112,37 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
       deleteMany: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           input:
             | {
-                model: "user";
+                model: 'user';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "name"
-                    | "email"
-                    | "emailVerified"
-                    | "image"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "username"
-                    | "displayUsername"
-                    | "userId"
-                    | "_id";
+                    | 'name'
+                    | 'email'
+                    | 'emailVerified'
+                    | 'image'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | 'username'
+                    | 'displayUsername'
+                    | 'userId'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -139,30 +153,30 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "session";
+                model: 'session';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "expiresAt"
-                    | "token"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "ipAddress"
-                    | "userAgent"
-                    | "userId"
-                    | "_id";
+                    | 'expiresAt'
+                    | 'token'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | 'ipAddress'
+                    | 'userAgent'
+                    | 'userId'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -173,35 +187,35 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "account";
+                model: 'account';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "accountId"
-                    | "providerId"
-                    | "userId"
-                    | "accessToken"
-                    | "refreshToken"
-                    | "idToken"
-                    | "accessTokenExpiresAt"
-                    | "refreshTokenExpiresAt"
-                    | "scope"
-                    | "password"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "_id";
+                    | 'accountId'
+                    | 'providerId'
+                    | 'userId'
+                    | 'accessToken'
+                    | 'refreshToken'
+                    | 'idToken'
+                    | 'accessTokenExpiresAt'
+                    | 'refreshTokenExpiresAt'
+                    | 'scope'
+                    | 'password'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -212,28 +226,28 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "verification";
+                model: 'verification';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "identifier"
-                    | "value"
-                    | "expiresAt"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "_id";
+                    | 'identifier'
+                    | 'value'
+                    | 'expiresAt'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -244,27 +258,63 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "jwks";
+                model: 'deviceCode';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "publicKey"
-                    | "privateKey"
-                    | "createdAt"
-                    | "expiresAt"
-                    | "_id";
+                    | 'deviceCode'
+                    | 'userCode'
+                    | 'userId'
+                    | 'expiresAt'
+                    | 'status'
+                    | 'lastPolledAt'
+                    | 'pollingInterval'
+                    | 'clientId'
+                    | 'scope'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
+                  value:
+                    | string
+                    | number
+                    | boolean
+                    | Array<string>
+                    | Array<number>
+                    | null;
+                }>;
+              }
+            | {
+                model: 'jwks';
+                where?: Array<{
+                  connector?: 'AND' | 'OR';
+                  field:
+                    | 'publicKey'
+                    | 'privateKey'
+                    | 'createdAt'
+                    | 'expiresAt'
+                    | '_id';
+                  operator?:
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -288,37 +338,37 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
       deleteOne: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           input:
             | {
-                model: "user";
+                model: 'user';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "name"
-                    | "email"
-                    | "emailVerified"
-                    | "image"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "username"
-                    | "displayUsername"
-                    | "userId"
-                    | "_id";
+                    | 'name'
+                    | 'email'
+                    | 'emailVerified'
+                    | 'image'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | 'username'
+                    | 'displayUsername'
+                    | 'userId'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -329,30 +379,30 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "session";
+                model: 'session';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "expiresAt"
-                    | "token"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "ipAddress"
-                    | "userAgent"
-                    | "userId"
-                    | "_id";
+                    | 'expiresAt'
+                    | 'token'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | 'ipAddress'
+                    | 'userAgent'
+                    | 'userId'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -363,35 +413,35 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "account";
+                model: 'account';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "accountId"
-                    | "providerId"
-                    | "userId"
-                    | "accessToken"
-                    | "refreshToken"
-                    | "idToken"
-                    | "accessTokenExpiresAt"
-                    | "refreshTokenExpiresAt"
-                    | "scope"
-                    | "password"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "_id";
+                    | 'accountId'
+                    | 'providerId'
+                    | 'userId'
+                    | 'accessToken'
+                    | 'refreshToken'
+                    | 'idToken'
+                    | 'accessTokenExpiresAt'
+                    | 'refreshTokenExpiresAt'
+                    | 'scope'
+                    | 'password'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -402,28 +452,28 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "verification";
+                model: 'verification';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "identifier"
-                    | "value"
-                    | "expiresAt"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "_id";
+                    | 'identifier'
+                    | 'value'
+                    | 'expiresAt'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -434,27 +484,63 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "jwks";
+                model: 'deviceCode';
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "publicKey"
-                    | "privateKey"
-                    | "createdAt"
-                    | "expiresAt"
-                    | "_id";
+                    | 'deviceCode'
+                    | 'userCode'
+                    | 'userId'
+                    | 'expiresAt'
+                    | 'status'
+                    | 'lastPolledAt'
+                    | 'pollingInterval'
+                    | 'clientId'
+                    | 'scope'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
+                  value:
+                    | string
+                    | number
+                    | boolean
+                    | Array<string>
+                    | Array<number>
+                    | null;
+                }>;
+              }
+            | {
+                model: 'jwks';
+                where?: Array<{
+                  connector?: 'AND' | 'OR';
+                  field:
+                    | 'publicKey'
+                    | 'privateKey'
+                    | 'createdAt'
+                    | 'expiresAt'
+                    | '_id';
+                  operator?:
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -470,12 +556,18 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
       findMany: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           join?: any;
           limit?: number;
-          model: "user" | "session" | "account" | "verification" | "jwks";
+          model:
+            | 'user'
+            | 'session'
+            | 'account'
+            | 'verification'
+            | 'deviceCode'
+            | 'jwks';
           offset?: number;
           paginationOpts: {
             cursor: string | null;
@@ -485,22 +577,22 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             maximumRowsRead?: number;
             numItems: number;
           };
-          sortBy?: { direction: "asc" | "desc"; field: string };
+          sortBy?: { direction: 'asc' | 'desc'; field: string };
           where?: Array<{
-            connector?: "AND" | "OR";
+            connector?: 'AND' | 'OR';
             field: string;
             operator?:
-              | "lt"
-              | "lte"
-              | "gt"
-              | "gte"
-              | "eq"
-              | "in"
-              | "not_in"
-              | "ne"
-              | "contains"
-              | "starts_with"
-              | "ends_with";
+              | 'lt'
+              | 'lte'
+              | 'gt'
+              | 'gte'
+              | 'eq'
+              | 'in'
+              | 'not_in'
+              | 'ne'
+              | 'contains'
+              | 'starts_with'
+              | 'ends_with';
             value:
               | string
               | number
@@ -514,27 +606,33 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
       findOne: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           join?: any;
-          model: "user" | "session" | "account" | "verification" | "jwks";
+          model:
+            | 'user'
+            | 'session'
+            | 'account'
+            | 'verification'
+            | 'deviceCode'
+            | 'jwks';
           select?: Array<string>;
           where?: Array<{
-            connector?: "AND" | "OR";
+            connector?: 'AND' | 'OR';
             field: string;
             operator?:
-              | "lt"
-              | "lte"
-              | "gt"
-              | "gte"
-              | "eq"
-              | "in"
-              | "not_in"
-              | "ne"
-              | "contains"
-              | "starts_with"
-              | "ends_with";
+              | 'lt'
+              | 'lte'
+              | 'gt'
+              | 'gte'
+              | 'eq'
+              | 'in'
+              | 'not_in'
+              | 'ne'
+              | 'contains'
+              | 'starts_with'
+              | 'ends_with';
             value:
               | string
               | number
@@ -548,12 +646,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
       updateMany: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           input:
             | {
-                model: "user";
+                model: 'user';
                 update: {
                   createdAt?: number;
                   displayUsername?: null | string;
@@ -566,30 +664,30 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   username?: null | string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "name"
-                    | "email"
-                    | "emailVerified"
-                    | "image"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "username"
-                    | "displayUsername"
-                    | "userId"
-                    | "_id";
+                    | 'name'
+                    | 'email'
+                    | 'emailVerified'
+                    | 'image'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | 'username'
+                    | 'displayUsername'
+                    | 'userId'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -600,7 +698,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "session";
+                model: 'session';
                 update: {
                   createdAt?: number;
                   expiresAt?: number;
@@ -611,28 +709,28 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   userId?: string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "expiresAt"
-                    | "token"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "ipAddress"
-                    | "userAgent"
-                    | "userId"
-                    | "_id";
+                    | 'expiresAt'
+                    | 'token'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | 'ipAddress'
+                    | 'userAgent'
+                    | 'userId'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -643,7 +741,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "account";
+                model: 'account';
                 update: {
                   accessToken?: null | string;
                   accessTokenExpiresAt?: null | number;
@@ -659,33 +757,33 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   userId?: string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "accountId"
-                    | "providerId"
-                    | "userId"
-                    | "accessToken"
-                    | "refreshToken"
-                    | "idToken"
-                    | "accessTokenExpiresAt"
-                    | "refreshTokenExpiresAt"
-                    | "scope"
-                    | "password"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "_id";
+                    | 'accountId'
+                    | 'providerId'
+                    | 'userId'
+                    | 'accessToken'
+                    | 'refreshToken'
+                    | 'idToken'
+                    | 'accessTokenExpiresAt'
+                    | 'refreshTokenExpiresAt'
+                    | 'scope'
+                    | 'password'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -696,7 +794,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "verification";
+                model: 'verification';
                 update: {
                   createdAt?: number;
                   expiresAt?: number;
@@ -705,26 +803,26 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   value?: string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "identifier"
-                    | "value"
-                    | "expiresAt"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "_id";
+                    | 'identifier'
+                    | 'value'
+                    | 'expiresAt'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -735,7 +833,54 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "jwks";
+                model: 'deviceCode';
+                update: {
+                  clientId?: null | string;
+                  deviceCode?: string;
+                  expiresAt?: number;
+                  lastPolledAt?: null | number;
+                  pollingInterval?: null | number;
+                  scope?: null | string;
+                  status?: string;
+                  userCode?: string;
+                  userId?: null | string;
+                };
+                where?: Array<{
+                  connector?: 'AND' | 'OR';
+                  field:
+                    | 'deviceCode'
+                    | 'userCode'
+                    | 'userId'
+                    | 'expiresAt'
+                    | 'status'
+                    | 'lastPolledAt'
+                    | 'pollingInterval'
+                    | 'clientId'
+                    | 'scope'
+                    | '_id';
+                  operator?:
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
+                  value:
+                    | string
+                    | number
+                    | boolean
+                    | Array<string>
+                    | Array<number>
+                    | null;
+                }>;
+              }
+            | {
+                model: 'jwks';
                 update: {
                   createdAt?: number;
                   expiresAt?: null | number;
@@ -743,25 +888,25 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   publicKey?: string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "publicKey"
-                    | "privateKey"
-                    | "createdAt"
-                    | "expiresAt"
-                    | "_id";
+                    | 'publicKey'
+                    | 'privateKey'
+                    | 'createdAt'
+                    | 'expiresAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -785,12 +930,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
       updateOne: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           input:
             | {
-                model: "user";
+                model: 'user';
                 update: {
                   createdAt?: number;
                   displayUsername?: null | string;
@@ -803,30 +948,30 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   username?: null | string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "name"
-                    | "email"
-                    | "emailVerified"
-                    | "image"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "username"
-                    | "displayUsername"
-                    | "userId"
-                    | "_id";
+                    | 'name'
+                    | 'email'
+                    | 'emailVerified'
+                    | 'image'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | 'username'
+                    | 'displayUsername'
+                    | 'userId'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -837,7 +982,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "session";
+                model: 'session';
                 update: {
                   createdAt?: number;
                   expiresAt?: number;
@@ -848,28 +993,28 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   userId?: string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "expiresAt"
-                    | "token"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "ipAddress"
-                    | "userAgent"
-                    | "userId"
-                    | "_id";
+                    | 'expiresAt'
+                    | 'token'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | 'ipAddress'
+                    | 'userAgent'
+                    | 'userId'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -880,7 +1025,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "account";
+                model: 'account';
                 update: {
                   accessToken?: null | string;
                   accessTokenExpiresAt?: null | number;
@@ -896,33 +1041,33 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   userId?: string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "accountId"
-                    | "providerId"
-                    | "userId"
-                    | "accessToken"
-                    | "refreshToken"
-                    | "idToken"
-                    | "accessTokenExpiresAt"
-                    | "refreshTokenExpiresAt"
-                    | "scope"
-                    | "password"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "_id";
+                    | 'accountId'
+                    | 'providerId'
+                    | 'userId'
+                    | 'accessToken'
+                    | 'refreshToken'
+                    | 'idToken'
+                    | 'accessTokenExpiresAt'
+                    | 'refreshTokenExpiresAt'
+                    | 'scope'
+                    | 'password'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -933,7 +1078,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "verification";
+                model: 'verification';
                 update: {
                   createdAt?: number;
                   expiresAt?: number;
@@ -942,26 +1087,26 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   value?: string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "identifier"
-                    | "value"
-                    | "expiresAt"
-                    | "createdAt"
-                    | "updatedAt"
-                    | "_id";
+                    | 'identifier'
+                    | 'value'
+                    | 'expiresAt'
+                    | 'createdAt'
+                    | 'updatedAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number
@@ -972,7 +1117,54 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }>;
               }
             | {
-                model: "jwks";
+                model: 'deviceCode';
+                update: {
+                  clientId?: null | string;
+                  deviceCode?: string;
+                  expiresAt?: number;
+                  lastPolledAt?: null | number;
+                  pollingInterval?: null | number;
+                  scope?: null | string;
+                  status?: string;
+                  userCode?: string;
+                  userId?: null | string;
+                };
+                where?: Array<{
+                  connector?: 'AND' | 'OR';
+                  field:
+                    | 'deviceCode'
+                    | 'userCode'
+                    | 'userId'
+                    | 'expiresAt'
+                    | 'status'
+                    | 'lastPolledAt'
+                    | 'pollingInterval'
+                    | 'clientId'
+                    | 'scope'
+                    | '_id';
+                  operator?:
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
+                  value:
+                    | string
+                    | number
+                    | boolean
+                    | Array<string>
+                    | Array<number>
+                    | null;
+                }>;
+              }
+            | {
+                model: 'jwks';
                 update: {
                   createdAt?: number;
                   expiresAt?: null | number;
@@ -980,25 +1172,25 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   publicKey?: string;
                 };
                 where?: Array<{
-                  connector?: "AND" | "OR";
+                  connector?: 'AND' | 'OR';
                   field:
-                    | "publicKey"
-                    | "privateKey"
-                    | "createdAt"
-                    | "expiresAt"
-                    | "_id";
+                    | 'publicKey'
+                    | 'privateKey'
+                    | 'createdAt'
+                    | 'expiresAt'
+                    | '_id';
                   operator?:
-                    | "lt"
-                    | "lte"
-                    | "gt"
-                    | "gte"
-                    | "eq"
-                    | "in"
-                    | "not_in"
-                    | "ne"
-                    | "contains"
-                    | "starts_with"
-                    | "ends_with";
+                    | 'lt'
+                    | 'lte'
+                    | 'gt'
+                    | 'gte'
+                    | 'eq'
+                    | 'in'
+                    | 'not_in'
+                    | 'ne'
+                    | 'contains'
+                    | 'starts_with'
+                    | 'ends_with';
                   value:
                     | string
                     | number

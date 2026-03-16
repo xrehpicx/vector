@@ -67,6 +67,17 @@ export const tables = {
   })
     .index('expiresAt', ['expiresAt'])
     .index('identifier', ['identifier']),
+  deviceCode: defineTable({
+    deviceCode: v.string(),
+    userCode: v.string(),
+    userId: v.optional(v.union(v.null(), v.string())),
+    expiresAt: v.number(),
+    status: v.string(),
+    lastPolledAt: v.optional(v.union(v.null(), v.number())),
+    pollingInterval: v.optional(v.union(v.null(), v.number())),
+    clientId: v.optional(v.union(v.null(), v.string())),
+    scope: v.optional(v.union(v.null(), v.string())),
+  }),
   jwks: defineTable({
     publicKey: v.string(),
     privateKey: v.string(),
