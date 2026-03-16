@@ -131,7 +131,7 @@ async function applyWorkflowAutomationForIssue(
     targetType,
   );
 
-  if (!nextStateId || issue.workflowStateId === nextStateId) {
+  if (!nextStateId) {
     return;
   }
 
@@ -143,22 +143,35 @@ async function applyWorkflowAutomationForIssue(
     .query('issueAssignees')
     .withIndex('by_issue', q => q.eq('issueId', issueId))
     .collect();
+  const nextClosedAt =
+    targetType === 'done' || targetType === 'canceled' ? Date.now() : undefined;
+  const issueNeedsPatch =
+    issue.workflowStateId !== nextStateId ||
+    (targetType === 'done' || targetType === 'canceled'
+      ? issue.closedAt === undefined
+      : issue.closedAt !== undefined);
+  const assignmentsOutOfSync =
+    assignments.length === 0 ||
+    assignments.some(assignment => assignment.stateId !== nextStateId);
 
-  await ctx.db.patch('issues', issueId, {
-    workflowStateId: nextStateId,
-    closedAt:
-      targetType === 'done' || targetType === 'canceled'
-        ? Date.now()
-        : undefined,
-  });
+  if (!issueNeedsPatch && !assignmentsOutOfSync) {
+    return;
+  }
 
-  if (assignments.length === 0) {
+  if (issueNeedsPatch) {
+    await ctx.db.patch('issues', issueId, {
+      workflowStateId: nextStateId,
+      closedAt: nextClosedAt,
+    });
+  }
+
+  if (assignmentsOutOfSync && assignments.length === 0) {
     await ctx.db.insert('issueAssignees', {
       issueId,
       assigneeId: undefined,
       stateId: nextStateId,
     });
-  } else {
+  } else if (assignmentsOutOfSync) {
     for (const assignment of assignments) {
       if (assignment.stateId === nextStateId) continue;
       await ctx.db.patch('issueAssignees', assignment._id, {
@@ -168,7 +181,7 @@ async function applyWorkflowAutomationForIssue(
   }
 
   const actorId = issue.createdBy ?? issue.reporterId ?? undefined;
-  if (actorId && nextState) {
+  if (issueNeedsPatch && actorId && nextState) {
     await recordActivity(ctx, {
       scope: resolveIssueScope(issue),
       actorId,
@@ -387,22 +400,6 @@ async function syncArtifactLinksForIssues(args: {
     ),
   ).then(ids => ids.filter((id): id is Id<'issues'> => id !== null));
 
-  const targetIssueIds: Id<'issues'>[] = [];
-  for (const issueId of issueIds) {
-    const suppression = await ctx.db
-      .query('githubArtifactSuppressions')
-      .withIndex('by_issue_external', q =>
-        q
-          .eq('issueId', issueId)
-          .eq('artifactType', artifactType)
-          .eq('externalKey', externalKey),
-      )
-      .first();
-    if (!suppression) {
-      targetIssueIds.push(issueId);
-    }
-  }
-
   const existingLinks = await (artifactType === 'pull_request'
     ? ctx.db
         .query('githubArtifactLinks')
@@ -424,8 +421,35 @@ async function syncArtifactLinksForIssues(args: {
           )
           .collect());
 
-  const targetSet = new Set(targetIssueIds.map(String));
+  let targetIssueIds: Id<'issues'>[] = [];
+  if (
+    args.source === 'auto' &&
+    issueIds.length === 0 &&
+    existingLinks.some(link => link.active)
+  ) {
+    targetIssueIds = Array.from(
+      new Set(
+        existingLinks.filter(link => link.active).map(link => link.issueId),
+      ),
+    );
+  } else {
+    for (const issueId of issueIds) {
+      const suppression = await ctx.db
+        .query('githubArtifactSuppressions')
+        .withIndex('by_issue_external', q =>
+          q
+            .eq('issueId', issueId)
+            .eq('artifactType', artifactType)
+            .eq('externalKey', externalKey),
+        )
+        .first();
+      if (!suppression) {
+        targetIssueIds.push(issueId);
+      }
+    }
+  }
 
+  const targetSet = new Set(targetIssueIds.map(String));
   for (const link of existingLinks) {
     if (link.source !== 'auto') continue;
     if (targetSet.has(String(link.issueId))) continue;
