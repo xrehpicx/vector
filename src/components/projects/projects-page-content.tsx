@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/lib/convex';
@@ -15,6 +15,8 @@ import { LayoutList, Columns3 } from 'lucide-react';
 import { PageSkeleton } from '@/components/ui/table-skeleton';
 import { MobileNavTrigger } from '@/app/[orgSlug]/(main)/layout';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { usePersistedViewMode } from '@/hooks/use-persisted-view-mode';
+import { updateProjectRows, updateQuery } from '@/lib/optimistic-updates';
 
 // Define project status types based on Convex schema
 type StatusType =
@@ -64,6 +66,8 @@ interface ProjectsPageContentProps {
 
 type ViewMode = 'table' | 'kanban';
 
+const PROJECTS_LAYOUT_STORAGE_KEY = 'vector:projects-list-layout';
+
 export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -71,16 +75,29 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   const [scopeTab, setScopeTab] = useState<ScopeTab>('mine');
 
   const viewParam = searchParams.get('view');
-  const viewMode: ViewMode = viewParam === 'kanban' ? 'kanban' : 'table';
-  const setViewMode = (mode: ViewMode) => {
-    const sp = new URLSearchParams(searchParams.toString());
-    if (mode === 'table') {
-      sp.delete('view');
-    } else {
-      sp.set('view', mode);
-    }
-    router.replace(`?${sp.toString()}`, { scroll: false });
-  };
+  const queryMode: ViewMode | null = viewParam === 'kanban' ? 'kanban' : null;
+  const syncViewModeUrl = useCallback(
+    (mode: ViewMode) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      if (mode === 'table') {
+        sp.delete('view');
+      } else {
+        sp.set('view', mode);
+      }
+
+      const query = sp.toString();
+      router.replace(query ? `?${query}` : window.location.pathname, {
+        scroll: false,
+      });
+    },
+    [router, searchParams],
+  );
+  const { viewMode, setViewMode } = usePersistedViewMode({
+    storageKey: PROJECTS_LAYOUT_STORAGE_KEY,
+    defaultMode: 'table',
+    queryMode,
+    syncUrl: syncViewModeUrl,
+  });
 
   // Pagination constants
   const PAGE_SIZE = 25;
@@ -147,7 +164,34 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   }));
 
   // Mutations
-  const changeStatusMutation = useMutation(api.projects.mutations.update);
+  const changeStatusMutation = useMutation(
+    api.projects.mutations.changeStatus,
+  ).withOptimisticUpdate((store, args) => {
+    const nextStatus =
+      statusesData?.find(
+        status => String(status._id) === String(args.statusId),
+      ) ?? null;
+
+    updateQuery(store, api.projects.queries.list, { orgSlug }, current =>
+      updateProjectRows(current, String(args.projectId), project => ({
+        ...project,
+        statusId: args.statusId ?? undefined,
+        status: nextStatus,
+      })),
+    );
+
+    updateQuery(
+      store,
+      api.projects.queries.listMyProjects,
+      { orgSlug },
+      current =>
+        updateProjectRows(current, String(args.projectId), project => ({
+          ...project,
+          statusId: args.statusId ?? undefined,
+          status: nextStatus,
+        })),
+    );
+  });
   const changeTeamMutation = useMutation(api.projects.mutations.update);
   const changeLeadMutation = useMutation(api.projects.mutations.changeLead);
   const deleteMutation = useMutation(api.projects.mutations.deleteProject);
@@ -157,7 +201,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
     if (statusId) {
       void changeStatusMutation({
         projectId: projectId as Id<'projects'>,
-        data: { statusId: statusId as Id<'projectStatuses'> },
+        statusId: statusId as Id<'projectStatuses'>,
       });
     }
   };

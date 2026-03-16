@@ -5,7 +5,7 @@ import { api } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { LayoutList, Columns3, Search, Loader2 } from 'lucide-react';
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { useConfirm } from '@/hooks/use-confirm';
+import { usePersistedViewMode } from '@/hooks/use-persisted-view-mode';
 import { MobileNavTrigger } from '../layout';
 
 type StateType = (typeof ISSUE_STATE_DEFAULTS)[number]['type'];
@@ -53,6 +54,8 @@ const filterTabs = [
   })),
 ];
 
+const ISSUES_LAYOUT_STORAGE_KEY = 'vector:issues-list-layout';
+
 export default function IssuesPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -61,11 +64,8 @@ export default function IssuesPage() {
   const [scopeTab, setScopeTab] = useState<ScopeTab>('mine');
 
   const viewParam = searchParams.get('view');
-  const [viewMode, setViewModeState] = useState<ViewMode>(
-    viewParam === 'table' ? 'table' : 'kanban',
-  );
-  const setViewMode = (mode: ViewMode) => {
-    setViewModeState(mode);
+  const queryMode: ViewMode | null = viewParam === 'table' ? 'table' : null;
+  const syncViewModeUrl = useCallback((mode: ViewMode) => {
     const sp = new URLSearchParams(window.location.search);
     if (mode === 'kanban') {
       sp.delete('view');
@@ -78,7 +78,13 @@ export default function IssuesPage() {
       '',
       qs ? `?${qs}` : window.location.pathname,
     );
-  };
+  }, []);
+  const { viewMode, setViewMode } = usePersistedViewMode({
+    storageKey: ISSUES_LAYOUT_STORAGE_KEY,
+    defaultMode: 'kanban',
+    queryMode,
+    syncUrl: syncViewModeUrl,
+  });
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [searchText, setSearchText] = useState('');

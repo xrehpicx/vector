@@ -26,6 +26,7 @@ import { UserAvatar } from '@/components/user-avatar';
 import { Users, User, Circle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getDynamicIcon, DynamicIcon } from '@/lib/dynamic-icons';
+import { useOptimisticValue } from '@/hooks/use-optimistic';
 
 import { useAccess } from '@/components/ui/permission-aware';
 
@@ -100,7 +101,8 @@ export function StatusSelector({
 }: StatusSelectorProps) {
   const [open, setOpen] = useState(false);
   const { viewOnly } = useAccess();
-  const displayStatus = selectedStatus;
+  const [displayStatus, setOptimisticStatus] =
+    useOptimisticValue(selectedStatus);
 
   const hasSelection = displayStatus !== '';
   const { showIcon, showLabel } = resolveVisibility(displayMode, hasSelection);
@@ -151,6 +153,7 @@ export function StatusSelector({
                     value={status.name}
                     onSelect={() => {
                       if (!viewOnly) {
+                        setOptimisticStatus(status._id);
                         onStatusSelect(status._id);
                         setOpen(false);
                       }
