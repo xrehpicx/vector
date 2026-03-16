@@ -187,6 +187,14 @@ Validation errors when creating teams or projects
 
 - Use short slug-like keys such as `eng`, `api`, or `mobile-platform`.
 
+## AI Agent Skill
+
+Install the Vector CLI skill for your AI coding agent:
+
+```bash
+npx skills add xrehpicx/vector-skill
+```
+
 ## Help
 
 Inspect command groups directly:
