@@ -1,0 +1,3 @@
+[submodule "packages/vector-skill"]
+	path = packages/vector-skill
+	url = https://github.com/xrehpicx/vector-skill.git

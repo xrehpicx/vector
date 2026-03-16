@@ -64,7 +64,7 @@ Vector also ships with a dedicated CLI package for terminal workflows.
 - Package README: [packages/vector-cli/README.md](packages/vector-cli/README.md)
 - Local repo entrypoint: `pnpm exec tsx src/cli/index.ts --help`
 - Published package target: `@rehpic/vcli`
-- AI agent skill: `npx skills add https://github.com/xrehpicx/vector --skill vector-cli-usage`
+- AI agent skill: `npx skills add xrehpicx/vector-skill`
 
 ## Project Status
 
