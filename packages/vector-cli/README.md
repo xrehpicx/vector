@@ -27,9 +27,14 @@ The CLI talks to:
 - the Next.js app for auth routes
 - the Convex deployment for queries, mutations, and actions
 
-By default it uses:
+The app URL is required. `vecli` resolves it from:
 
-- `http://localhost:3000` as the app URL
+- `--app-url <url>`
+- the saved profile session
+- `NEXT_PUBLIC_APP_URL`
+
+The Convex URL still defaults from:
+
 - `NEXT_PUBLIC_CONVEX_URL` or `CONVEX_URL` for Convex
 
 You can override either with flags:
@@ -43,8 +48,8 @@ vecli --app-url http://localhost:3000 --convex-url https://<deployment>.convex.c
 Sign up or log in:
 
 ```bash
-vecli auth signup --email you@example.com --username you --password 'secret'
-vecli auth login you@example.com --password 'secret'
+vecli --app-url http://localhost:3000 auth signup --email you@example.com --username you --password 'secret'
+vecli --app-url http://localhost:3000 auth login you@example.com --password 'secret'
 vecli auth whoami
 ```
 
@@ -158,6 +163,10 @@ For scripts, prefer:
 `Not logged in`
 
 - Run `vecli auth login` or `vecli auth signup`.
+
+`app URL is required`
+
+- Pass `--app-url <url>`, set `NEXT_PUBLIC_APP_URL`, or log in once with `--app-url` so the selected profile stores it.
 
 `Organization slug is required`
 

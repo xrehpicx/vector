@@ -1,18 +1,31 @@
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(__dirname, '..', '..');
+const cliEntrypoint = path.join(repoRoot, 'src/cli/index.ts');
+const tsxBin = path.join(repoRoot, 'node_modules/.bin/tsx');
+
+function runCliRaw(
+  args: string[],
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  const result = spawnSync(tsxBin, [cliEntrypoint, ...args], {
+    cwd: options.cwd ?? repoRoot,
+    env: options.env ?? process.env,
+    encoding: 'utf8',
+  });
+
+  return result;
+}
 
 function runCli(args: string[]) {
-  const result = spawnSync(
-    'pnpm',
-    ['exec', 'tsx', 'src/cli/index.ts', ...args],
-    {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    },
-  );
+  const result = runCliRaw(args);
 
   const stdout = result.stdout ?? '';
   const stderr = result.stderr ?? '';
@@ -20,7 +33,7 @@ function runCli(args: string[]) {
   if (result.status !== 0) {
     throw new Error(
       [
-        `CLI command failed: vector ${args.join(' ')}`,
+        `CLI command failed: vecli ${args.join(' ')}`,
         `exit code: ${String(result.status)}`,
         stdout && `stdout:\n${stdout}`,
         stderr && `stderr:\n${stderr}`,
@@ -34,6 +47,22 @@ function runCli(args: string[]) {
 }
 
 describe('Vector CLI command surface', () => {
+  it('requires an app URL when no flag, env var, or saved session is available', () => {
+    const tempHome = mkdtempSync(path.join(tmpdir(), 'vecli-home-'));
+    const tempCwd = mkdtempSync(path.join(tmpdir(), 'vecli-cwd-'));
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: tempHome };
+    delete env.NEXT_PUBLIC_APP_URL;
+
+    const result = runCliRaw(['auth', 'whoami'], {
+      cwd: tempCwd,
+      env,
+    });
+    const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain('app URL is required');
+  });
+
   it('renders the root help with all top-level commands', () => {
     const output = runCli(['--help']);
 

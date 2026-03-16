@@ -174,11 +174,9 @@ async function getRuntime(command: Command) {
   const options = command.optsWithGlobals<GlobalOptions>();
   const profile = options.profile ?? 'default';
   const session = await readSession(profile);
-  const appUrl =
-    options.appUrl ??
-    session?.appUrl ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    'http://localhost:3000';
+  const appUrlSource =
+    options.appUrl ?? session?.appUrl ?? process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl = requiredString(appUrlSource, 'app URL');
   const convexUrl =
     options.convexUrl ??
     session?.convexUrl ??
@@ -496,7 +494,10 @@ program
   .name('vecli')
   .description('Vector CLI')
   .showHelpAfterError()
-  .option('--app-url <url>', 'Vector app URL')
+  .option(
+    '--app-url <url>',
+    'Vector app URL. Required unless saved in the profile or NEXT_PUBLIC_APP_URL is set.',
+  )
   .option('--convex-url <url>', 'Convex deployment URL')
   .option('--org <slug>', 'Organization slug override')
   .option('--profile <name>', 'CLI profile name', 'default')

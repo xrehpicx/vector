@@ -67,12 +67,17 @@ The CLI uses:
 - `--app-url` for the Next.js app and Better Auth routes
 - `--convex-url` for the Convex deployment
 
-Defaults come from session state or env:
+The app URL must come from:
 
-- `NEXT_PUBLIC_APP_URL` with fallback to `http://localhost:3000`
+- `--app-url <url>`
+- the saved profile session
+- `NEXT_PUBLIC_APP_URL`
+
+Convex URL defaults come from:
+
 - `NEXT_PUBLIC_CONVEX_URL` or `CONVEX_URL`
 
-If the local app is running on a non-default origin, say that explicitly and show `--app-url`.
+If the local app origin is not already stored in the profile, say that explicitly and show `--app-url`.
 
 ### Profiles
 
@@ -231,6 +236,9 @@ When troubleshooting, start from the actual error and map it to the likely fix:
 
 - `Not logged in`
   Run `vecli auth login` or `vecli auth signup`.
+
+- `app URL is required`
+  Pass `--app-url <url>`, set `NEXT_PUBLIC_APP_URL`, or log in once with `--app-url` so the selected profile stores it.
 
 - `Organization slug is required`
   Pass `--org <slug>` or run `vecli org use <slug>`.

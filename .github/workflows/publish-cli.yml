@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 jobs:
@@ -38,26 +41,45 @@ jobs:
           pnpm exec tsc --noEmit --pretty false
           pnpm run build:cli-package
 
-      - name: Set publish version
-        id: version
+      - name: Set publish metadata
+        id: publish
         run: |
           node <<'NODE'
           const fs = require('node:fs');
+          const eventName = process.env.GITHUB_EVENT_NAME;
           const path = 'packages/vector-cli/package.json';
           const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const [major, minor] = String(pkg.version).split('.').map(Number);
-          const runNumber = Number(process.env.GITHUB_RUN_NUMBER || '0');
-          const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT || '1');
-          const patch = runNumber * 1000 + runAttempt;
-          pkg.version = `${major}.${minor}.${patch}`;
+          let version;
+          let npmTag;
+
+          if (eventName === 'release') {
+            const tagName = String(process.env.GITHUB_REF_NAME || '').replace(/^v/, '');
+            if (!/^\d+\.\d+\.\d+$/.test(tagName)) {
+              throw new Error(`Release tag must be a stable semver like v1.2.3. Received: ${tagName || '<empty>'}`);
+            }
+            version = tagName;
+            npmTag = 'latest';
+          } else {
+            const baseVersion = String(pkg.version).trim();
+            if (!/^\d+\.\d+\.\d+$/.test(baseVersion)) {
+              throw new Error(`packages/vector-cli/package.json version must be a stable semver like 1.2.3. Received: ${baseVersion}`);
+            }
+            const runNumber = Number(process.env.GITHUB_RUN_NUMBER || '0');
+            const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT || '1');
+            version = `${baseVersion}-beta.${runNumber}.${runAttempt}`;
+            npmTag = 'beta';
+          }
+
+          pkg.version = version;
           fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${pkg.version}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `npm_tag=${npmTag}\n`);
           NODE
 
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish
+        run: npm publish --tag "${{ steps.publish.outputs.npm_tag }}"
         working-directory: packages/vector-cli
 
       - name: Job summary
@@ -66,5 +88,7 @@ jobs:
             echo "## CLI publish"
             echo
             echo "- Package: \`vecli\`"
-            echo "- Version: \`${{ steps.version.outputs.version }}\`"
+            echo "- Version: \`${{ steps.publish.outputs.version }}\`"
+            echo "- npm tag: \`${{ steps.publish.outputs.npm_tag }}\`"
+            echo "- Trigger: \`${{ github.event_name }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
