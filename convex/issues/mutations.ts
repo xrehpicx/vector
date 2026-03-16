@@ -57,6 +57,21 @@ async function getUserNames(ctx: MutationCtx, userIds: readonly Id<'users'>[]) {
   return users.map(user => getUserDisplayName(user, 'Unknown user'));
 }
 
+async function queueGitHubContentLinkSync(
+  ctx: MutationCtx,
+  issueId: Id<'issues'>,
+  actorId?: Id<'users'>,
+) {
+  await ctx.scheduler.runAfter(
+    0,
+    internal.github.actions.syncIssueLinksFromContent,
+    {
+      issueId,
+      actorId,
+    },
+  );
+}
+
 async function resolveDefaultWorkflowStateId(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
@@ -1316,6 +1331,8 @@ export const updateTitle = mutation({
           title: args.title,
         }),
       });
+
+      await queueGitHubContentLinkSync(ctx, issue._id, userId);
     }
   },
 });
@@ -1360,6 +1377,8 @@ export const updateDescription = mutation({
         },
         snapshot: snapshotForIssue(issue),
       });
+
+      await queueGitHubContentLinkSync(ctx, issue._id, userId);
     }
   },
 });

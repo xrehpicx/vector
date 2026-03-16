@@ -467,7 +467,6 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const displayedStateId = singleVisibleAssignment?.stateId
     ? String(singleVisibleAssignment.stateId)
     : issue?.workflowStateId || '';
-  const hasGitHubApiAccess = Boolean(githubCapabilities?.hasApiAccess);
   const hasGitHubIntegration = Boolean(
     githubCapabilities?.hasWebhookIngestion || githubCapabilities?.hasApiAccess,
   );
@@ -770,7 +769,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                     <CommandList>
                       <CommandEmpty>No action found.</CommandEmpty>
                       <CommandGroup>
-                        {hasGitHubApiAccess ? (
+                        {hasGitHubIntegration ? (
                           <PermissionAwareSelector
                             orgSlug={resolvedParams.orgSlug}
                             permission={PERMISSIONS.ISSUE_EDIT}
@@ -788,21 +787,21 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                               <div className='flex-1'>
                                 <div className='font-medium'>Link GitHub</div>
                                 <div className='text-muted-foreground text-xs'>
-                                  Attach a PR, issue, or commit
+                                  Attach a PR, issue, or commit by URL
                                 </div>
                               </div>
                             </CommandItem>
                           </PermissionAwareSelector>
-                        ) : hasGitHubIntegration ? (
+                        ) : hasAnyGitHubConfiguration ? (
                           <CommandItem value='GitHub webhooks active' disabled>
                             <GitPullRequest className='text-muted-foreground mr-2 h-4 w-4' />
                             <div className='flex-1'>
                               <div className='text-muted-foreground font-medium'>
-                                GitHub webhooks active
+                                GitHub not ready
                               </div>
                               <div className='text-muted-foreground text-xs'>
-                                Development links appear automatically from
-                                incoming webhook deliveries.
+                                Finish GitHub setup to attach PRs, issues, and
+                                commits.
                               </div>
                             </div>
                           </CommandItem>

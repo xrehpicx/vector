@@ -1126,6 +1126,21 @@ export const updateIssue = internalMutation({
           description: nextDescription,
         }),
       });
+
+      if (
+        (args.title !== undefined && args.title.trim() !== issue.title) ||
+        (args.description !== undefined &&
+          args.description !== issue.description)
+      ) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.github.actions.syncIssueLinksFromContent,
+          {
+            issueId: issue._id,
+            actorId: args.userId,
+          },
+        );
+      }
     }
 
     // Handle assignee and state changes on the issueAssignees table

@@ -373,6 +373,9 @@ export function IssueDevelopmentSection({
   const [busyLinkId, setBusyLinkId] = useState<string | null>(null);
   const autoRefreshRef = useRef<string | null>(null);
   const hasApiAccess = Boolean(githubCapabilities?.hasApiAccess);
+  const hasGitHubIntegration = Boolean(
+    githubCapabilities?.hasWebhookIngestion || githubCapabilities?.hasApiAccess,
+  );
 
   const hasArtifacts = useMemo(() => {
     if (!development) return false;
@@ -488,7 +491,7 @@ export function IssueDevelopmentSection({
           <h2 className='text-sm font-semibold'>Development</h2>
         </div>
         <div className='flex items-center gap-1'>
-          {canEdit && hasApiAccess ? (
+          {canEdit && hasGitHubIntegration ? (
             <LinkArtifactInput
               url={url}
               setUrl={setUrl}
