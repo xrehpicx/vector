@@ -125,6 +125,10 @@ interface KanbanIssueCard extends GroupedIssue {
   stateColor: string | null;
   stateName: string | null;
   stateType: string | null;
+  /** Viewer's assignment state display (falls back to workflow state) */
+  displayStateIcon: string | null;
+  displayStateColor: string | null;
+  displayStateName: string | null;
 }
 
 export function IssuesKanban({
@@ -248,11 +252,19 @@ export function IssuesKanban({
           assigneeName: displayAssignee?.name ?? null,
           assigneeEmail: displayAssignee?.email ?? null,
           assigneeImage: displayAssignee?.image ?? null,
-          stateId: viewerAssignment?.stateId ?? issue.workflowStateId,
-          stateIcon: viewerAssignment?.stateIcon ?? issue.workflowStateIcon,
-          stateColor: viewerAssignment?.stateColor ?? issue.workflowStateColor,
-          stateName: viewerAssignment?.stateName ?? issue.workflowStateName,
-          stateType: viewerAssignment?.stateType ?? issue.workflowStateType,
+          // stateId drives column placement — always use workflow state
+          stateId: issue.workflowStateId,
+          stateIcon: issue.workflowStateIcon,
+          stateColor: issue.workflowStateColor,
+          stateName: issue.workflowStateName,
+          stateType: issue.workflowStateType,
+          // display fields show the viewer's assignment state on the card
+          displayStateIcon:
+            viewerAssignment?.stateIcon ?? issue.workflowStateIcon,
+          displayStateColor:
+            viewerAssignment?.stateColor ?? issue.workflowStateColor,
+          displayStateName:
+            viewerAssignment?.stateName ?? issue.workflowStateName,
         };
       })
       .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -798,13 +810,13 @@ function KanbanCardContent({
         </span>
         <span className='text-muted-foreground/60 shrink-0'>·</span>
         <DynamicIcon
-          name={issue.stateIcon}
+          name={issue.displayStateIcon}
           className='text-muted-foreground size-3 shrink-0'
-          style={{ color: issue.stateColor || '#94a3b8' }}
+          style={{ color: issue.displayStateColor || '#94a3b8' }}
           fallback={Circle}
         />
         <span className='text-muted-foreground truncate'>
-          {issue.stateName ?? 'No state'}
+          {issue.displayStateName ?? 'No state'}
         </span>
       </div>
     </div>
