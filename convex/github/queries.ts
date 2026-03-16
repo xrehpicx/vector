@@ -8,6 +8,23 @@ import { PERMISSIONS } from '../_shared/permissions';
 import { getSiteSettings } from '../platformAdmin/lib';
 import { buildArtifactExternalKey } from './shared';
 
+function parsePullRequestExternalKey(value?: string | null) {
+  if (!value?.startsWith('pr:')) return null;
+  const payload = value.slice(3);
+  const hashIndex = payload.lastIndexOf('#');
+  if (hashIndex === -1) return null;
+
+  const repoFullName = payload.slice(0, hashIndex);
+  const number = Number(payload.slice(hashIndex + 1));
+  if (!repoFullName || Number.isNaN(number)) return null;
+
+  return {
+    repoFullName,
+    number,
+    url: `https://github.com/${repoFullName}/pull/${number}`,
+  };
+}
+
 async function loadActiveIntegration(
   ctx: QueryCtx,
   organizationId: Id<'organizations'>,
@@ -101,6 +118,20 @@ async function hydrateDevelopmentForIssue(
     committedAt: number | null;
     repository: string;
   }> = [];
+  const unresolvedPullRequests: Array<{
+    linkId: Id<'githubArtifactLinks'>;
+    source: Doc<'githubArtifactLinks'>['source'] | null;
+    matchReason: string | null;
+    title: string;
+    number: number;
+    url: string;
+    state: 'open';
+    headRefName: null;
+    repository: {
+      fullName: string;
+    } | null;
+    lastActivityAt: number;
+  }> = [];
 
   if (includeRollup) {
     const children = await ctx.db
@@ -160,6 +191,34 @@ async function hydrateDevelopmentForIssue(
         repository: repositories.get(pr.repositoryId) ?? null,
       }))
       .sort((a, b) => b.lastActivityAt - a.lastActivityAt),
+    pullRequestFallbacks: (() => {
+      for (const link of links) {
+        if (!link.pullRequestId || !link.active) continue;
+        const hasHydratedPullRequest = pullRequests.some(
+          pr => pr !== null && String(pr._id) === String(link.pullRequestId),
+        );
+        if (hasHydratedPullRequest) continue;
+
+        const parsed = parsePullRequestExternalKey(link.matchReason);
+        if (!parsed) continue;
+
+        unresolvedPullRequests.push({
+          linkId: link._id,
+          source: link.source ?? null,
+          matchReason: link.matchReason ?? null,
+          title: `${parsed.repoFullName}#${parsed.number}`,
+          number: parsed.number,
+          url: parsed.url,
+          state: 'open',
+          headRefName: null,
+          repository: {
+            fullName: parsed.repoFullName,
+          },
+          lastActivityAt: 0,
+        });
+      }
+      return unresolvedPullRequests;
+    })(),
     githubIssues: githubIssues
       .filter((item): item is NonNullable<typeof item> => item !== null)
       .map(issue => ({

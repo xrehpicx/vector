@@ -38,6 +38,7 @@ type DevelopmentData = FunctionReturnType<
   typeof api.github.queries.getIssueDevelopment
 >;
 type PullRequestItem = DevelopmentData['pullRequests'][number];
+type PullRequestFallbackItem = DevelopmentData['pullRequestFallbacks'][number];
 type GitHubIssueItem = DevelopmentData['githubIssues'][number];
 type CommitItem = DevelopmentData['commits'][number];
 
@@ -154,6 +155,57 @@ function PullRequestRow({
                   item.source === 'auto',
                 )
             : undefined
+        }
+        primaryLabel={item.source === 'auto' ? 'Suppress' : 'Unlink'}
+      />
+    </div>
+  );
+}
+
+function PullRequestFallbackRow({
+  item,
+  canEdit,
+  busy,
+  onUnlink,
+}: {
+  item: PullRequestFallbackItem;
+  canEdit: boolean;
+  busy: boolean;
+  onUnlink: (linkId: Id<'githubArtifactLinks'>, suppress: boolean) => void;
+}) {
+  return (
+    <div className='group/row hover:bg-muted/50 flex items-center gap-3 rounded-md px-3 py-2 transition-colors'>
+      <GitPullRequest className='text-muted-foreground size-4 shrink-0' />
+      <div className='min-w-0 flex-1'>
+        <div className='flex items-center gap-2'>
+          <Link
+            href={item.url}
+            target='_blank'
+            rel='noreferrer'
+            className='hover:text-foreground truncate text-sm font-medium transition-colors'
+          >
+            {item.title}
+          </Link>
+          <span className='text-muted-foreground text-xs'>Linked</span>
+          <span className='text-muted-foreground font-mono text-xs'>
+            #{item.number}
+          </span>
+        </div>
+        <div className='text-muted-foreground text-xs'>
+          <span className='font-mono'>
+            {item.repository?.fullName ?? 'Unknown'}
+          </span>
+        </div>
+      </div>
+      <RowActions
+        href={item.url}
+        canEdit={canEdit}
+        busy={busy}
+        onPrimaryAction={() =>
+          onUnlink(
+            item.linkId as Id<'githubArtifactLinks'>,
+            item.source === 'auto',
+          )
         }
         primaryLabel={item.source === 'auto' ? 'Suppress' : 'Unlink'}
       />
@@ -381,6 +433,7 @@ export function IssueDevelopmentSection({
     if (!development) return false;
     return (
       development.pullRequests.length > 0 ||
+      development.pullRequestFallbacks.length > 0 ||
       development.githubIssues.length > 0 ||
       development.commits.length > 0 ||
       development.childCommitRollup.length > 0
@@ -527,6 +580,20 @@ export function IssueDevelopmentSection({
               {development.pullRequests.map(item => (
                 <PullRequestRow
                   key={item._id}
+                  item={item}
+                  canEdit={canEdit}
+                  busy={busyLinkId === String(item.linkId)}
+                  onUnlink={handleUnlink}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {development.pullRequestFallbacks.length > 0 ? (
+            <div>
+              {development.pullRequestFallbacks.map(item => (
+                <PullRequestFallbackRow
+                  key={String(item.linkId)}
                   item={item}
                   canEdit={canEdit}
                   busy={busyLinkId === String(item.linkId)}
