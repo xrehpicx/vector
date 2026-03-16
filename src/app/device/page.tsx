@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/input-otp';
 import { Loader2, CheckCircle2, XCircle, Monitor } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 import { toast } from 'sonner';
 import { extractAuthErrorMessage } from '@/lib/auth-error-handler';
@@ -242,6 +243,15 @@ function DeviceAuthForm() {
             </Button>
           </div>
         )}
+
+        <p className='text-muted-foreground mt-4 text-center text-sm'>
+          <Link
+            href='/'
+            className='text-foreground font-medium hover:underline'
+          >
+            Back to home
+          </Link>
+        </p>
       </div>
     </div>
   );

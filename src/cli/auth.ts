@@ -198,10 +198,10 @@ export async function fetchAuthSession(session: CliSession, appUrl: string) {
     throw new Error(await parseError(response));
   }
 
-  const data = (await response.json()) as AuthSessionResponse;
+  const data = (await response.json()) as AuthSessionResponse | null;
   return {
     session: nextSession,
-    user: data.user ?? null,
+    user: data?.user ?? null,
   };
 }
 
@@ -295,7 +295,23 @@ export async function pollDeviceToken(
     if (response.ok) {
       const data = (await response.json()) as DeviceTokenResponse;
       if (data.access_token) {
-        // Session cookies were set by the response — return the updated session
+        // The device/token response may set session cookies directly
+        if (Object.keys(session.cookies).length > 0) {
+          return session;
+        }
+        // Otherwise use the token to call get-session with Bearer auth
+        const sessionResp = await fetch(
+          buildUrl(appUrl, '/api/auth/get-session'),
+          {
+            headers: {
+              authorization: `Bearer ${data.access_token}`,
+            },
+          },
+        );
+        if (sessionResp.ok) {
+          const updated = applySetCookieHeaders(session, sessionResp);
+          return updated;
+        }
         return session;
       }
     }
