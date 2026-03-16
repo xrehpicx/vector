@@ -193,6 +193,13 @@ export function IssuesTable({
             : Circle;
           const priorityColor = issue.priorityColor || '#94a3b8';
 
+          // Prefer showing the current viewer's assignment state
+          const viewerAssignment = assignments.find(
+            a => a.assigneeId === currentUserId,
+          );
+          const displayStateId =
+            viewerAssignment?.stateId ?? issue.workflowStateId;
+
           return (
             <motion.div
               layout
@@ -264,7 +271,7 @@ export function IssuesTable({
               >
                 <StateSelector
                   states={states}
-                  selectedState={issue.workflowStateId || ''}
+                  selectedState={displayStateId || ''}
                   onStateSelect={stateId =>
                     onAssignmentStateChange(issue.id, stateId)
                   }

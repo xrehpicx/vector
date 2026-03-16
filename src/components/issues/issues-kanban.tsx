@@ -231,22 +231,32 @@ export function IssuesKanban({
 
   const issueCards = React.useMemo(() => {
     return groupedIssues
-      .map<KanbanIssueCard>(issue => ({
-        ...issue,
-        cardId: issue.id,
-        assignmentId: issue.id,
-        assigneeId: issue.assignees[0]?.id ?? null,
-        assigneeName: issue.assignees[0]?.name ?? null,
-        assigneeEmail: issue.assignees[0]?.email ?? null,
-        assigneeImage: issue.assignees[0]?.image ?? null,
-        stateId: issue.workflowStateId,
-        stateIcon: issue.workflowStateIcon,
-        stateColor: issue.workflowStateColor,
-        stateName: issue.workflowStateName,
-        stateType: issue.workflowStateType,
-      }))
+      .map<KanbanIssueCard>(issue => {
+        // Prefer showing the current viewer's assignment if they are an assignee
+        const viewerAssignment = currentUserId
+          ? issue.assignments.find(a => a.assigneeId === currentUserId)
+          : null;
+        const displayAssignee = viewerAssignment
+          ? issue.assignees.find(a => a.id === currentUserId)
+          : issue.assignees[0];
+
+        return {
+          ...issue,
+          cardId: issue.id,
+          assignmentId: issue.id,
+          assigneeId: displayAssignee?.id ?? null,
+          assigneeName: displayAssignee?.name ?? null,
+          assigneeEmail: displayAssignee?.email ?? null,
+          assigneeImage: displayAssignee?.image ?? null,
+          stateId: viewerAssignment?.stateId ?? issue.workflowStateId,
+          stateIcon: viewerAssignment?.stateIcon ?? issue.workflowStateIcon,
+          stateColor: viewerAssignment?.stateColor ?? issue.workflowStateColor,
+          stateName: viewerAssignment?.stateName ?? issue.workflowStateName,
+          stateType: viewerAssignment?.stateType ?? issue.workflowStateType,
+        };
+      })
       .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [groupedIssues]);
+  }, [groupedIssues, currentUserId]);
 
   const canMoveCard = React.useCallback(
     (_issue: KanbanIssueCard) => Boolean(onStateChange),
