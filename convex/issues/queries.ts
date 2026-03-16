@@ -1359,6 +1359,7 @@ export const listIssues = query({
     projectId: v.optional(v.string()),
     teamId: v.optional(v.string()),
     assigneeId: v.optional(v.string()),
+    relatedOnly: v.optional(v.boolean()),
     searchQuery: v.optional(v.string()),
     page: v.optional(v.number()),
     pageSize: v.optional(v.number()),
@@ -1443,7 +1444,18 @@ export const listIssues = query({
       )
       .filter(issue =>
         assigneeIssueIds ? assigneeIssueIds.has(issue._id) : true,
-      );
+      )
+      .filter(issue => {
+        if (!args.relatedOnly) return true;
+        // Show issues belonging to teams or projects the user is a member of
+        const inMyTeam = issue.teamId
+          ? access.teamIds.has(issue.teamId)
+          : false;
+        const inMyProject = issue.projectId
+          ? access.projectIds.has(issue.projectId)
+          : false;
+        return inMyTeam || inMyProject;
+      });
 
     const pageSize =
       args.pageSize && args.pageSize > 0

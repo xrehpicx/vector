@@ -7,6 +7,7 @@ import type { SuggestionOptions as TiptapSuggestionOptions } from '@tiptap/sugge
 
 export type MentionSuggestionOptions = {
   orgSlug: string;
+  placement?: 'bottom-start' | 'top-start';
 };
 
 type MentionSuggestion = Pick<TiptapSuggestionOptions, 'items' | 'render'>;
@@ -20,7 +21,7 @@ type SuggestionKeyDownProps = Parameters<
 export function createMentionSuggestion(
   options: MentionSuggestionOptions,
 ): MentionSuggestion {
-  const { orgSlug } = options;
+  const { orgSlug, placement = 'bottom-start' } = options;
 
   return {
     // Items is a no-op — the wrapper component fetches via useQuery
@@ -50,7 +51,7 @@ export function createMentionSuggestion(
             showOnCreate: true,
             interactive: true,
             trigger: 'manual',
-            placement: 'bottom-start',
+            placement,
           });
         },
 

@@ -212,7 +212,10 @@ export const AssistantInput = forwardRef<
         includeChildren: true,
       }),
       MentionExtension.configure({
-        suggestion: createMentionSuggestion({ orgSlug }),
+        suggestion: createMentionSuggestion({
+          orgSlug,
+          placement: 'top-start',
+        }),
       }),
       createSubmitOnEnterExtension(getSubmitFn),
     ],

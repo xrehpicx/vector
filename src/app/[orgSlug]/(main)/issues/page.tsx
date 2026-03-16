@@ -30,7 +30,7 @@ import { MobileNavTrigger } from '../layout';
 type StateType = (typeof ISSUE_STATE_DEFAULTS)[number]['type'];
 type FilterType = 'all' | StateType;
 type ViewMode = 'table' | 'kanban';
-type ScopeTab = 'mine' | 'all';
+type ScopeTab = 'mine' | 'related' | 'all';
 
 const TAB_LABELS: Record<FilterType, string> = {
   all: 'All',
@@ -123,12 +123,17 @@ export default function IssuesPage() {
     orgSlug,
   });
 
-  const issuesData = useQuery(api.issues.queries.listIssues, {
+  const scopeQueryArgs = {
     orgSlug,
     projectId: selectedProject || undefined,
     teamId: selectedTeam || undefined,
-    assigneeId: scopeTab === 'mine' ? currentUserId || undefined : undefined,
     searchQuery: deferredSearch || undefined,
+  };
+
+  const issuesData = useQuery(api.issues.queries.listIssues, {
+    ...scopeQueryArgs,
+    assigneeId: scopeTab === 'mine' ? currentUserId || undefined : undefined,
+    relatedOnly: scopeTab === 'related' ? true : undefined,
     page: viewMode === 'table' ? page : undefined,
     pageSize: viewMode === 'table' ? PAGE_SIZE : undefined,
     includeCounts: true,
@@ -139,18 +144,34 @@ export default function IssuesPage() {
     counts: {},
   };
 
-  // Lightweight query for the other scope tab's count
-  const otherScopeData = useQuery(api.issues.queries.listIssues, {
-    orgSlug,
-    projectId: selectedProject || undefined,
-    teamId: selectedTeam || undefined,
-    assigneeId: scopeTab === 'mine' ? undefined : currentUserId || undefined,
-    searchQuery: deferredSearch || undefined,
-    page: 1,
-    pageSize: 1,
-    includeCounts: false,
-  });
-  const otherScopeTotal = otherScopeData?.total ?? 0;
+  // Lightweight count queries for inactive scope tabs
+  const mineCountData = useQuery(
+    api.issues.queries.listIssues,
+    scopeTab !== 'mine'
+      ? {
+          ...scopeQueryArgs,
+          assigneeId: currentUserId || undefined,
+          page: 1,
+          pageSize: 1,
+        }
+      : 'skip',
+  );
+  const relatedCountData = useQuery(
+    api.issues.queries.listIssues,
+    scopeTab !== 'related'
+      ? { ...scopeQueryArgs, relatedOnly: true, page: 1, pageSize: 1 }
+      : 'skip',
+  );
+  const allCountData = useQuery(
+    api.issues.queries.listIssues,
+    scopeTab !== 'all' ? { ...scopeQueryArgs, page: 1, pageSize: 1 } : 'skip',
+  );
+
+  const scopeCounts = {
+    mine: scopeTab === 'mine' ? total : (mineCountData?.total ?? 0),
+    related: scopeTab === 'related' ? total : (relatedCountData?.total ?? 0),
+    all: scopeTab === 'all' ? total : (allCountData?.total ?? 0),
+  };
 
   // Reset page when filters change
   useEffect(() => {
@@ -279,42 +300,31 @@ export default function IssuesPage() {
         <div className='flex flex-col gap-1 p-1 sm:flex-row sm:items-center sm:justify-between'>
           <div className='flex min-w-0 flex-1 items-center gap-1 overflow-x-auto'>
             <MobileNavTrigger />
-            <Button
-              variant={scopeTab === 'mine' ? 'secondary' : 'ghost'}
-              size='sm'
-              className={cn(
-                'h-6 shrink-0 gap-2 rounded-xs px-3 text-xs font-normal',
-                scopeTab === 'mine' && 'bg-secondary',
-              )}
-              onClick={() => {
-                setScopeTab('mine');
-                setActiveFilter('all');
-                setPage(1);
-              }}
-            >
-              <span>My issues</span>
-              <span className='text-muted-foreground text-xs'>
-                {scopeTab === 'mine' ? total : otherScopeTotal}
-              </span>
-            </Button>
-            <Button
-              variant={scopeTab === 'all' ? 'secondary' : 'ghost'}
-              size='sm'
-              className={cn(
-                'h-6 shrink-0 gap-2 rounded-xs px-3 text-xs font-normal',
-                scopeTab === 'all' && 'bg-secondary',
-              )}
-              onClick={() => {
-                setScopeTab('all');
-                setActiveFilter('all');
-                setPage(1);
-              }}
-            >
-              <span>All issues</span>
-              <span className='text-muted-foreground text-xs'>
-                {scopeTab === 'all' ? total : otherScopeTotal}
-              </span>
-            </Button>
+            {[
+              { key: 'mine' as const, label: 'My issues' },
+              { key: 'related' as const, label: 'Related' },
+              { key: 'all' as const, label: 'All issues' },
+            ].map(tab => (
+              <Button
+                key={tab.key}
+                variant={scopeTab === tab.key ? 'secondary' : 'ghost'}
+                size='sm'
+                className={cn(
+                  'h-6 shrink-0 gap-2 rounded-xs px-3 text-xs font-normal',
+                  scopeTab === tab.key && 'bg-secondary',
+                )}
+                onClick={() => {
+                  setScopeTab(tab.key);
+                  setActiveFilter('all');
+                  setPage(1);
+                }}
+              >
+                <span>{tab.label}</span>
+                <span className='text-muted-foreground text-xs'>
+                  {scopeCounts[tab.key]}
+                </span>
+              </Button>
+            ))}
             <div className='bg-border mx-1 h-4 w-px shrink-0' />
             {visibleTabs.map(tab => (
               <Button
