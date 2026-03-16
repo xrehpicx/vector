@@ -417,7 +417,7 @@ export const linkGitHubIdentity = internalAction({
     if (!res.ok) {
       throw new Error('Failed to fetch GitHub profile');
     }
-    const profile = await res.json();
+    const profile = (await res.json()) as { id: number; login: string };
 
     await ctx.runMutation(internal.users.setGitHubIdentity, {
       userId: args.userId,

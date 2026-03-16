@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
-import { Bell, Laptop, Send, Smartphone, Sparkles } from 'lucide-react';
+import { Bell, Check, Laptop, Send, Smartphone, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/convex';
 import {
@@ -249,11 +249,18 @@ export function NotificationPreferencesPage() {
                         key={channel.key}
                         variant={enabled ? 'secondary' : 'outline'}
                         size='sm'
-                        className={cn('h-7', enabled && 'shadow-sm')}
+                        className={cn(
+                          'h-7',
+                          enabled && 'shadow-sm',
+                          !enabled && 'text-muted-foreground/60',
+                        )}
                         onClick={() =>
                           void handleToggle(preference.category, channel.key)
                         }
                       >
+                        {enabled && (
+                          <Check className='size-3 text-green-600 dark:text-green-400' />
+                        )}
                         <Icon className='size-3.5' />
                         {channel.label}
                       </Button>

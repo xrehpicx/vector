@@ -1,7 +1,11 @@
 import { query } from '../_generated/server';
 import { v, ConvexError } from 'convex/values';
-import type { Id, Doc } from '../_generated/dataModel';
+import type { Doc } from '../_generated/dataModel';
 import { canViewProject } from '../access';
+import {
+  getLeadMembershipFromMembers,
+  getProjectLeadSummary,
+} from '../_shared/leads';
 import { isDefined } from '../_shared/typeGuards';
 import { getAuthUserId } from '../authUtils';
 
@@ -35,10 +39,8 @@ export const getByKey = query({
       throw new ConvexError('FORBIDDEN');
     }
 
-    const leadUser = project.leadId
-      ? await ctx.db.get('users', project.leadId)
-      : null;
-    return { ...project, lead: leadUser };
+    const { leadId, lead } = await getProjectLeadSummary(ctx, project);
+    return { ...project, leadId, lead };
   },
 });
 
@@ -85,8 +87,28 @@ export const list = query({
       (project): project is Doc<'projects'> => project !== null,
     );
 
-    const leadIds = projects.map(p => p.leadId).filter(isDefined);
-    const statusIds = projects.map(p => p.statusId).filter(isDefined);
+    const projectMemberships = await Promise.all(
+      projects.map(async project => ({
+        projectId: project._id,
+        members: await ctx.db
+          .query('projectMembers')
+          .withIndex('by_project', q => q.eq('projectId', project._id))
+          .collect(),
+      })),
+    );
+    const projectMembershipMap = new Map(
+      projectMemberships.map(({ projectId, members }) => [projectId, members]),
+    );
+
+    const leadIds = projects
+      .map(project => {
+        const members = projectMembershipMap.get(project._id) ?? [];
+        return getLeadMembershipFromMembers(members)?.userId ?? project.leadId;
+      })
+      .filter(isDefined);
+    const statusIds = projects
+      .map(project => project.statusId)
+      .filter(isDefined);
 
     const leadUsers = await Promise.all(
       leadIds.map(id => ctx.db.get('users', id)),
@@ -98,13 +120,21 @@ export const list = query({
     const leadUserMap = new Map(leadIds.map((id, i) => [id, leadUsers[i]]));
     const statusMap = new Map(statusIds.map((id, i) => [id, statuses[i]]));
 
-    const projectsWithDetails = projects.map(project => {
-      const leadUser = project.leadId ? leadUserMap.get(project.leadId) : null;
+    return projects.map(project => {
+      const leadId =
+        getLeadMembershipFromMembers(
+          projectMembershipMap.get(project._id) ?? [],
+        )?.userId ?? project.leadId;
+      const leadUser = leadId ? leadUserMap.get(leadId) : null;
       const status = project.statusId ? statusMap.get(project.statusId) : null;
-      return { ...project, lead: leadUser, status };
-    });
 
-    return projectsWithDetails;
+      return {
+        ...project,
+        leadId,
+        lead: leadUser,
+        status,
+      };
+    });
   },
 });
 
@@ -130,37 +160,54 @@ export const listMyProjects = query({
       throw new ConvexError('ORGANIZATION_NOT_FOUND');
     }
 
-    // Get all project memberships for this user
     const myMemberships = await ctx.db
       .query('projectMembers')
       .withIndex('by_user', q => q.eq('userId', userId))
       .collect();
 
-    // Fetch the projects and filter to this org
     const projects = (
       await Promise.all(
-        myMemberships.map(async m => {
-          const project = await ctx.db.get('projects', m.projectId);
+        myMemberships.map(async membership => {
+          const project = await ctx.db.get('projects', membership.projectId);
           return project && project.organizationId === org._id ? project : null;
         }),
       )
-    ).filter((p): p is Doc<'projects'> => p !== null);
+    ).filter((project): project is Doc<'projects'> => project !== null);
 
-    // Also include projects the user created or leads but may not be a member of
+    // Keep the legacy field as a fallback until old rows are normalized.
     const allOrgProjects = await ctx.db
       .query('projects')
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
       .collect();
     const ownedProjects = allOrgProjects.filter(
-      p =>
-        (p.createdBy === userId || p.leadId === userId) &&
-        !projects.some(mp => mp._id === p._id),
+      project =>
+        (project.createdBy === userId || project.leadId === userId) &&
+        !projects.some(myProject => myProject._id === project._id),
     );
     const combinedProjects = [...projects, ...ownedProjects];
 
-    // Enrich with lead + status
-    const leadIds = combinedProjects.map(p => p.leadId).filter(isDefined);
-    const statusIds = combinedProjects.map(p => p.statusId).filter(isDefined);
+    const projectMemberships = await Promise.all(
+      combinedProjects.map(async project => ({
+        projectId: project._id,
+        members: await ctx.db
+          .query('projectMembers')
+          .withIndex('by_project', q => q.eq('projectId', project._id))
+          .collect(),
+      })),
+    );
+    const projectMembershipMap = new Map(
+      projectMemberships.map(({ projectId, members }) => [projectId, members]),
+    );
+
+    const leadIds = combinedProjects
+      .map(project => {
+        const members = projectMembershipMap.get(project._id) ?? [];
+        return getLeadMembershipFromMembers(members)?.userId ?? project.leadId;
+      })
+      .filter(isDefined);
+    const statusIds = combinedProjects
+      .map(project => project.statusId)
+      .filter(isDefined);
 
     const leadUsers = await Promise.all(
       leadIds.map(id => ctx.db.get('users', id)),
@@ -173,9 +220,19 @@ export const listMyProjects = query({
     const statusMap = new Map(statusIds.map((id, i) => [id, statuses[i]]));
 
     return combinedProjects.map(project => {
-      const leadUser = project.leadId ? leadUserMap.get(project.leadId) : null;
+      const leadId =
+        getLeadMembershipFromMembers(
+          projectMembershipMap.get(project._id) ?? [],
+        )?.userId ?? project.leadId;
+      const leadUser = leadId ? leadUserMap.get(leadId) : null;
       const status = project.statusId ? statusMap.get(project.statusId) : null;
-      return { ...project, lead: leadUser, status };
+
+      return {
+        ...project,
+        leadId,
+        lead: leadUser,
+        status,
+      };
     });
   },
 });

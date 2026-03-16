@@ -10,20 +10,26 @@ import {
   GitCommitHorizontal,
   GitPullRequest,
   Github,
+  Link2,
   RefreshCw,
   ShieldOff,
   Unlink2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { BarsSpinner } from '@/components/bars-spinner';
 import { formatDateHuman } from '@/lib/date';
-import { cn } from '@/lib/utils';
 import { usePermissionCheck } from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { toast } from 'sonner';
+import { getGitHubLinkErrorMessage } from '@/lib/error-handling';
 import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useQuery } from 'convex/react';
@@ -330,6 +336,63 @@ function CommitRow({
   );
 }
 
+function LinkArtifactInput({
+  url,
+  setUrl,
+  isLinking,
+  onLink,
+}: {
+  url: string;
+  setUrl: (v: string) => void;
+  isLinking: boolean;
+  onLink: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant='ghost' size='xs' className='h-6 gap-1 px-2'>
+          <Link2 className='size-3.5' />
+          Link
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align='end' className='w-80 p-2'>
+        <div className='flex gap-2'>
+          <Input
+            value={url}
+            onChange={event => setUrl(event.target.value)}
+            placeholder='Paste a GitHub URL'
+            className='h-8'
+            disabled={isLinking}
+            autoFocus
+            onKeyDown={event => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                onLink();
+                setOpen(false);
+              }
+            }}
+          />
+          <Button
+            size='sm'
+            variant='outline'
+            className='h-8 shrink-0'
+            disabled={isLinking || !url.trim()}
+            onClick={() => {
+              onLink();
+              setOpen(false);
+            }}
+          >
+            {isLinking ? <BarsSpinner size={10} /> : null}
+            Link
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function DevelopmentSkeleton() {
   return (
     <div className='space-y-2'>
@@ -373,7 +436,8 @@ export function IssueDevelopmentSection({
     return (
       development.pullRequests.length > 0 ||
       development.githubIssues.length > 0 ||
-      development.commits.length > 0
+      development.commits.length > 0 ||
+      development.childCommitRollup.length > 0
     );
   }, [development]);
 
@@ -437,8 +501,7 @@ export function IssueDevelopmentSection({
       });
       setUrl('');
     } catch (error) {
-      console.error(error);
-      toast.error('Failed to link GitHub artifact');
+      toast.error(getGitHubLinkErrorMessage(error));
     } finally {
       setIsLinking(false);
     }
@@ -463,6 +526,10 @@ export function IssueDevelopmentSection({
     }
   };
 
+  if (development !== undefined && !hasArtifacts) {
+    return null;
+  }
+
   return (
     <div className='mb-8'>
       <div className='mb-2 flex items-center justify-between gap-3'>
@@ -470,166 +537,136 @@ export function IssueDevelopmentSection({
           <Github className='size-4' />
           <h2 className='text-sm font-semibold'>Development</h2>
         </div>
-        <Button
-          variant='ghost'
-          size='xs'
-          disabled={!canEdit || isRefreshing}
-          onClick={() => void handleRefresh()}
-        >
-          {isRefreshing ? (
-            <BarsSpinner size={10} />
-          ) : (
-            <RefreshCw
-              className={cn('size-3.5', isRefreshing && 'animate-spin')}
+        <div className='flex items-center gap-1'>
+          {canEdit ? (
+            <LinkArtifactInput
+              url={url}
+              setUrl={setUrl}
+              isLinking={isLinking}
+              onLink={() => void handleLink()}
             />
-          )}
-          Refresh
-        </Button>
-      </div>
-
-      <div className='space-y-3'>
-        <div className='flex flex-col gap-2 rounded-lg border p-2 sm:flex-row'>
-          <Input
-            value={url}
-            onChange={event => setUrl(event.target.value)}
-            placeholder='Paste a GitHub PR, issue, or commit URL'
-            className='h-8'
-            disabled={!canEdit || isLinking}
-            onKeyDown={event => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                void handleLink();
-              }
-            }}
-          />
+          ) : null}
           <Button
-            size='sm'
-            variant='outline'
-            disabled={!canEdit || isLinking || !url.trim()}
-            onClick={() => void handleLink()}
+            variant='ghost'
+            size='xs'
+            className='h-6 gap-1 px-2'
+            disabled={!canEdit || isRefreshing}
+            onClick={() => void handleRefresh()}
           >
-            {isLinking ? <BarsSpinner size={10} /> : null}
-            Link
+            {isRefreshing ? (
+              <BarsSpinner size={10} />
+            ) : (
+              <RefreshCw className='size-3.5' />
+            )}
+            Refresh
           </Button>
         </div>
-
-        {!canEdit ? (
-          <p className='text-muted-foreground text-xs'>
-            You can view GitHub development here, but linking and suppression
-            are restricted to issue editors.
-          </p>
-        ) : null}
-
-        {development === undefined ? (
-          <DevelopmentSkeleton />
-        ) : hasArtifacts ? (
-          <div className='space-y-3'>
-            {development.pullRequests.length > 0 ? (
-              <div className='space-y-2'>
-                <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  Pull Requests
-                </div>
-                {development.pullRequests.map(item => (
-                  <PullRequestRow
-                    key={item._id}
-                    item={item}
-                    canEdit={canEdit}
-                    busy={busyLinkId === String(item.linkId)}
-                    onUnlink={handleUnlink}
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            {development.githubIssues.length > 0 ? (
-              <div className='space-y-2'>
-                <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  GitHub Issues
-                </div>
-                {development.githubIssues.map(item => (
-                  <GitHubIssueRow
-                    key={item._id}
-                    item={item}
-                    canEdit={canEdit}
-                    busy={busyLinkId === String(item.linkId)}
-                    onUnlink={handleUnlink}
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            {development.commits.length > 0 ? (
-              <div className='space-y-2'>
-                <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  Commits
-                </div>
-                {development.commits.map(item => (
-                  <CommitRow
-                    key={item._id}
-                    item={item}
-                    canEdit={canEdit}
-                    busy={busyLinkId === String(item.linkId)}
-                    onUnlink={handleUnlink}
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            {development.childCommitRollup.length > 0 ? (
-              <div className='space-y-2'>
-                <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                  Child Issue Commits
-                </div>
-                <div className='space-y-1 rounded-lg border p-2'>
-                  {development.childCommitRollup.map(item => (
-                    <div
-                      key={item.sha}
-                      className='flex items-center justify-between gap-3 rounded-md px-1 py-1'
-                    >
-                      <div className='min-w-0 flex-1'>
-                        <div className='flex items-center gap-2'>
-                          <GitCommitHorizontal className='text-muted-foreground size-3.5 shrink-0' />
-                          <Link
-                            href={`/${orgSlug}/issues/${item.issueKey}`}
-                            className='truncate text-sm font-medium'
-                          >
-                            {item.issueKey}
-                          </Link>
-                          <span className='text-muted-foreground truncate text-xs'>
-                            {item.messageHeadline}
-                          </span>
-                        </div>
-                        <div className='text-muted-foreground mt-1 flex flex-wrap items-center gap-2 pl-5 text-xs'>
-                          <span className='font-mono'>{item.repository}</span>
-                          <span className='font-mono'>{item.shortSha}</span>
-                          <span>
-                            {item.committedAt
-                              ? formatDateHuman(new Date(item.committedAt))
-                              : 'Commit time unavailable'}
-                          </span>
-                        </div>
-                      </div>
-                      <Link
-                        href={item.url}
-                        target='_blank'
-                        rel='noreferrer'
-                        className='hover:bg-muted inline-flex size-6 items-center justify-center rounded-[min(var(--radius-md),10px)] transition-colors'
-                      >
-                        <ExternalLink className='size-3.5' />
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className='text-muted-foreground rounded-lg border px-3 py-6 text-sm'>
-            No linked GitHub development yet. Paste a GitHub URL here, or let
-            webhooks and reconciliation match references automatically.
-          </div>
-        )}
       </div>
+
+      {development === undefined ? (
+        <DevelopmentSkeleton />
+      ) : (
+        <div className='space-y-3'>
+          {development.pullRequests.length > 0 ? (
+            <div className='space-y-2'>
+              <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                Pull Requests
+              </div>
+              {development.pullRequests.map(item => (
+                <PullRequestRow
+                  key={item._id}
+                  item={item}
+                  canEdit={canEdit}
+                  busy={busyLinkId === String(item.linkId)}
+                  onUnlink={handleUnlink}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {development.githubIssues.length > 0 ? (
+            <div className='space-y-2'>
+              <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                GitHub Issues
+              </div>
+              {development.githubIssues.map(item => (
+                <GitHubIssueRow
+                  key={item._id}
+                  item={item}
+                  canEdit={canEdit}
+                  busy={busyLinkId === String(item.linkId)}
+                  onUnlink={handleUnlink}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {development.commits.length > 0 ? (
+            <div className='space-y-2'>
+              <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                Commits
+              </div>
+              {development.commits.map(item => (
+                <CommitRow
+                  key={item._id}
+                  item={item}
+                  canEdit={canEdit}
+                  busy={busyLinkId === String(item.linkId)}
+                  onUnlink={handleUnlink}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {development.childCommitRollup.length > 0 ? (
+            <div className='space-y-2'>
+              <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                Child Issue Commits
+              </div>
+              <div className='space-y-1 rounded-lg border p-2'>
+                {development.childCommitRollup.map(item => (
+                  <div
+                    key={item.sha}
+                    className='flex items-center justify-between gap-3 rounded-md px-1 py-1'
+                  >
+                    <div className='min-w-0 flex-1'>
+                      <div className='flex items-center gap-2'>
+                        <GitCommitHorizontal className='text-muted-foreground size-3.5 shrink-0' />
+                        <Link
+                          href={`/${orgSlug}/issues/${item.issueKey}`}
+                          className='truncate text-sm font-medium'
+                        >
+                          {item.issueKey}
+                        </Link>
+                        <span className='text-muted-foreground truncate text-xs'>
+                          {item.messageHeadline}
+                        </span>
+                      </div>
+                      <div className='text-muted-foreground mt-1 flex flex-wrap items-center gap-2 pl-5 text-xs'>
+                        <span className='font-mono'>{item.repository}</span>
+                        <span className='font-mono'>{item.shortSha}</span>
+                        <span>
+                          {item.committedAt
+                            ? formatDateHuman(new Date(item.committedAt))
+                            : 'Commit time unavailable'}
+                        </span>
+                      </div>
+                    </div>
+                    <Link
+                      href={item.url}
+                      target='_blank'
+                      rel='noreferrer'
+                      className='hover:bg-muted inline-flex size-6 items-center justify-center rounded-[min(var(--radius-md),10px)] transition-colors'
+                    >
+                      <ExternalLink className='size-3.5' />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

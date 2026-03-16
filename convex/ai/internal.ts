@@ -1,6 +1,10 @@
 import { internalMutation, internalQuery } from '../_generated/server';
 import { ConvexError, v } from 'convex/values';
 import {
+  setProjectLeadMemberRole,
+  setTeamLeadMemberRole,
+} from '../_shared/leads';
+import {
   syncOrganizationRoleAssignment,
   syncProjectRoleAssignment,
   syncTeamRoleAssignment,
@@ -1329,7 +1333,6 @@ export const createProject = internalMutation({
       key: projectKey,
       name: projectName,
       description: args.description?.trim(),
-      leadId: args.userId,
       teamId: team?._id,
       statusId: status?._id ?? undefined,
       createdBy: args.userId,
@@ -1579,7 +1582,6 @@ export const createTeam = internalMutation({
       key: teamKey,
       name: teamName,
       description: args.description?.trim(),
-      leadId: args.userId,
       icon: args.icon,
       color: args.color,
       visibility: args.visibility ?? 'organization',
@@ -2158,7 +2160,7 @@ export const changeTeamLead = internalMutation({
     }
 
     if (args.leadName === null) {
-      await ctx.db.patch('teams', team._id, { leadId: undefined });
+      await setTeamLeadMemberRole(ctx, team, null);
       return { message: `Removed lead from ${team.name}`, teamKey: team.key };
     }
 
@@ -2169,26 +2171,7 @@ export const changeTeamLead = internalMutation({
     );
     if (!memberMatch) throw new ConvexError('MEMBER_NOT_FOUND');
 
-    await ctx.db.patch('teams', team._id, { leadId: memberMatch.user._id });
-
-    // Ensure lead is a team member
-    const existing = await ctx.db
-      .query('teamMembers')
-      .withIndex('by_team_user', q =>
-        q.eq('teamId', team._id).eq('userId', memberMatch.user._id),
-      )
-      .first();
-    if (!existing) {
-      await ctx.db.insert('teamMembers', {
-        teamId: team._id,
-        userId: memberMatch.user._id,
-        role: 'lead',
-        joinedAt: Date.now(),
-      });
-    } else if (existing.role !== 'lead') {
-      await ctx.db.patch('teamMembers', existing._id, { role: 'lead' });
-    }
-    await syncTeamRoleAssignment(ctx, team._id, memberMatch.user._id, 'lead');
+    await setTeamLeadMemberRole(ctx, team, memberMatch.user._id);
 
     return {
       message: `Set ${memberMatch.user.name ?? memberMatch.user.email} as lead of ${team.name}`,
@@ -2377,7 +2360,7 @@ export const changeProjectLead = internalMutation({
     }
 
     if (args.leadName === null) {
-      await ctx.db.patch('projects', project._id, { leadId: undefined });
+      await setProjectLeadMemberRole(ctx, project, null);
       return {
         message: `Removed lead from ${project.name}`,
         projectKey: project.key,
@@ -2391,33 +2374,7 @@ export const changeProjectLead = internalMutation({
     );
     if (!memberMatch) throw new ConvexError('MEMBER_NOT_FOUND');
 
-    await ctx.db.patch('projects', project._id, {
-      leadId: memberMatch.user._id,
-    });
-
-    // Ensure lead is a project member
-    const existing = await ctx.db
-      .query('projectMembers')
-      .withIndex('by_project_user', q =>
-        q.eq('projectId', project._id).eq('userId', memberMatch.user._id),
-      )
-      .first();
-    if (!existing) {
-      await ctx.db.insert('projectMembers', {
-        projectId: project._id,
-        userId: memberMatch.user._id,
-        role: 'lead',
-        joinedAt: Date.now(),
-      });
-    } else if (existing.role !== 'lead') {
-      await ctx.db.patch('projectMembers', existing._id, { role: 'lead' });
-    }
-    await syncProjectRoleAssignment(
-      ctx,
-      project._id,
-      memberMatch.user._id,
-      'lead',
-    );
+    await setProjectLeadMemberRole(ctx, project, memberMatch.user._id);
 
     return {
       message: `Set ${memberMatch.user.name ?? memberMatch.user.email} as lead of ${project.name}`,

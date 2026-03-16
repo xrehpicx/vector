@@ -1,7 +1,11 @@
 import { query } from '../_generated/server';
 import { v, ConvexError } from 'convex/values';
-import type { Id, Doc } from '../_generated/dataModel';
+import type { Doc } from '../_generated/dataModel';
 import { canViewTeam } from '../access';
+import {
+  getLeadMembershipFromMembers,
+  getTeamLeadSummary,
+} from '../_shared/leads';
 import { isDefined } from '../_shared/typeGuards';
 import { getAuthUserId } from '../authUtils';
 
@@ -14,7 +18,6 @@ export const getByKey = query({
     teamKey: v.string(),
   },
   handler: async (ctx, args) => {
-    // Find organization
     const org = await ctx.db
       .query('organizations')
       .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
@@ -24,7 +27,6 @@ export const getByKey = query({
       throw new ConvexError('ORGANIZATION_NOT_FOUND');
     }
 
-    // Find team by key and organization
     const team = await ctx.db
       .query('teams')
       .withIndex('by_org_key', q =>
@@ -36,19 +38,16 @@ export const getByKey = query({
       throw new ConvexError('TEAM_NOT_FOUND');
     }
 
-    // Check if user can view this team based on visibility
     if (!(await canViewTeam(ctx, team))) {
       throw new ConvexError('FORBIDDEN');
     }
 
-    // Get team details including lead user
-    const leadUser = team.leadId
-      ? await ctx.db.get('users', team.leadId)
-      : null;
+    const { leadId, lead } = await getTeamLeadSummary(ctx, team);
 
     return {
       ...team,
-      lead: leadUser,
+      leadId,
+      lead,
     };
   },
 });
@@ -61,7 +60,6 @@ export const list = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    // Find organization
     const org = await ctx.db
       .query('organizations')
       .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
@@ -71,13 +69,11 @@ export const list = query({
       throw new ConvexError('ORGANIZATION_NOT_FOUND');
     }
 
-    // Get all teams in organization
     const allTeams = await ctx.db
       .query('teams')
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
       .collect();
 
-    // Filter teams based on visibility permissions
     const teamPromises = allTeams.map(async team => {
       const canView = await canViewTeam(ctx, team);
       return canView ? team : null;
@@ -86,41 +82,43 @@ export const list = query({
       (team): team is Doc<'teams'> => team !== null,
     );
 
-    // Batch database calls for better performance
-    const leadIds = teams.map(t => t.leadId).filter(isDefined);
+    const teamMemberships = await Promise.all(
+      teams.map(async team => ({
+        teamId: team._id,
+        members: await ctx.db
+          .query('teamMembers')
+          .withIndex('by_team', q => q.eq('teamId', team._id))
+          .collect(),
+      })),
+    );
+    const teamMembershipMap = new Map(
+      teamMemberships.map(({ teamId, members }) => [teamId, members]),
+    );
+
+    const leadIds = teams
+      .map(team => {
+        const members = teamMembershipMap.get(team._id) ?? [];
+        return getLeadMembershipFromMembers(members)?.userId ?? team.leadId;
+      })
+      .filter(isDefined);
     const leadUsers = await Promise.all(
       leadIds.map(id => ctx.db.get('users', id)),
     );
     const leadUserMap = new Map(leadIds.map((id, i) => [id, leadUsers[i]]));
 
-    // Get team member counts in batches
-    const teamMemberCounts = await Promise.all(
-      teams.map(async team => {
-        const memberCount = await ctx.db
-          .query('teamMembers')
-          .withIndex('by_team', q => q.eq('teamId', team._id))
-          .collect()
-          .then(members => members.length);
-        return { teamId: team._id, memberCount };
-      }),
-    );
-    const memberCountMap = new Map(
-      teamMemberCounts.map(({ teamId, memberCount }) => [teamId, memberCount]),
-    );
-
-    // Combine results
-    const teamsWithDetails = teams.map(team => {
-      const leadUser = team.leadId ? leadUserMap.get(team.leadId) : null;
-      const memberCount = memberCountMap.get(team._id) ?? 0;
+    return teams.map(team => {
+      const members = teamMembershipMap.get(team._id) ?? [];
+      const leadId =
+        getLeadMembershipFromMembers(members)?.userId ?? team.leadId;
+      const leadUser = leadId ? leadUserMap.get(leadId) : null;
 
       return {
         ...team,
+        leadId,
         lead: leadUser,
-        memberCount,
+        memberCount: members.length,
       };
     });
-
-    return teamsWithDetails;
   },
 });
 
@@ -146,59 +144,68 @@ export const listMyTeams = query({
       throw new ConvexError('ORGANIZATION_NOT_FOUND');
     }
 
-    // Get all team memberships for this user
     const myMemberships = await ctx.db
       .query('teamMembers')
       .withIndex('by_user', q => q.eq('userId', userId))
       .collect();
 
-    // Fetch the teams and filter to this org
     const teams = (
       await Promise.all(
-        myMemberships.map(async m => {
-          const team = await ctx.db.get('teams', m.teamId);
+        myMemberships.map(async membership => {
+          const team = await ctx.db.get('teams', membership.teamId);
           return team && team.organizationId === org._id ? team : null;
         }),
       )
-    ).filter((t): t is Doc<'teams'> => t !== null);
+    ).filter((team): team is Doc<'teams'> => team !== null);
 
-    // Also include teams the user created but may not be a member of
     const allOrgTeams = await ctx.db
       .query('teams')
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
       .collect();
     const createdTeams = allOrgTeams.filter(
-      t => t.createdBy === userId && !teams.some(mt => mt._id === t._id),
+      team =>
+        team.createdBy === userId &&
+        !teams.some(myTeam => myTeam._id === team._id),
     );
     const combinedTeams = [...teams, ...createdTeams];
 
-    // Enrich with lead + member count
-    const leadIds = combinedTeams.map(t => t.leadId).filter(isDefined);
+    const teamMemberships = await Promise.all(
+      combinedTeams.map(async team => ({
+        teamId: team._id,
+        members: await ctx.db
+          .query('teamMembers')
+          .withIndex('by_team', q => q.eq('teamId', team._id))
+          .collect(),
+      })),
+    );
+    const teamMembershipMap = new Map(
+      teamMemberships.map(({ teamId, members }) => [teamId, members]),
+    );
+
+    const leadIds = combinedTeams
+      .map(team => {
+        const members = teamMembershipMap.get(team._id) ?? [];
+        return getLeadMembershipFromMembers(members)?.userId ?? team.leadId;
+      })
+      .filter(isDefined);
     const leadUsers = await Promise.all(
       leadIds.map(id => ctx.db.get('users', id)),
     );
     const leadUserMap = new Map(leadIds.map((id, i) => [id, leadUsers[i]]));
 
-    const teamMemberCounts = await Promise.all(
-      combinedTeams.map(async team => {
-        const count = (
-          await ctx.db
-            .query('teamMembers')
-            .withIndex('by_team', q => q.eq('teamId', team._id))
-            .collect()
-        ).length;
-        return { teamId: team._id, count };
-      }),
-    );
-    const memberCountMap = new Map(
-      teamMemberCounts.map(({ teamId, count }) => [teamId, count]),
-    );
+    return combinedTeams.map(team => {
+      const members = teamMembershipMap.get(team._id) ?? [];
+      const leadId =
+        getLeadMembershipFromMembers(members)?.userId ?? team.leadId;
+      const leadUser = leadId ? leadUserMap.get(leadId) : null;
 
-    return combinedTeams.map(team => ({
-      ...team,
-      lead: team.leadId ? leadUserMap.get(team.leadId) : null,
-      memberCount: memberCountMap.get(team._id) ?? 0,
-    }));
+      return {
+        ...team,
+        leadId,
+        lead: leadUser,
+        memberCount: members.length,
+      };
+    });
   },
 });
 
@@ -222,13 +229,11 @@ export const listMembers = query({
       throw new ConvexError('FORBIDDEN');
     }
 
-    // Get team members
     const teamMembers = await ctx.db
       .query('teamMembers')
       .withIndex('by_team', q => q.eq('teamId', team._id))
       .collect();
 
-    // Get user details for each member
     const membersWithUsers = await Promise.all(
       teamMembers.map(async member => {
         const user = await ctx.db.get('users', member.userId);

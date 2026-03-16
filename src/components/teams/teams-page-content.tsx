@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { CreateTeamButton, TeamsTable } from '@/components/teams';
 import { Button } from '@/components/ui/button';
 
@@ -23,11 +23,6 @@ export function TeamsPageContent({
   orgSlug,
   canCreateTeams,
 }: TeamsPageContentProps) {
-  // --------------------------------------------------
-  // Scope & Pagination
-  // --------------------------------------------------
-  const PAGE_SIZE = 25;
-  const [page, setPage] = useState(1);
   const [scopeTab, setScopeTab] = useState<ScopeTab>('mine');
 
   const allTeamsData = useQuery(api.teams.queries.list, { orgSlug });
@@ -51,14 +46,6 @@ export function TeamsPageContent({
   const allTeams = transformTeams(allTeamsData);
   const myTeams = transformTeams(myTeamsData);
   const teams = scopeTab === 'mine' ? myTeams : allTeams;
-
-  const total = teams.length;
-
-  // Clamp page to valid range during render instead of via effect
-  const safePage = useMemo(() => {
-    const maxPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    return page > maxPage ? 1 : page;
-  }, [page, total]);
 
   // --------------------------------------------------
   // Team operations

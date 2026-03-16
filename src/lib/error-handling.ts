@@ -1,3 +1,4 @@
+import { ConvexError } from 'convex/values';
 import { toast } from 'sonner';
 
 // Error categories for better UX
@@ -225,4 +226,32 @@ export function useMutationErrorHandler() {
       onError?: (error: ErrorInfo) => void,
     ) => handleMutationError(mutationFn, context, onSuccess, onError),
   };
+}
+
+const GITHUB_LINK_ERROR_MESSAGES: Record<string, string> = {
+  INVALID_GITHUB_URL:
+    'That doesn\u2019t look like a valid GitHub URL. Paste a link to a PR, issue, or commit.',
+  REPOSITORY_NOT_CONNECTED:
+    'This repository isn\u2019t connected to the organization. Connect it in settings first.',
+  INVALID_GITHUB_ISSUE:
+    'That GitHub URL points to a pull request, not an issue. Use the PR link instead.',
+  FORBIDDEN:
+    'You don\u2019t have permission to link GitHub artifacts to this issue.',
+  ISSUE_NOT_FOUND: 'The issue could not be found. It may have been deleted.',
+  UNAUTHORIZED: 'You need to be signed in to link GitHub artifacts.',
+};
+
+/**
+ * Extract a user-friendly error message from a GitHub link action error.
+ */
+export function getGitHubLinkErrorMessage(error: unknown): string {
+  const code =
+    error instanceof ConvexError && typeof error.data === 'string'
+      ? error.data
+      : null;
+
+  return (
+    (code && GITHUB_LINK_ERROR_MESSAGES[code]) ??
+    'Failed to link GitHub artifact. Check the URL and try again.'
+  );
 }

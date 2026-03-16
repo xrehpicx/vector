@@ -830,7 +830,11 @@ export default function TeamViewPage() {
     notFound();
   }
 
-  const canEdit = !!(user && team && (team.leadId === user._id || canEditTeam));
+  const canEdit = !!(
+    user &&
+    team &&
+    (team.createdBy === user._id || team.leadId === user._id || canEditTeam)
+  );
 
   if (team && team._id !== initializedTeamId) {
     setInitializedTeamId(team._id);

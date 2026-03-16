@@ -7,7 +7,6 @@ import {
   OrgNameEditor,
   OrgSlugEditor,
 } from '@/components/organization';
-import { GitHubIntegrationSettings } from '@/components/organization/github-integration-settings';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/convex';
 import { useQuery } from 'convex/react';
@@ -138,8 +137,6 @@ export default function OrgSettingsPageClient({
             </p>
           </div>
         </div>
-
-        <GitHubIntegrationSettings orgSlug={orgSlug} />
       </div>
     </div>
   );

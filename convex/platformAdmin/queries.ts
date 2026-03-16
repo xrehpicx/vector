@@ -90,13 +90,9 @@ export const getGitHubAppConfig = query({
 
     const settings = await getSiteSettings(ctx.db);
 
+    // WIP admin surface only. This should not be treated as the source of truth
+    // for workspace GitHub connectivity.
     return {
-      installationId: settings?.githubAppInstallationId ?? null,
-      accountLogin: settings?.githubAppAccountLogin ?? null,
-      accountType: settings?.githubAppAccountType ?? null,
-      hasToken: Boolean(settings?.githubAppEncryptedToken),
-      tokenFingerprint: settings?.githubAppTokenFingerprint ?? null,
-      connectedAt: settings?.githubAppConnectedAt ?? null,
       updatedAt: settings?.githubAppUpdatedAt ?? null,
       hasAppId: Boolean(settings?.githubAppId),
       hasPrivateKey: Boolean(settings?.githubAppEncryptedPrivateKey),
@@ -110,9 +106,10 @@ export const getGitHubAppCredentials = internalQuery({
   handler: async ctx => {
     const settings = await getSiteSettings(ctx.db);
 
+    // WIP: these credentials are kept around for webhook verification and
+    // future app-install work. Avoid introducing new runtime dependencies on
+    // platform-level GitHub auth without product sign-off.
     return {
-      installationId: settings?.githubAppInstallationId ?? null,
-      encryptedToken: settings?.githubAppEncryptedToken ?? null,
       appId: settings?.githubAppId ?? null,
       encryptedPrivateKey: settings?.githubAppEncryptedPrivateKey ?? null,
       encryptedWebhookSecret: settings?.githubAppEncryptedWebhookSecret ?? null,

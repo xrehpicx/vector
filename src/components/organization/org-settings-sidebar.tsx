@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  Blocks,
   Building,
   Users,
   Settings2,
@@ -62,6 +63,13 @@ export function OrgSettingsSidebar({
       href: `/${orgSlug}/settings/states`,
       icon: Settings2,
       description: 'Configure issue and project states',
+      requiresAdmin: true,
+    },
+    {
+      label: 'Integrations',
+      href: `/${orgSlug}/settings/integrations`,
+      icon: Blocks,
+      description: 'Manage third-party integrations',
       requiresAdmin: true,
     },
   ];

@@ -6,9 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Circle, Save, X, Pencil, Trash2 } from 'lucide-react';
+import {
+  Circle,
+  Save,
+  X,
+  Pencil,
+  Trash2,
+  MoreHorizontal,
+  GitPullRequest,
+} from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { formatDateHuman } from '@/lib/date';
 import Link from 'next/link';
@@ -40,7 +48,22 @@ import { LinkedDocuments } from '@/components/documents/linked-documents';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { IssueDevelopmentSection } from '@/components/issues/issue-development-section';
 import { useConfirm } from '@/hooks/use-confirm';
+import { toast } from 'sonner';
 import { updateQuery } from '@/lib/optimistic-updates';
+import { getGitHubLinkErrorMessage } from '@/lib/error-handling';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 
 interface IssueViewPageProps {
   params: Promise<{ orgSlug: string; issueKey: string }>;
@@ -149,11 +172,19 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   }, [params]);
 
   const user = useQuery(api.users.currentUser);
+  const isGithubEnabled = useQuery(
+    api.github.queries.isGitHubEnabled,
+    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
+  );
 
   const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
   const [isUpdatingDescription, setIsUpdatingDescription] = useState(false);
   const [isUpdatingEstimates, setIsUpdatingEstimates] = useState(false);
   const [isDeletingIssue, setIsDeletingIssue] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [linkGithubOpen, setLinkGithubOpen] = useState(false);
+  const [linkGithubUrl, setLinkGithubUrl] = useState('');
+  const [isLinkingGithub, setIsLinkingGithub] = useState(false);
   const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
 
   const issue = useQuery(
@@ -219,6 +250,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     api.issues.mutations.updateEstimatedTimes,
   );
   const deleteIssueMutation = useMutation(api.issues.mutations.deleteIssue);
+  const linkArtifactByUrl = useAction(api.github.actions.linkArtifactByUrl);
   const changeTeamMutation = useMutation(
     api.issues.mutations.changeTeam,
   ).withOptimisticUpdate((store, args) => {
@@ -472,6 +504,25 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     });
   };
 
+  const handleLinkGithub = async () => {
+    const trimmed = linkGithubUrl.trim();
+    if (!trimmed || !issue || !resolvedParams) return;
+    setIsLinkingGithub(true);
+    try {
+      await linkArtifactByUrl({
+        orgSlug: resolvedParams.orgSlug,
+        issueKey: issue.key,
+        url: trimmed,
+      });
+      setLinkGithubUrl('');
+      setLinkGithubOpen(false);
+    } catch (error) {
+      toast.error(getGitHubLinkErrorMessage(error));
+    } finally {
+      setIsLinkingGithub(false);
+    }
+  };
+
   const handleDeleteIssue = async () => {
     if (!issue || !resolvedParams || !canDeleteIssue) return;
     const ok = await confirmDelete({
@@ -616,22 +667,130 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                 />
               </PermissionAwareSelector>
               <div className='bg-muted-foreground/20 h-4 w-px' />
-              <PermissionAwareSelector
-                orgSlug={resolvedParams.orgSlug}
-                permission={PERMISSIONS.ISSUE_DELETE}
-                fallbackMessage="You don't have permission to delete this issue"
-              >
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  className='text-destructive hover:bg-destructive/10 hover:text-destructive h-6 gap-1 px-2'
-                  disabled={!canDeleteIssue || isDeletingIssue}
-                  onClick={() => void handleDeleteIssue()}
-                >
-                  <Trash2 className='size-3.5' />
-                  <span className='hidden sm:inline'>Delete</span>
-                </Button>
-              </PermissionAwareSelector>
+              <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant='ghost' size='sm' className='h-6 w-6 p-0'>
+                    <MoreHorizontal className='size-3.5' />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align='end' className='w-56 p-0'>
+                  <Command>
+                    <CommandInput
+                      placeholder='Search actions...'
+                      className='h-9'
+                    />
+                    <CommandList>
+                      <CommandEmpty>No action found.</CommandEmpty>
+                      <CommandGroup>
+                        {isGithubEnabled ? (
+                          <PermissionAwareSelector
+                            orgSlug={resolvedParams.orgSlug}
+                            permission={PERMISSIONS.ISSUE_EDIT}
+                            fallbackMessage="You don't have permission to link GitHub artifacts"
+                          >
+                            <CommandItem
+                              value='Link GitHub'
+                              className='cursor-pointer'
+                              onSelect={() => {
+                                setActionsOpen(false);
+                                setLinkGithubOpen(true);
+                              }}
+                            >
+                              <GitPullRequest className='mr-2 h-4 w-4' />
+                              <div className='flex-1'>
+                                <div className='font-medium'>Link GitHub</div>
+                                <div className='text-muted-foreground text-xs'>
+                                  Attach a PR, issue, or commit
+                                </div>
+                              </div>
+                            </CommandItem>
+                          </PermissionAwareSelector>
+                        ) : isGithubEnabled === false ? (
+                          <CommandItem
+                            value='Link GitHub'
+                            className='cursor-pointer'
+                            onSelect={() => {
+                              setActionsOpen(false);
+                              window.open(
+                                `/${resolvedParams.orgSlug}/settings/integrations/github`,
+                                '_blank',
+                              );
+                            }}
+                          >
+                            <GitPullRequest className='text-muted-foreground mr-2 h-4 w-4' />
+                            <div className='flex-1'>
+                              <div className='text-muted-foreground font-medium'>
+                                Link GitHub
+                              </div>
+                              <div className='text-muted-foreground text-xs'>
+                                GitHub integration not enabled. Configure it in
+                                settings.
+                              </div>
+                            </div>
+                          </CommandItem>
+                        ) : null}
+                        <PermissionAwareSelector
+                          orgSlug={resolvedParams.orgSlug}
+                          permission={PERMISSIONS.ISSUE_DELETE}
+                          fallbackMessage="You don't have permission to delete this issue"
+                        >
+                          <CommandItem
+                            value='Delete'
+                            className='text-destructive data-[selected=true]:text-destructive cursor-pointer'
+                            disabled={!canDeleteIssue || isDeletingIssue}
+                            onSelect={() => {
+                              setActionsOpen(false);
+                              void handleDeleteIssue();
+                            }}
+                          >
+                            <Trash2 className='mr-2 h-4 w-4' />
+                            <div className='flex-1'>
+                              <div className='font-medium'>Delete</div>
+                              <div className='text-xs opacity-70'>
+                                Permanently remove this issue
+                              </div>
+                            </div>
+                          </CommandItem>
+                        </PermissionAwareSelector>
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+
+              {/* Link GitHub URL popover */}
+              <Popover open={linkGithubOpen} onOpenChange={setLinkGithubOpen}>
+                <PopoverTrigger asChild>
+                  <span />
+                </PopoverTrigger>
+                <PopoverContent align='end' className='w-80 p-2'>
+                  <div className='flex gap-2'>
+                    <Input
+                      value={linkGithubUrl}
+                      onChange={e => setLinkGithubUrl(e.target.value)}
+                      placeholder='Paste a GitHub PR, issue, or commit URL'
+                      className='h-8'
+                      disabled={isLinkingGithub}
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleLinkGithub();
+                        }
+                      }}
+                    />
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      className='h-8 shrink-0'
+                      disabled={isLinkingGithub || !linkGithubUrl.trim()}
+                      onClick={() => void handleLinkGithub()}
+                    >
+                      Link
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 

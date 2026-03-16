@@ -83,30 +83,29 @@ export function ProjectLeadSelector({
       projectKey && project?._id ? { projectId: project._id } : 'skip',
     ) ?? [];
 
-  // For existing projects, we need to include the project lead even if they're not explicitly added as project members
+  // Existing projects can promote any org member; project members are surfaced first.
   const members: (ProjectMember | OrgMember)[] = projectKey
     ? (() => {
-        const leadId = project?.leadId;
+        const projectMemberIds = new Set(
+          projectMembers.map(member => String(member.userId)),
+        );
+        const remainingOrgMembers = orgMembers.filter(
+          member => !projectMemberIds.has(String(member.userId)),
+        );
 
-        if (leadId && !projectMembers.some(m => m.userId === leadId)) {
-          // Find the lead in org members and add them to the list
-          const leadFromOrg = orgMembers.find(m => m.userId === leadId);
-          if (leadFromOrg) {
-            return [...projectMembers, leadFromOrg];
-          }
-        }
-
-        return projectMembers;
+        return [...projectMembers, ...remainingOrgMembers];
       })()
     : orgMembers;
 
-  // Sort members: current user first, then alphabetically by name
+  // Sort members: current user first, project members next, then alphabetically.
   const sortedMembers = [...members].sort((a, b) => {
-    // Current user always comes first
     if (a.userId === currentUserId) return -1;
     if (b.userId === currentUserId) return 1;
 
-    // Then sort by name
+    if (projectKey && isProjectMember(a) !== isProjectMember(b)) {
+      return isProjectMember(a) ? -1 : 1;
+    }
+
     const nameA = isProjectMember(a)
       ? a.user?.name || a.user?.email || ''
       : a.name || a.email || '';
@@ -185,16 +184,9 @@ export function ProjectLeadSelector({
       <PopoverTrigger asChild>{trigger || defaultTrigger}</PopoverTrigger>
       <PopoverContent align={align} className='w-64 p-0'>
         <Command>
-          <CommandInput
-            placeholder={
-              projectKey ? 'Search project members...' : 'Search members...'
-            }
-            className='h-9'
-          />
+          <CommandInput placeholder='Search members...' className='h-9' />
           <CommandList>
-            <CommandEmpty>
-              {projectKey ? 'No project members found.' : 'No members found.'}
-            </CommandEmpty>
+            <CommandEmpty>No members found.</CommandEmpty>
             <CommandGroup>
               <CommandItem
                 value=''

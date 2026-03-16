@@ -19,6 +19,36 @@ async function loadActiveIntegration(
     .first();
 }
 
+function getEffectiveGitHubAuthState(
+  integration: Doc<'githubIntegrations'> | null,
+  siteSettings: Awaited<ReturnType<typeof getSiteSettings>>,
+) {
+  const installationId = integration?.installationId ?? null;
+  const hasInstallation = Boolean(installationId);
+  const hasTokenFallback = Boolean(integration?.encryptedToken);
+  const hasPlatformAppCredentials = Boolean(
+    siteSettings?.githubAppId && siteSettings?.githubAppEncryptedPrivateKey,
+  );
+  const hasWebhookSecret = Boolean(
+    siteSettings?.githubAppEncryptedWebhookSecret,
+  );
+
+  return {
+    installationId,
+    hasInstallation,
+    hasTokenFallback,
+    hasPlatformAppCredentials,
+    hasWebhookSecret,
+    hasUsableAuth:
+      hasTokenFallback || (hasInstallation && hasPlatformAppCredentials),
+    hasAnyConfiguration:
+      hasInstallation ||
+      hasTokenFallback ||
+      hasPlatformAppCredentials ||
+      hasWebhookSecret,
+  };
+}
+
 async function hydrateDevelopmentForIssue(
   ctx: QueryCtx,
   issueId: Id<'issues'>,
@@ -241,30 +271,10 @@ export const isGitHubEnabled = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return false;
-
     const org = await getOrganizationBySlug(ctx, args.orgSlug);
-    const member = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', org._id).eq('userId', userId),
-      )
-      .first();
-    if (!member) return false;
-
-    // Check platform-level config
     const settings = await getSiteSettings(ctx.db);
-    const hasPlatformConfig = Boolean(
-      settings?.githubAppInstallationId || settings?.githubAppEncryptedToken,
-    );
-
     const integration = await loadActiveIntegration(ctx, org._id);
-
-    // Enabled if platform has config AND org has an integration row,
-    // or if per-org row has its own credentials (backward compat)
-    if (hasPlatformConfig && integration) return true;
-    return Boolean(integration?.installationId || integration?.encryptedToken);
+    return getEffectiveGitHubAuthState(integration, settings).hasUsableAuth;
   },
 });
 
@@ -274,8 +284,8 @@ export const isGitHubAppConfigured = query({
     const settings = await getSiteSettings(ctx.db);
     return Boolean(
       settings?.githubAppId ||
-        settings?.githubAppInstallationId ||
-        settings?.githubAppEncryptedToken,
+        settings?.githubAppEncryptedPrivateKey ||
+        settings?.githubAppEncryptedWebhookSecret,
     );
   },
 });
@@ -302,6 +312,11 @@ export const getOrgSettings = query({
     }
 
     const integration = await loadActiveIntegration(ctx, org._id);
+    const siteSettings = await getSiteSettings(ctx.db);
+    const effectiveAuth = getEffectiveGitHubAuthState(
+      integration,
+      siteSettings,
+    );
     const repositories = integration
       ? await ctx.db
           .query('githubRepositories')
@@ -328,6 +343,7 @@ export const getOrgSettings = query({
             hasTokenFallback: Boolean(integration.encryptedToken),
           }
         : null,
+      effectiveAuth,
       repositories,
       canManage,
     };

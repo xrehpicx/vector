@@ -12,6 +12,10 @@ import {
   resolveProjectScope,
   snapshotForProject,
 } from '../activities/lib';
+import {
+  getProjectLeadSummary,
+  setProjectLeadMemberRole,
+} from '../_shared/leads';
 import { PERMISSIONS, requirePermission } from '../permissions/utils';
 import { syncProjectRoleAssignment } from '../roles';
 
@@ -124,50 +128,38 @@ export const create = mutation({
       key: args.data.key.trim(),
       name: args.data.name.trim(),
       description: args.data.description?.trim(),
-      leadId: args.data.leadId,
       teamId: args.data.teamId,
       statusId: args.data.statusId,
       createdBy: userId,
       visibility: args.data.visibility || 'organization',
     });
 
+    const creatorRole =
+      args.data.leadId && args.data.leadId !== userId ? 'member' : 'lead';
     await ctx.db.insert('projectMembers', {
       projectId,
       userId,
-      role: 'lead',
+      role: creatorRole,
       joinedAt: Date.now(),
     });
-    await syncProjectRoleAssignment(ctx, projectId, userId, 'lead');
-
-    if (args.data.leadId && args.data.leadId !== userId) {
-      const existingLeadMembership = await ctx.db
-        .query('projectMembers')
-        .withIndex('by_project_user', q =>
-          q.eq('projectId', projectId).eq('userId', args.data.leadId!),
-        )
-        .first();
-
-      if (!existingLeadMembership) {
-        await ctx.db.insert('projectMembers', {
-          projectId,
-          userId: args.data.leadId,
-          role: 'lead',
-          joinedAt: Date.now(),
-        });
-      }
-      await syncProjectRoleAssignment(ctx, projectId, args.data.leadId, 'lead');
-    }
+    await syncProjectRoleAssignment(ctx, projectId, userId, creatorRole);
 
     const createdProject = await ctx.db.get('projects', projectId);
-    if (createdProject) {
-      await recordActivity(ctx, {
-        scope: resolveProjectScope(createdProject),
-        entityType: 'project',
-        eventType: 'project_created',
-        actorId: userId,
-        snapshot: snapshotForProject(createdProject),
-      });
+    if (!createdProject) {
+      throw new ConvexError('PROJECT_NOT_FOUND');
     }
+
+    if (args.data.leadId && args.data.leadId !== userId) {
+      await setProjectLeadMemberRole(ctx, createdProject, args.data.leadId);
+    }
+
+    await recordActivity(ctx, {
+      scope: resolveProjectScope(createdProject),
+      entityType: 'project',
+      eventType: 'project_created',
+      actorId: userId,
+      snapshot: snapshotForProject(createdProject),
+    });
 
     return { projectId } as const;
   },
@@ -191,9 +183,8 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const userId = await requireAuthUser(ctx);
     const project = await requireProjectEditAccess(ctx, args.projectId);
-    const previousLead = project.leadId
-      ? await ctx.db.get('users', project.leadId)
-      : null;
+    const previousLeadSummary = await getProjectLeadSummary(ctx, project);
+    const previousLead = previousLeadSummary.lead;
     const previousTeam = project.teamId
       ? await ctx.db.get('teams', project.teamId)
       : null;
@@ -229,39 +220,20 @@ export const update = mutation({
       }
     }
 
-    const { startDate, dueDate, ...rest } = args.data;
+    const { startDate, dueDate, leadId: nextLeadId, ...rest } = args.data;
     await ctx.db.patch('projects', project._id, {
       ...rest,
       ...(startDate !== undefined && { startDate: startDate ?? undefined }),
       ...(dueDate !== undefined && { dueDate: dueDate ?? undefined }),
     });
 
-    if (args.data.leadId) {
-      const existingLeadMembership = await ctx.db
-        .query('projectMembers')
-        .withIndex('by_project_user', q =>
-          q.eq('projectId', project._id).eq('userId', args.data.leadId!),
-        )
-        .first();
-      if (!existingLeadMembership) {
-        await ctx.db.insert('projectMembers', {
-          projectId: project._id,
-          userId: args.data.leadId,
-          role: 'lead',
-          joinedAt: Date.now(),
-        });
-      }
-      await syncProjectRoleAssignment(
-        ctx,
-        project._id,
-        args.data.leadId,
-        'lead',
-      );
+    if (nextLeadId !== undefined) {
+      await setProjectLeadMemberRole(ctx, project, nextLeadId);
     }
 
-    const nextLead = args.data.leadId
-      ? await ctx.db.get('users', args.data.leadId)
-      : args.data.leadId === undefined
+    const nextLead = nextLeadId
+      ? await ctx.db.get('users', nextLeadId)
+      : nextLeadId === undefined
         ? previousLead
         : null;
     const nextTeam = args.data.teamId
@@ -335,18 +307,18 @@ export const update = mutation({
       });
     }
 
-    if (args.data.leadId !== undefined && args.data.leadId !== project.leadId) {
+    if (nextLeadId !== undefined && nextLeadId !== previousLeadSummary.leadId) {
       await recordActivity(ctx, {
         scope,
         entityType: 'project',
         eventType: 'project_lead_changed',
         actorId: userId,
-        subjectUserId: args.data.leadId ?? undefined,
+        subjectUserId: nextLeadId ?? undefined,
         details: {
           field: 'lead',
-          fromId: project.leadId,
+          fromId: previousLeadSummary.leadId,
           fromLabel: userLabel(previousLead),
-          toId: args.data.leadId,
+          toId: nextLeadId,
           toLabel: userLabel(nextLead),
         },
         snapshot,
@@ -561,9 +533,8 @@ export const changeLead = mutation({
   handler: async (ctx, args) => {
     const userId = await requireAuthUser(ctx);
     const project = await requireProjectEditAccess(ctx, args.projectId);
-    const previousLead = project.leadId
-      ? await ctx.db.get('users', project.leadId)
-      : null;
+    const previousLeadSummary = await getProjectLeadSummary(ctx, project);
+    const previousLead = previousLeadSummary.lead;
 
     if (args.leadId) {
       const leadMembership = await ctx.db
@@ -577,30 +548,11 @@ export const changeLead = mutation({
       if (!leadMembership) {
         throw new ConvexError('INVALID_PROJECT_LEAD');
       }
-
-      const projectMembership = await ctx.db
-        .query('projectMembers')
-        .withIndex('by_project_user', q =>
-          q.eq('projectId', project._id).eq('userId', args.leadId!),
-        )
-        .first();
-      if (!projectMembership) {
-        await ctx.db.insert('projectMembers', {
-          projectId: project._id,
-          userId: args.leadId,
-          role: 'lead',
-          joinedAt: Date.now(),
-        });
-      }
-
-      await syncProjectRoleAssignment(ctx, project._id, args.leadId, 'lead');
     }
 
-    await ctx.db.patch('projects', project._id, {
-      leadId: args.leadId ?? undefined,
-    });
+    await setProjectLeadMemberRole(ctx, project, args.leadId);
 
-    if (args.leadId !== project.leadId) {
+    if (args.leadId !== previousLeadSummary.leadId) {
       const nextLead = args.leadId
         ? await ctx.db.get('users', args.leadId)
         : null;
@@ -612,7 +564,7 @@ export const changeLead = mutation({
         subjectUserId: args.leadId ?? undefined,
         details: {
           field: 'lead',
-          fromId: project.leadId,
+          fromId: previousLeadSummary.leadId,
           fromLabel: userLabel(previousLead),
           toId: args.leadId,
           toLabel: userLabel(nextLead),
@@ -668,7 +620,11 @@ export const addMember = mutation({
       role: args.role,
       joinedAt: Date.now(),
     });
-    await syncProjectRoleAssignment(ctx, project._id, args.userId, args.role);
+    if (args.role === 'lead') {
+      await setProjectLeadMemberRole(ctx, project, args.userId);
+    } else {
+      await syncProjectRoleAssignment(ctx, project._id, args.userId, args.role);
+    }
 
     await recordActivity(ctx, {
       scope: resolveProjectScope(project),

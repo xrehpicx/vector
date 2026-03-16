@@ -68,7 +68,6 @@ async function loadGitHubAuth(
   fallbackToken: string | null;
   appCredentials?: { appId: string; privateKey: string };
 }> {
-  // Try platform-level credentials first
   const platformCreds = await ctx.runQuery(
     internal.platformAdmin.queries.getGitHubAppCredentials,
     {},
@@ -85,24 +84,13 @@ async function loadGitHubAuth(
   );
   const { integration, repositories } = result;
 
-  // Platform token takes precedence, then per-org token
-  const encryptedToken =
-    platformCreds.encryptedToken ?? integration?.encryptedToken ?? null;
+  const encryptedToken = integration?.encryptedToken ?? null;
   const fallbackToken = encryptedToken ? decryptSecret(encryptedToken) : null;
 
-  // Build merged integration with platform installationId if per-org doesn't have one
-  const mergedIntegration = integration
-    ? {
-        ...integration,
-        installationId:
-          integration.installationId ??
-          platformCreds.installationId ??
-          undefined,
-      }
-    : platformCreds.installationId
-      ? { installationId: platformCreds.installationId }
-      : null;
-
+  // WIP: platform app credentials are still plumbed through for the
+  // installation-token path, but workspace GitHub connectivity itself should be
+  // modeled as org-owned. Avoid adding new product flows that depend on
+  // platform-level GitHub auth here without revisiting that design.
   const appCredentials =
     platformCreds.appId && platformCreds.encryptedPrivateKey
       ? {
@@ -112,7 +100,7 @@ async function loadGitHubAuth(
       : undefined;
 
   return {
-    integration: mergedIntegration,
+    integration,
     repositories,
     fallbackToken,
     appCredentials,
@@ -720,17 +708,17 @@ export const processWebhook = internalAction({
         return { ignored: true } as const;
       }
 
-      await ctx.runMutation(internal.github.mutations.upsertSyncHealth, {
-        organizationId: integration.organizationId,
-        lastWebhookAt: Date.now(),
-        lastWebhookEvent: args.event,
-      });
-
       const shouldSyncRepositories =
         args.event === 'installation_repositories' ||
         payload.action === 'created' ||
         payload.action === 'new_permissions_accepted' ||
         payload.action === 'unsuspend';
+
+      await ctx.runMutation(internal.github.mutations.upsertSyncHealth, {
+        organizationId: integration.organizationId,
+        lastWebhookAt: Date.now(),
+        lastWebhookEvent: args.event,
+      });
 
       if (shouldSyncRepositories) {
         try {
@@ -876,10 +864,11 @@ export const reconcileRecentArtifacts = internalAction({
       const fallbackToken = item.integration.encryptedToken
         ? decryptSecret(item.integration.encryptedToken)
         : null;
+      const installationId = item.integration.installationId ?? null;
 
       try {
         await withGitHubToken({
-          installationId: item.integration.installationId,
+          installationId,
           fallbackToken,
           appCredentials,
           run: async token => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/lib/convex';
@@ -149,7 +149,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   // Mutations
   const changeStatusMutation = useMutation(api.projects.mutations.update);
   const changeTeamMutation = useMutation(api.projects.mutations.update);
-  const changeLeadMutation = useMutation(api.projects.mutations.update);
+  const changeLeadMutation = useMutation(api.projects.mutations.changeLead);
   const deleteMutation = useMutation(api.projects.mutations.deleteProject);
 
   // Event handlers
@@ -172,12 +172,10 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   };
 
   const handleLeadChange = (projectId: string, leadId: string) => {
-    if (leadId) {
-      void changeLeadMutation({
-        projectId: projectId as Id<'projects'>,
-        data: { leadId: leadId as Id<'users'> },
-      });
-    }
+    void changeLeadMutation({
+      projectId: projectId as Id<'projects'>,
+      leadId: (leadId as Id<'users'>) || null,
+    });
   };
 
   const handleDelete = (projectId: string) => {

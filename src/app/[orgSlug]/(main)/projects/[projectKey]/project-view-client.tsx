@@ -322,7 +322,9 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
   const canEdit = !!(
     user &&
     project &&
-    (project.leadId === user._id || canEditProject)
+    (project.createdBy === user._id ||
+      project.leadId === user._id ||
+      canEditProject)
   );
 
   const statuses = useQuery(api.organizations.queries.listProjectStatuses, {

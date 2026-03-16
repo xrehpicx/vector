@@ -8,6 +8,7 @@ import {
   resolveTeamScope,
   snapshotForTeam,
 } from '../activities/lib';
+import { getTeamLeadSummary, setTeamLeadMemberRole } from '../_shared/leads';
 import { PERMISSIONS, requirePermission } from '../permissions/utils';
 import { syncTeamRoleAssignment } from '../roles';
 
@@ -92,49 +93,38 @@ export const create = mutation({
       key: args.data.key.trim(),
       name: args.data.name.trim(),
       description: args.data.description?.trim(),
-      leadId: args.data.leadId,
       icon: args.data.icon,
       color: args.data.color,
       visibility: args.data.visibility || 'organization',
       createdBy: userId,
     });
 
+    const creatorRole =
+      args.data.leadId && args.data.leadId !== userId ? 'member' : 'lead';
     await ctx.db.insert('teamMembers', {
       teamId,
       userId,
-      role: 'lead',
+      role: creatorRole,
       joinedAt: Date.now(),
     });
-    await syncTeamRoleAssignment(ctx, teamId, userId, 'lead');
-
-    if (args.data.leadId && args.data.leadId !== userId) {
-      const leadMembership = await ctx.db
-        .query('teamMembers')
-        .withIndex('by_team_user', q =>
-          q.eq('teamId', teamId).eq('userId', args.data.leadId!),
-        )
-        .first();
-      if (!leadMembership) {
-        await ctx.db.insert('teamMembers', {
-          teamId,
-          userId: args.data.leadId,
-          role: 'lead',
-          joinedAt: Date.now(),
-        });
-      }
-      await syncTeamRoleAssignment(ctx, teamId, args.data.leadId, 'lead');
-    }
+    await syncTeamRoleAssignment(ctx, teamId, userId, creatorRole);
 
     const createdTeam = await ctx.db.get('teams', teamId);
-    if (createdTeam) {
-      await recordActivity(ctx, {
-        scope: resolveTeamScope(createdTeam),
-        entityType: 'team',
-        eventType: 'team_created',
-        actorId: userId,
-        snapshot: snapshotForTeam(createdTeam),
-      });
+    if (!createdTeam) {
+      throw new ConvexError('TEAM_NOT_FOUND');
     }
+
+    if (args.data.leadId && args.data.leadId !== userId) {
+      await setTeamLeadMemberRole(ctx, createdTeam, args.data.leadId);
+    }
+
+    await recordActivity(ctx, {
+      scope: resolveTeamScope(createdTeam),
+      entityType: 'team',
+      eventType: 'team_created',
+      actorId: userId,
+      snapshot: snapshotForTeam(createdTeam),
+    });
 
     return { teamId };
   },
@@ -154,9 +144,8 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const userId = await requireAuthUser(ctx);
     const team = await requireTeamEditAccess(ctx, args.teamId);
-    const previousLead = team.leadId
-      ? await ctx.db.get('users', team.leadId)
-      : null;
+    const previousLeadSummary = await getTeamLeadSummary(ctx, team);
+    const previousLead = previousLeadSummary.lead;
 
     if (args.data.leadId) {
       const leadMembership = await ctx.db
@@ -172,24 +161,13 @@ export const update = mutation({
       }
     }
 
-    await ctx.db.patch('teams', team._id, { ...args.data });
+    const { leadId: nextLeadId, ...rest } = args.data;
+    if (Object.keys(rest).length > 0) {
+      await ctx.db.patch('teams', team._id, rest);
+    }
 
-    if (args.data.leadId) {
-      const existingLeadMembership = await ctx.db
-        .query('teamMembers')
-        .withIndex('by_team_user', q =>
-          q.eq('teamId', team._id).eq('userId', args.data.leadId!),
-        )
-        .first();
-      if (!existingLeadMembership) {
-        await ctx.db.insert('teamMembers', {
-          teamId: team._id,
-          userId: args.data.leadId,
-          role: 'lead',
-          joinedAt: Date.now(),
-        });
-      }
-      await syncTeamRoleAssignment(ctx, team._id, args.data.leadId, 'lead');
+    if (nextLeadId !== undefined) {
+      await setTeamLeadMemberRole(ctx, team, nextLeadId);
     }
 
     const snapshot = snapshotForTeam({
@@ -228,21 +206,21 @@ export const update = mutation({
       });
     }
 
-    if (args.data.leadId !== undefined && args.data.leadId !== team.leadId) {
-      const nextLead = args.data.leadId
-        ? await ctx.db.get('users', args.data.leadId)
+    if (nextLeadId !== undefined && nextLeadId !== previousLeadSummary.leadId) {
+      const nextLead = nextLeadId
+        ? await ctx.db.get('users', nextLeadId)
         : null;
       await recordActivity(ctx, {
         scope: resolveTeamScope(team),
         entityType: 'team',
         eventType: 'team_lead_changed',
         actorId: userId,
-        subjectUserId: args.data.leadId ?? undefined,
+        subjectUserId: nextLeadId ?? undefined,
         details: {
           field: 'lead',
-          fromId: team.leadId,
+          fromId: previousLeadSummary.leadId,
           fromLabel: userLabel(previousLead),
-          toId: args.data.leadId,
+          toId: nextLeadId,
           toLabel: userLabel(nextLead),
         },
         snapshot,
@@ -296,7 +274,11 @@ export const addMember = mutation({
       role: args.role,
       joinedAt: Date.now(),
     });
-    await syncTeamRoleAssignment(ctx, team._id, args.userId, args.role);
+    if (args.role === 'lead') {
+      await setTeamLeadMemberRole(ctx, team, args.userId);
+    } else {
+      await syncTeamRoleAssignment(ctx, team._id, args.userId, args.role);
+    }
 
     await recordActivity(ctx, {
       scope: resolveTeamScope(team),

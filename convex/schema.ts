@@ -78,11 +78,14 @@ export default defineSchema({
     brandLogo: v.optional(v.id('_storage')),
     brandThemeColor: v.optional(v.string()),
     brandAccentColor: v.optional(v.string()),
-    // Platform-level GitHub App credentials (configurable from admin UI, env var fallback)
+    // WIP: reserved for future GitHub App install/auth flows.
+    // Do not treat these as the primary workspace GitHub integration source;
+    // workspace webhook/token state lives on githubIntegrations.
     githubAppId: v.optional(v.string()),
     githubAppEncryptedPrivateKey: v.optional(v.string()),
     githubAppEncryptedWebhookSecret: v.optional(v.string()),
-    // Platform-level GitHub App installation metadata
+    // WIP: legacy/experimental app-install metadata. New workspace integration
+    // work should avoid depending on this until the app-install flow is revived.
     githubAppInstallationId: v.optional(v.number()),
     githubAppAccountLogin: v.optional(v.string()),
     githubAppAccountType: v.optional(v.string()),

@@ -61,7 +61,7 @@ For status, priority, team, project, assignee, lead, role, or visibility changes
 - Do not send users to a separate edit page
 - Do not add a dedicated modal for a single-field edit
 
-Destructive or secondary actions belong in a `DropdownMenu`, not in the primary inline selector.
+Destructive or secondary actions (delete, archive, link external resource, etc.) belong in a `Popover + Command` combobox menu triggered by a `MoreHorizontal` (⋯) icon button — not a `DropdownMenu`. This keeps all menus keyboard-searchable and consistent with the selector pattern. Use `CommandItem` for each action, styled with `text-destructive` for dangerous operations.
 
 ### 2. Respect the density rhythm
 
@@ -220,6 +220,7 @@ Entity detail pages (projects, teams, issues) use a constrained `max-w-5xl mx-au
 - Do not add ad hoc spinners when `src/components/bars-spinner.tsx` already fits the need
 - Do not use `GradientWaveText` as a decorative replacement for ordinary labels or body copy
 - Do not create a brand-new row layout if an issues/member/project row already solves it
+- Do not use `DropdownMenu` for action menus — use `Popover + Command` (combobox) instead so menus stay searchable and consistent
 
 ## Ship Checklist
 
