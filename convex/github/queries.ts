@@ -424,6 +424,43 @@ export const getIntegrationByOrgSlug = internalQuery({
   },
 });
 
+export const getWebhookCandidatesByRepositoryFullName = internalQuery({
+  args: {
+    fullName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const repositories = await ctx.db
+      .query('githubRepositories')
+      .withIndex('by_full_name', q => q.eq('fullName', args.fullName))
+      .collect();
+
+    const seenIntegrationIds = new Set<string>();
+    const candidates: Array<{
+      organizationId: Id<'organizations'>;
+      integration: Doc<'githubIntegrations'>;
+    }> = [];
+
+    for (const repository of repositories) {
+      const key = String(repository.integrationId);
+      if (seenIntegrationIds.has(key)) continue;
+      seenIntegrationIds.add(key);
+
+      const integration = await ctx.db.get(
+        'githubIntegrations',
+        repository.integrationId,
+      );
+      if (!integration) continue;
+
+      candidates.push({
+        organizationId: repository.organizationId,
+        integration,
+      });
+    }
+
+    return candidates;
+  },
+});
+
 export const searchAutoLinkIssueCandidates = internalQuery({
   args: {
     organizationId: v.id('organizations'),

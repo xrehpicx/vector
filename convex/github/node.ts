@@ -95,10 +95,8 @@ export function verifyGitHubWebhookSignature(
   signature: string | null,
   webhookSecret?: string,
 ) {
-  const secret = webhookSecret ?? process.env.GITHUB_WEBHOOK_SECRET;
-  if (!secret) {
-    throw new Error('Missing GITHUB_WEBHOOK_SECRET');
-  }
+  const secret = webhookSecret;
+  if (!secret) return false;
   if (!signature) return false;
 
   const expected = `sha256=${createHmac('sha256', secret)

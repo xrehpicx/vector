@@ -707,6 +707,16 @@ async function persistCommitPayload(
     payload: any;
   },
 ) {
+  const sha =
+    typeof args.payload.sha === 'string' && args.payload.sha.trim().length > 0
+      ? args.payload.sha
+      : typeof args.payload.id === 'string' && args.payload.id.trim().length > 0
+        ? args.payload.id
+        : null;
+  if (!sha) {
+    return null;
+  }
+
   const commitMessage: string =
     args.payload.commit?.message ?? args.payload.message ?? '';
   const [headline, ...bodyLines] = commitMessage.split('\n');
@@ -715,9 +725,9 @@ async function persistCommitPayload(
     {
       organizationId: args.organizationId,
       repositoryId: args.repository._id,
-      sha: args.payload.sha,
-      shortSha: String(args.payload.sha).slice(0, 7),
-      messageHeadline: headline || String(args.payload.sha).slice(0, 7),
+      sha,
+      shortSha: sha.slice(0, 7),
+      messageHeadline: headline || sha.slice(0, 7),
       messageBody: bodyLines.join('\n').trim() || undefined,
       url: args.payload.html_url ?? args.payload.url,
       authorName:
@@ -739,7 +749,7 @@ async function persistCommitPayload(
     organizationId: args.organizationId,
     commitId,
     repoFullName: args.repository.fullName,
-    sha: args.payload.sha,
+    sha,
     issueKeys,
   });
 
@@ -1047,6 +1057,10 @@ export const processWebhook = internalAction({
   handler: async (ctx, args) => {
     const payload = parseGitHubWebhookPayload(args.body);
     const repoPayload = payload.repository;
+    const installationId =
+      typeof payload.installation?.id === 'number'
+        ? payload.installation.id
+        : null;
 
     if (args.orgSlug) {
       const integration = await ctx.runQuery(
@@ -1153,38 +1167,68 @@ export const processWebhook = internalAction({
       return { ignored: true } as const;
     }
 
-    const platformCreds = await ctx.runQuery(
-      internal.platformAdmin.queries.getGitHubAppCredentials,
-      {},
-    );
-    const webhookSecret = platformCreds.encryptedWebhookSecret
-      ? decryptSecret(platformCreds.encryptedWebhookSecret)
-      : undefined;
+    let matchedIntegration: {
+      organizationId: Id<'organizations'>;
+      integration: any;
+    } | null = null;
 
-    if (
-      !verifyGitHubWebhookSignature(
-        args.body,
-        args.signature ?? null,
-        webhookSecret,
-      )
-    ) {
-      throw new Error('Invalid GitHub webhook signature');
+    if (installationId) {
+      const integration = await ctx.runQuery(
+        internal.github.queries.getIntegrationByInstallationId,
+        { installationId },
+      );
+      if (integration) {
+        const webhookSecret = integration.encryptedWebhookSecret
+          ? decryptSecret(integration.encryptedWebhookSecret)
+          : undefined;
+        if (
+          verifyGitHubWebhookSignature(
+            args.body,
+            args.signature ?? null,
+            webhookSecret,
+          )
+        ) {
+          matchedIntegration = {
+            organizationId: integration.organizationId,
+            integration,
+          };
+        }
+      }
     }
 
-    const installationId =
-      typeof payload.installation?.id === 'number'
-        ? payload.installation.id
-        : null;
+    if (!matchedIntegration && typeof repoPayload?.full_name === 'string') {
+      const candidates = await ctx.runQuery(
+        internal.github.queries.getWebhookCandidatesByRepositoryFullName,
+        { fullName: repoPayload.full_name },
+      );
+
+      for (const candidate of candidates) {
+        const webhookSecret = candidate.integration.encryptedWebhookSecret
+          ? decryptSecret(candidate.integration.encryptedWebhookSecret)
+          : undefined;
+        if (
+          verifyGitHubWebhookSignature(
+            args.body,
+            args.signature ?? null,
+            webhookSecret,
+          )
+        ) {
+          matchedIntegration = candidate;
+          break;
+        }
+      }
+    }
+
+    if (!matchedIntegration) {
+      return { ignored: true } as const;
+    }
 
     if (
       (args.event === 'installation' ||
         args.event === 'installation_repositories') &&
       installationId
     ) {
-      const integration = await ctx.runQuery(
-        internal.github.queries.getIntegrationByInstallationId,
-        { installationId },
-      );
+      const integration = matchedIntegration.integration;
 
       if (!integration) {
         return { ignored: true } as const;
@@ -1224,24 +1268,7 @@ export const processWebhook = internalAction({
       return { success: true } as const;
     }
 
-    const repoFullName: string | undefined = repoPayload?.full_name;
-
-    let repository = null;
-    if (repoFullName) {
-      const integrations = await ctx.runQuery(
-        internal.github.queries.listIntegrationsForReconcile,
-        {},
-      );
-      for (const candidate of integrations) {
-        repository =
-          candidate.repositories.find(
-            (repo: { fullName: string }) => repo.fullName === repoFullName,
-          ) ?? null;
-        if (repository) break;
-      }
-    }
-
-    const organizationId = repository?.organizationId;
+    const organizationId = matchedIntegration.organizationId;
     if (!organizationId) {
       return { ignored: true } as const;
     }
@@ -1251,6 +1278,17 @@ export const processWebhook = internalAction({
       lastWebhookAt: Date.now(),
       lastWebhookEvent: args.event,
     });
+
+    let repository = null;
+    if (typeof repoPayload?.full_name === 'string') {
+      repository = await ctx.runQuery(
+        internal.github.queries.getRepositoryByFullName,
+        {
+          organizationId,
+          fullName: repoPayload.full_name,
+        },
+      );
+    }
 
     const ensuredRepository = repoPayload
       ? await ensureRepository(ctx, organizationId, {
