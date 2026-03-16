@@ -49,6 +49,45 @@ const hasScheduler = (
 ): ctx is GenericActionCtx<DataModel> | GenericMutationCtx<DataModel> =>
   'scheduler' in ctx;
 
+const hasRunAction = (
+  ctx: GenericCtx<DataModel>,
+): ctx is GenericActionCtx<DataModel> => 'runAction' in ctx;
+
+async function dispatchOtpEmail(
+  ctx: GenericCtx<DataModel>,
+  {
+    email,
+    otp,
+    type,
+  }: {
+    email: string;
+    otp: string;
+    type: 'sign-in' | 'email-verification' | 'forget-password';
+  },
+) {
+  const payload = {
+    to: email,
+    otp,
+    type,
+  };
+
+  if (hasScheduler(ctx)) {
+    await ctx.scheduler.runAfter(0, internal.email.otp.sendOtpEmail, payload);
+    return;
+  }
+
+  if (hasRunAction(ctx)) {
+    await ctx.runAction(internal.email.otp.sendOtpEmail, payload);
+    return;
+  }
+
+  console.warn('[otp] unable to dispatch OTP email', {
+    email,
+    type,
+    availableContextKeys: Object.keys(ctx),
+  });
+}
+
 function normalizeUserId(
   ctx: Pick<GenericMutationCtx<DataModel>, 'db'>,
   userId: string | null | undefined,
@@ -193,13 +232,7 @@ export const createAuthOptions = (
     emailOTP({
       async sendVerificationOTP({ email, otp, type }) {
         console.log(`[otp] ${type} for ${email}: ${otp}`);
-        if (hasScheduler(ctx)) {
-          await ctx.scheduler.runAfter(0, internal.email.otp.sendOtpEmail, {
-            to: email,
-            otp,
-            type,
-          });
-        }
+        await dispatchOtpEmail(ctx, { email, otp, type });
       },
       otpLength: 4,
       expiresIn: 900,

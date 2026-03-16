@@ -23,9 +23,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import { BarsSpinner } from '@/components/bars-spinner';
-import { formatDateHuman } from '@/lib/date';
 import { usePermissionCheck } from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { toast } from 'sonner';
@@ -48,77 +46,12 @@ function isStale(lastSyncedAt?: number | null) {
   return Date.now() - lastSyncedAt > STALE_AFTER_MS;
 }
 
-function StatusBadge({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: 'default' | 'secondary' | 'outline';
-}) {
-  return (
-    <Badge
-      variant={tone}
-      className='h-5 rounded-md px-1.5 text-[10px] font-medium tracking-wide uppercase'
-    >
-      {label}
-    </Badge>
-  );
-}
-
-function PullRequestStateBadge({ state }: { state: PullRequestItem['state'] }) {
-  if (state === 'merged') {
-    return <StatusBadge label='merged' tone='default' />;
-  }
-  if (state === 'closed') {
-    return <StatusBadge label='closed' tone='outline' />;
-  }
-  if (state === 'draft') {
-    return <StatusBadge label='draft' tone='secondary' />;
-  }
-  return <StatusBadge label='open' tone='secondary' />;
-}
-
-function GitHubIssueStateBadge({ state }: { state: GitHubIssueItem['state'] }) {
-  return (
-    <StatusBadge
-      label={state === 'closed' ? 'closed' : 'open'}
-      tone={state === 'closed' ? 'outline' : 'secondary'}
-    />
-  );
-}
-
-function ArtifactMeta({
-  repository,
-  syncedAt,
-  source,
-}: {
-  repository: string;
-  syncedAt?: number | null;
-  source?: 'auto' | 'manual' | 'rollup' | null;
-}) {
-  return (
-    <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-xs'>
-      <span className='font-mono'>{repository}</span>
-      {source ? (
-        <Badge variant='outline' className='h-5 rounded-md px-1.5 text-[10px]'>
-          {source === 'auto'
-            ? 'auto'
-            : source === 'manual'
-              ? 'manual'
-              : 'rollup'}
-        </Badge>
-      ) : null}
-      <span>
-        {syncedAt
-          ? `Synced ${formatDateHuman(new Date(syncedAt))}`
-          : 'Sync pending'}
-      </span>
-      {isStale(syncedAt) ? (
-        <span className='text-amber-600 dark:text-amber-400'>Stale</span>
-      ) : null}
-    </div>
-  );
-}
+const STATE_COLORS: Record<string, string> = {
+  merged: 'text-purple-600 dark:text-purple-400',
+  closed: 'text-red-500 dark:text-red-400',
+  draft: 'text-muted-foreground',
+  open: 'text-green-600 dark:text-green-400',
+};
 
 function RowActions({
   href,
@@ -134,7 +67,7 @@ function RowActions({
   primaryLabel?: string;
 }) {
   return (
-    <div className='flex shrink-0 items-center gap-1'>
+    <div className='flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100'>
       <Link
         href={href}
         target='_blank'
@@ -147,14 +80,16 @@ function RowActions({
         <Button
           variant='ghost'
           size='xs'
+          className='h-6 gap-1 px-1.5'
           disabled={!canEdit || busy}
           onClick={onPrimaryAction}
         >
-          {busy ? <BarsSpinner size={10} /> : null}
-          {primaryLabel === 'Suppress' ? (
-            <ShieldOff className='size-3.5' />
+          {busy ? (
+            <BarsSpinner size={10} />
+          ) : primaryLabel === 'Suppress' ? (
+            <ShieldOff className='size-3' />
           ) : (
-            <Unlink2 className='size-3.5' />
+            <Unlink2 className='size-3' />
           )}
           {primaryLabel}
         </Button>
@@ -174,13 +109,12 @@ function PullRequestRow({
   busy: boolean;
   onUnlink: (linkId: Id<'githubArtifactLinks'>, suppress: boolean) => void;
 }) {
+  const stateColor = STATE_COLORS[item.state] ?? STATE_COLORS.open;
   return (
-    <div className='flex items-start gap-3 rounded-lg border px-3 py-2'>
-      <div className='bg-muted flex size-7 shrink-0 items-center justify-center rounded-md'>
-        <GitPullRequest className='size-3.5' />
-      </div>
+    <div className='group/row hover:bg-muted/50 flex items-center gap-3 rounded-md px-3 py-2 transition-colors'>
+      <GitPullRequest className={`size-4 shrink-0 ${stateColor}`} />
       <div className='min-w-0 flex-1'>
-        <div className='flex flex-wrap items-center gap-2'>
+        <div className='flex items-center gap-2'>
           <Link
             href={item.url}
             target='_blank'
@@ -189,22 +123,24 @@ function PullRequestRow({
           >
             {item.title}
           </Link>
-          <PullRequestStateBadge state={item.state} />
+          <span className='text-muted-foreground text-xs capitalize'>
+            {item.state}
+          </span>
           <span className='text-muted-foreground font-mono text-xs'>
             #{item.number}
           </span>
         </div>
-        <ArtifactMeta
-          repository={item.repository?.fullName ?? 'Unknown repository'}
-          syncedAt={item.lastSyncedAt}
-          source={item.source}
-        />
-        {item.headRefName ? (
-          <div className='text-muted-foreground mt-1 flex items-center gap-1 text-xs'>
-            <GitBranch className='size-3' />
-            <span className='truncate font-mono'>{item.headRefName}</span>
-          </div>
-        ) : null}
+        <div className='text-muted-foreground flex items-center gap-2 text-xs'>
+          <span className='font-mono'>
+            {item.repository?.fullName ?? 'Unknown'}
+          </span>
+          {item.headRefName ? (
+            <>
+              <GitBranch className='size-3 shrink-0' />
+              <span className='truncate font-mono'>{item.headRefName}</span>
+            </>
+          ) : null}
+        </div>
       </div>
       <RowActions
         href={item.url}
@@ -236,13 +172,13 @@ function GitHubIssueRow({
   busy: boolean;
   onUnlink: (linkId: Id<'githubArtifactLinks'>, suppress: boolean) => void;
 }) {
+  const stateColor =
+    item.state === 'closed' ? STATE_COLORS.closed : STATE_COLORS.open;
   return (
-    <div className='flex items-start gap-3 rounded-lg border px-3 py-2'>
-      <div className='bg-muted flex size-7 shrink-0 items-center justify-center rounded-md'>
-        <Bug className='size-3.5' />
-      </div>
+    <div className='group/row hover:bg-muted/50 flex items-center gap-3 rounded-md px-3 py-2 transition-colors'>
+      <Bug className={`size-4 shrink-0 ${stateColor}`} />
       <div className='min-w-0 flex-1'>
-        <div className='flex flex-wrap items-center gap-2'>
+        <div className='flex items-center gap-2'>
           <Link
             href={item.url}
             target='_blank'
@@ -251,16 +187,18 @@ function GitHubIssueRow({
           >
             {item.title}
           </Link>
-          <GitHubIssueStateBadge state={item.state} />
+          <span className='text-muted-foreground text-xs capitalize'>
+            {item.state}
+          </span>
           <span className='text-muted-foreground font-mono text-xs'>
             #{item.number}
           </span>
         </div>
-        <ArtifactMeta
-          repository={item.repository?.fullName ?? 'Unknown repository'}
-          syncedAt={item.lastSyncedAt}
-          source={item.source}
-        />
+        <div className='text-muted-foreground text-xs'>
+          <span className='font-mono'>
+            {item.repository?.fullName ?? 'Unknown'}
+          </span>
+        </div>
       </div>
       <RowActions
         href={item.url}
@@ -293,12 +231,10 @@ function CommitRow({
   onUnlink: (linkId: Id<'githubArtifactLinks'>, suppress: boolean) => void;
 }) {
   return (
-    <div className='flex items-start gap-3 rounded-lg border px-3 py-2'>
-      <div className='bg-muted flex size-7 shrink-0 items-center justify-center rounded-md'>
-        <GitCommitHorizontal className='size-3.5' />
-      </div>
+    <div className='group/row hover:bg-muted/50 flex items-center gap-3 rounded-md px-3 py-2 transition-colors'>
+      <GitCommitHorizontal className='text-muted-foreground size-4 shrink-0' />
       <div className='min-w-0 flex-1'>
-        <div className='flex flex-wrap items-center gap-2'>
+        <div className='flex items-center gap-2'>
           <Link
             href={item.url}
             target='_blank'
@@ -311,11 +247,11 @@ function CommitRow({
             {item.shortSha}
           </span>
         </div>
-        <ArtifactMeta
-          repository={item.repository?.fullName ?? 'Unknown repository'}
-          syncedAt={item.lastSyncedAt}
-          source={item.source}
-        />
+        <div className='text-muted-foreground text-xs'>
+          <span className='font-mono'>
+            {item.repository?.fullName ?? 'Unknown'}
+          </span>
+        </div>
       </div>
       <RowActions
         href={item.url}
@@ -546,18 +482,10 @@ export function IssueDevelopmentSection({
 
   return (
     <div className='mb-8'>
-      <div className='mb-2 flex items-center justify-between gap-3'>
+      <div className='mb-1 flex items-center justify-between gap-3'>
         <div className='flex items-center gap-2'>
-          <Github className='size-4' />
+          <Github className='text-muted-foreground size-4' />
           <h2 className='text-sm font-semibold'>Development</h2>
-          {!hasApiAccess ? (
-            <Badge
-              variant='outline'
-              className='h-5 rounded-md px-1.5 text-[10px]'
-            >
-              Webhook-driven
-            </Badge>
-          ) : null}
         </div>
         <div className='flex items-center gap-1'>
           {canEdit && hasApiAccess ? (
@@ -590,12 +518,9 @@ export function IssueDevelopmentSection({
       {development === undefined ? (
         <DevelopmentSkeleton />
       ) : (
-        <div className='space-y-3'>
+        <div className='space-y-1'>
           {development.pullRequests.length > 0 ? (
-            <div className='space-y-2'>
-              <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                Pull Requests
-              </div>
+            <div>
               {development.pullRequests.map(item => (
                 <PullRequestRow
                   key={item._id}
@@ -609,10 +534,7 @@ export function IssueDevelopmentSection({
           ) : null}
 
           {development.githubIssues.length > 0 ? (
-            <div className='space-y-2'>
-              <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                GitHub Issues
-              </div>
+            <div>
               {development.githubIssues.map(item => (
                 <GitHubIssueRow
                   key={item._id}
@@ -626,10 +548,7 @@ export function IssueDevelopmentSection({
           ) : null}
 
           {development.commits.length > 0 ? (
-            <div className='space-y-2'>
-              <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                Commits
-              </div>
+            <div>
               {development.commits.map(item => (
                 <CommitRow
                   key={item._id}
@@ -643,50 +562,45 @@ export function IssueDevelopmentSection({
           ) : null}
 
           {development.childCommitRollup.length > 0 ? (
-            <div className='space-y-2'>
-              <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-                Child Issue Commits
+            <div>
+              <div className='text-muted-foreground mb-1 px-3 text-xs font-medium'>
+                From child issues
               </div>
-              <div className='space-y-1 rounded-lg border p-2'>
-                {development.childCommitRollup.map(item => (
-                  <div
-                    key={item.sha}
-                    className='flex items-center justify-between gap-3 rounded-md px-1 py-1'
-                  >
-                    <div className='min-w-0 flex-1'>
-                      <div className='flex items-center gap-2'>
-                        <GitCommitHorizontal className='text-muted-foreground size-3.5 shrink-0' />
-                        <Link
-                          href={`/${orgSlug}/issues/${item.issueKey}`}
-                          className='truncate text-sm font-medium'
-                        >
-                          {item.issueKey}
-                        </Link>
-                        <span className='text-muted-foreground truncate text-xs'>
-                          {item.messageHeadline}
-                        </span>
-                      </div>
-                      <div className='text-muted-foreground mt-1 flex flex-wrap items-center gap-2 pl-5 text-xs'>
-                        <span className='font-mono'>{item.repository}</span>
-                        <span className='font-mono'>{item.shortSha}</span>
-                        <span>
-                          {item.committedAt
-                            ? formatDateHuman(new Date(item.committedAt))
-                            : 'Commit time unavailable'}
-                        </span>
-                      </div>
+              {development.childCommitRollup.map(item => (
+                <div
+                  key={item.sha}
+                  className='group/row hover:bg-muted/50 flex items-center gap-3 rounded-md px-3 py-2 transition-colors'
+                >
+                  <GitCommitHorizontal className='text-muted-foreground size-4 shrink-0' />
+                  <div className='min-w-0 flex-1'>
+                    <div className='flex items-center gap-2'>
+                      <Link
+                        href={`/${orgSlug}/issues/${item.issueKey}`}
+                        className='hover:text-foreground text-sm font-medium transition-colors'
+                      >
+                        {item.issueKey}
+                      </Link>
+                      <span className='text-muted-foreground truncate text-xs'>
+                        {item.messageHeadline}
+                      </span>
+                      <span className='text-muted-foreground font-mono text-xs'>
+                        {item.shortSha}
+                      </span>
                     </div>
-                    <Link
-                      href={item.url}
-                      target='_blank'
-                      rel='noreferrer'
-                      className='hover:bg-muted inline-flex size-6 items-center justify-center rounded-[min(var(--radius-md),10px)] transition-colors'
-                    >
-                      <ExternalLink className='size-3.5' />
-                    </Link>
+                    <div className='text-muted-foreground text-xs'>
+                      <span className='font-mono'>{item.repository}</span>
+                    </div>
                   </div>
-                ))}
-              </div>
+                  <Link
+                    href={item.url}
+                    target='_blank'
+                    rel='noreferrer'
+                    className='hover:bg-muted inline-flex size-6 shrink-0 items-center justify-center rounded-[min(var(--radius-md),10px)] opacity-0 transition-all group-hover/row:opacity-100'
+                  >
+                    <ExternalLink className='size-3.5' />
+                  </Link>
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
