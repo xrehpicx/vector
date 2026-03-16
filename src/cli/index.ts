@@ -747,7 +747,7 @@ authCommand
       );
     } else {
       const deviceResp = await requestDeviceCode(runtime.appUrl, 'vcli');
-      const verifyUrl = `${runtime.appUrl}${deviceResp.verification_uri}?user_code=${deviceResp.user_code}`;
+      const verifyUrl = `${runtime.appUrl}/device?user_code=${deviceResp.user_code}`;
 
       console.log();
       console.log(`  Open this URL in your browser to log in:`);
