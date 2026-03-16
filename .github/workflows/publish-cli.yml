@@ -67,7 +67,7 @@ jobs:
             const runNumber = Number(process.env.GITHUB_RUN_NUMBER || '0');
             const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT || '1');
             version = `${baseVersion}-beta.${runNumber}.${runAttempt}`;
-            npmTag = 'beta';
+            npmTag = 'latest';
           }
 
           pkg.version = version;
