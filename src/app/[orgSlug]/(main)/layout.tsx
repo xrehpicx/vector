@@ -183,10 +183,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   // Fetch current user and organization data
   const user = useQuery(api.users.currentUser);
-  const organization = useQuery(api.organizations.queries.getBySlug, {
-    orgSlug,
-  });
-  const userOrganizations = useQuery(api.users.getOrganizations);
+  const organization = useQuery(
+    api.organizations.queries.getBySlug,
+    user?._id ? { orgSlug } : 'skip',
+  );
+  const userOrganizations = useQuery(
+    api.users.getOrganizations,
+    user?._id ? {} : 'skip',
+  );
 
   // Route matching for bottom bar active state
   const isActive = (path: string) =>

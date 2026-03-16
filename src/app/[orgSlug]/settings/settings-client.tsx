@@ -20,13 +20,15 @@ export default function OrgSettingsPageClient({
 }: OrgSettingsPageClientProps) {
   const params = useParams();
   const orgSlugParam = params.orgSlug as string;
-  const org = useQuery(api.organizations.queries.getBySlug, {
-    orgSlug: orgSlugParam,
-  });
-  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
-    orgSlug: orgSlugParam,
-  });
   const user = useQuery(api.users.currentUser);
+  const org = useQuery(
+    api.organizations.queries.getBySlug,
+    user?._id ? { orgSlug: orgSlugParam } : 'skip',
+  );
+  const members = useQuery(
+    api.organizations.queries.listMembersWithRoles,
+    user?._id ? { orgSlug: orgSlugParam } : 'skip',
+  );
 
   const userRole = members?.find(m => m.userId === user?._id)?.role || 'member';
   const isOwner = userRole === 'owner';

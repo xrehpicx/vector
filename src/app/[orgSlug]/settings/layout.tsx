@@ -61,13 +61,18 @@ export default function OrgSettingsLayout({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const user = useQuery(api.users.currentUser);
-  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
-    orgSlug,
-  });
-  const organization = useQuery(api.organizations.queries.getBySlug, {
-    orgSlug,
-  });
-  const userOrganizations = useQuery(api.users.getOrganizations);
+  const members = useQuery(
+    api.organizations.queries.listMembersWithRoles,
+    user?._id ? { orgSlug } : 'skip',
+  );
+  const organization = useQuery(
+    api.organizations.queries.getBySlug,
+    user?._id ? { orgSlug } : 'skip',
+  );
+  const userOrganizations = useQuery(
+    api.users.getOrganizations,
+    user?._id ? {} : 'skip',
+  );
   const userRole = members?.find(m => m.userId === user?._id)?.role || 'member';
 
   const organizations =
