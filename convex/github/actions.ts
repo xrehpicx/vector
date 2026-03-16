@@ -27,6 +27,7 @@ import {
   verifyGitHubWebhookSignature,
   withGitHubToken,
 } from './node';
+import { buildArtifactExternalKey } from './shared';
 import { extractIssueKeysFromText } from './shared';
 
 async function requireOrgSettingsAccess(ctx: any, orgSlug: string) {
@@ -281,6 +282,222 @@ function parseGitHubWebhookPayload(body: string) {
   }
 }
 
+function extractGitHubArtifactUrls(text: string) {
+  type ParsedArtifactUrl =
+    | ({ type: 'pull_request'; owner: string; repo: string; number: number } & {
+        url: string;
+      })
+    | ({ type: 'issue'; owner: string; repo: string; number: number } & {
+        url: string;
+      })
+    | ({ type: 'commit'; owner: string; repo: string; sha: string } & {
+        url: string;
+      });
+
+  const matches =
+    text.match(/https?:\/\/github\.com\/[^\s<>()\[\]{}]+/gi) ?? [];
+  const urls = new Map<string, ParsedArtifactUrl>();
+
+  for (const rawMatch of matches) {
+    const url = rawMatch.replace(/[),.;!?]+$/g, '');
+    const parsed = parseGitHubUrl(url);
+    if (!parsed) continue;
+    urls.set(url, { ...parsed, url });
+  }
+
+  return Array.from(urls.values());
+}
+
+async function linkArtifactToIssueRecord(
+  ctx: any,
+  args: {
+    organizationId: Id<'organizations'>;
+    issueId: Id<'issues'>;
+    issueKey: string;
+    url: string;
+    actorId?: Id<'users'>;
+  },
+) {
+  const parsed = parseGitHubUrl(args.url.trim());
+  if (!parsed) {
+    throw new ConvexError('INVALID_GITHUB_URL');
+  }
+
+  const repoFullName = `${parsed.owner}/${parsed.repo}`;
+  const repository = await ctx.runQuery(
+    internal.github.queries.getRepositoryByFullName,
+    {
+      organizationId: args.organizationId,
+      fullName: repoFullName,
+    },
+  );
+
+  if (!repository?.selected) {
+    throw new ConvexError('REPOSITORY_NOT_CONNECTED');
+  }
+
+  const alreadyLinked = await ctx.runQuery(
+    internal.github.queries.hasActiveLinkForIssueArtifact,
+    {
+      issueId: args.issueId,
+      artifactType: parsed.type,
+      repoFullName,
+      number: parsed.type === 'commit' ? undefined : parsed.number,
+      sha: parsed.type === 'commit' ? parsed.sha : undefined,
+    },
+  );
+
+  if (alreadyLinked) {
+    return { success: true, linked: false, reason: 'already_linked' } as const;
+  }
+
+  const storedArtifact = await ctx.runQuery(
+    internal.github.queries.findStoredArtifactForLinking,
+    {
+      organizationId: args.organizationId,
+      artifactType: parsed.type,
+      fullName: repoFullName,
+      number: parsed.type === 'commit' ? undefined : parsed.number,
+      sha: parsed.type === 'commit' ? parsed.sha : undefined,
+    },
+  );
+
+  if (storedArtifact) {
+    if (parsed.type === 'pull_request' && 'pullRequestId' in storedArtifact) {
+      await ctx.runMutation(internal.github.mutations.linkPullRequestManually, {
+        organizationId: args.organizationId,
+        issueId: args.issueId,
+        pullRequestId: storedArtifact.pullRequestId,
+        repoFullName,
+        number: parsed.number,
+        actorId: args.actorId,
+      });
+      return { success: true, linked: true } as const;
+    }
+
+    if (parsed.type === 'issue' && 'githubIssueId' in storedArtifact) {
+      await ctx.runMutation(internal.github.mutations.linkGitHubIssueManually, {
+        organizationId: args.organizationId,
+        issueId: args.issueId,
+        githubIssueId: storedArtifact.githubIssueId,
+        repoFullName,
+        number: parsed.number,
+        actorId: args.actorId,
+      });
+      return { success: true, linked: true } as const;
+    }
+
+    if (parsed.type === 'commit' && 'commitId' in storedArtifact) {
+      await ctx.runMutation(internal.github.mutations.linkCommitManually, {
+        organizationId: args.organizationId,
+        issueId: args.issueId,
+        commitId: storedArtifact.commitId,
+        repoFullName,
+        sha: parsed.sha,
+        actorId: args.actorId,
+      });
+      return { success: true, linked: true } as const;
+    }
+  }
+
+  const { integration, fallbackToken, appCredentials } = await loadGitHubAuth(
+    ctx,
+    args.organizationId,
+  );
+
+  const artifactResult = await withGitHubToken({
+    installationId: integration?.installationId,
+    fallbackToken,
+    appCredentials,
+    run: async token => {
+      if (parsed.type === 'pull_request') {
+        return {
+          type: parsed.type,
+          payload: await fetchPullRequest(
+            token,
+            parsed.owner,
+            parsed.repo,
+            parsed.number,
+          ),
+        };
+      }
+      if (parsed.type === 'issue') {
+        return {
+          type: parsed.type,
+          payload: await fetchIssue(
+            token,
+            parsed.owner,
+            parsed.repo,
+            parsed.number,
+          ),
+        };
+      }
+      return {
+        type: parsed.type,
+        payload: await fetchCommit(
+          token,
+          parsed.owner,
+          parsed.repo,
+          parsed.sha,
+        ),
+      };
+    },
+  });
+
+  if (artifactResult.type === 'pull_request') {
+    const pullRequestId = await persistPullRequestPayload(ctx, {
+      organizationId: args.organizationId,
+      repository,
+      payload: artifactResult.payload,
+    });
+    await ctx.runMutation(internal.github.mutations.linkPullRequestManually, {
+      organizationId: args.organizationId,
+      issueId: args.issueId,
+      pullRequestId,
+      repoFullName,
+      number: artifactResult.payload.number,
+      actorId: args.actorId,
+    });
+    return { success: true, linked: true } as const;
+  }
+
+  if (artifactResult.type === 'issue') {
+    const githubIssueId = await persistGitHubIssuePayload(ctx, {
+      organizationId: args.organizationId,
+      repository,
+      payload: artifactResult.payload,
+    });
+    if (!githubIssueId) {
+      throw new ConvexError('INVALID_GITHUB_ISSUE');
+    }
+    await ctx.runMutation(internal.github.mutations.linkGitHubIssueManually, {
+      organizationId: args.organizationId,
+      issueId: args.issueId,
+      githubIssueId,
+      repoFullName,
+      number: artifactResult.payload.number,
+      actorId: args.actorId,
+    });
+    return { success: true, linked: true } as const;
+  }
+
+  const commitId = await persistCommitPayload(ctx, {
+    organizationId: args.organizationId,
+    repository,
+    payload: artifactResult.payload,
+  });
+  await ctx.runMutation(internal.github.mutations.linkCommitManually, {
+    organizationId: args.organizationId,
+    issueId: args.issueId,
+    commitId,
+    repoFullName,
+    sha: artifactResult.payload.sha,
+    actorId: args.actorId,
+  });
+
+  return { success: true, linked: true } as const;
+}
+
 async function ensureRepository(
   ctx: any,
   organizationId: Id<'organizations'>,
@@ -442,6 +659,11 @@ async function persistGitHubIssuePayload(
       state: args.payload.state,
       authorLogin: args.payload.user?.login ?? undefined,
       authorAvatarUrl: args.payload.user?.avatar_url ?? undefined,
+      assigneeLogins: Array.isArray(args.payload.assignees)
+        ? args.payload.assignees
+            .map((assignee: any) => assignee?.login)
+            .filter((login: any): login is string => Boolean(login))
+        : undefined,
       closedAt: args.payload.closed_at
         ? Date.parse(args.payload.closed_at)
         : undefined,
@@ -623,120 +845,91 @@ export const linkArtifactByUrl = action({
       args.orgSlug,
       args.issueKey,
     );
-    const parsed = parseGitHubUrl(args.url.trim());
-    if (!parsed) {
-      throw new ConvexError('INVALID_GITHUB_URL');
-    }
-
-    const { integration, fallbackToken, appCredentials } = await loadGitHubAuth(
-      ctx,
-      issue.organizationId,
-    );
-    const existingRepository = await ctx.runQuery(
-      internal.github.queries.getRepositoryByFullName,
-      {
-        organizationId: issue.organizationId,
-        fullName: `${parsed.owner}/${parsed.repo}`,
-      },
-    );
-
-    if (!existingRepository?.selected) {
-      throw new ConvexError('REPOSITORY_NOT_CONNECTED');
-    }
-
-    const artifactResult = await withGitHubToken({
-      installationId: integration?.installationId,
-      fallbackToken,
-      appCredentials,
-      run: async token => {
-        if (parsed.type === 'pull_request') {
-          return {
-            type: parsed.type,
-            payload: await fetchPullRequest(
-              token,
-              parsed.owner,
-              parsed.repo,
-              parsed.number,
-            ),
-          };
-        }
-        if (parsed.type === 'issue') {
-          return {
-            type: parsed.type,
-            payload: await fetchIssue(
-              token,
-              parsed.owner,
-              parsed.repo,
-              parsed.number,
-            ),
-          };
-        }
-        return {
-          type: parsed.type,
-          payload: await fetchCommit(
-            token,
-            parsed.owner,
-            parsed.repo,
-            parsed.sha,
-          ),
-        };
-      },
-    });
-    const repository = existingRepository;
-
     const viewer = await ctx.runQuery(api.users.currentUser, {});
     if (!viewer?._id) {
       throw new ConvexError('UNAUTHORIZED');
     }
 
-    if (artifactResult.type === 'pull_request') {
-      const pullRequestId = await persistPullRequestPayload(ctx, {
-        organizationId: issue.organizationId,
-        repository,
-        payload: artifactResult.payload,
-      });
-      await ctx.runMutation(internal.github.mutations.linkPullRequestManually, {
-        organizationId: issue.organizationId,
-        issueId: issue._id,
-        pullRequestId,
-        repoFullName: repository.fullName,
-        number: artifactResult.payload.number,
-        actorId: viewer._id,
-      });
-    } else if (artifactResult.type === 'issue') {
-      const githubIssueId = await persistGitHubIssuePayload(ctx, {
-        organizationId: issue.organizationId,
-        repository,
-        payload: artifactResult.payload,
-      });
-      if (!githubIssueId) {
-        throw new ConvexError('INVALID_GITHUB_ISSUE');
-      }
-      await ctx.runMutation(internal.github.mutations.linkGitHubIssueManually, {
-        organizationId: issue.organizationId,
-        issueId: issue._id,
-        githubIssueId,
-        repoFullName: repository.fullName,
-        number: artifactResult.payload.number,
-        actorId: viewer._id,
-      });
-    } else {
-      const commitId = await persistCommitPayload(ctx, {
-        organizationId: issue.organizationId,
-        repository,
-        payload: artifactResult.payload,
-      });
-      await ctx.runMutation(internal.github.mutations.linkCommitManually, {
-        organizationId: issue.organizationId,
-        issueId: issue._id,
-        commitId,
-        repoFullName: repository.fullName,
-        sha: artifactResult.payload.sha,
-        actorId: viewer._id,
-      });
-    }
+    await linkArtifactToIssueRecord(ctx, {
+      organizationId: issue.organizationId,
+      issueId: issue._id,
+      issueKey: issue.key,
+      url: args.url,
+      actorId: viewer._id,
+    });
 
     return { success: true } as const;
+  },
+});
+
+export const syncIssueLinksFromContent = internalAction({
+  args: {
+    issueId: v.id('issues'),
+    actorId: v.optional(v.id('users')),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ success: true; scanned: number; linked: number }> => {
+    const issue: {
+      _id: Id<'issues'>;
+      organizationId: Id<'organizations'>;
+      key: string;
+      title: string;
+      description: string | null;
+    } | null = await ctx.runQuery(internal.github.queries.getIssueForLinkSync, {
+      issueId: args.issueId,
+    });
+
+    if (!issue) {
+      return { success: true, scanned: 0, linked: 0 } as const;
+    }
+
+    const artifactUrls: Array<{
+      url: string;
+      type: 'pull_request';
+      owner: string;
+      repo: string;
+      number: number;
+    }> = extractGitHubArtifactUrls(
+      [issue.title, issue.description ?? ''].filter(Boolean).join('\n'),
+    ).filter(artifact => artifact.type === 'pull_request');
+
+    let linked = 0;
+
+    for (const artifact of artifactUrls) {
+      try {
+        const result = await linkArtifactToIssueRecord(ctx, {
+          organizationId: issue.organizationId,
+          issueId: issue._id,
+          issueKey: issue.key,
+          url: artifact.url,
+          actorId: args.actorId,
+        });
+        if (result.linked) {
+          linked += 1;
+        }
+      } catch (error) {
+        const parsed = parseGitHubUrl(artifact.url);
+        const externalKey = parsed
+          ? buildArtifactExternalKey(
+              parsed.type,
+              `${parsed.owner}/${parsed.repo}`,
+              parsed.type === 'commit' ? parsed.sha : parsed.number,
+            )
+          : artifact.url;
+        console.error(
+          `[github.issueContentAutoLink] failed to link ${externalKey} for issue ${issue.key}`,
+          error,
+        );
+      }
+    }
+
+    return {
+      success: true,
+      scanned: artifactUrls.length,
+      linked,
+    } as const;
   },
 });
 
@@ -1032,8 +1225,9 @@ export const processWebhook = internalAction({
       );
       for (const candidate of integrations) {
         repository =
-          candidate.repositories.find(repo => repo.fullName === repoFullName) ??
-          null;
+          candidate.repositories.find(
+            (repo: { fullName: string }) => repo.fullName === repoFullName,
+          ) ?? null;
         if (repository) break;
       }
     }

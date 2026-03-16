@@ -139,6 +139,10 @@ async function applyWorkflowAutomationForIssue(
     ? await ctx.db.get('issueStates', issue.workflowStateId)
     : null;
   const nextState = await ctx.db.get('issueStates', nextStateId);
+  const assignments = await ctx.db
+    .query('issueAssignees')
+    .withIndex('by_issue', q => q.eq('issueId', issueId))
+    .collect();
 
   await ctx.db.patch('issues', issueId, {
     workflowStateId: nextStateId,
@@ -147,6 +151,21 @@ async function applyWorkflowAutomationForIssue(
         ? Date.now()
         : undefined,
   });
+
+  if (assignments.length === 0) {
+    await ctx.db.insert('issueAssignees', {
+      issueId,
+      assigneeId: undefined,
+      stateId: nextStateId,
+    });
+  } else {
+    for (const assignment of assignments) {
+      if (assignment.stateId === nextStateId) continue;
+      await ctx.db.patch('issueAssignees', assignment._id, {
+        stateId: nextStateId,
+      });
+    }
+  }
 
   const actorId = issue.createdBy ?? issue.reporterId ?? undefined;
   if (actorId && nextState) {
@@ -167,27 +186,12 @@ async function applyWorkflowAutomationForIssue(
   }
 }
 
-/**
- * Auto-assign Vector users to an issue based on the linked PR's author and assignees.
- * Only assigns users who have linked their GitHub account and are org members.
- */
-async function autoAssignFromPullRequest(
+async function autoAssignFromGitHubLogins(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
   issueId: Id<'issues'>,
-  pullRequestId: Id<'githubPullRequests'>,
+  githubUsernames: string[],
 ) {
-  const pr = await ctx.db.get('githubPullRequests', pullRequestId);
-  if (!pr) return;
-
-  // Collect GitHub usernames: PR author + PR assignees
-  const githubUsernames: string[] = [];
-  if (pr.authorLogin) githubUsernames.push(pr.authorLogin);
-  if (pr.assigneeLogins) {
-    for (const login of pr.assigneeLogins) {
-      if (!githubUsernames.includes(login)) githubUsernames.push(login);
-    }
-  }
   if (githubUsernames.length === 0) return;
 
   const issue = await ctx.db.get('issues', issueId);
@@ -201,6 +205,11 @@ async function autoAssignFromPullRequest(
     )
     .first();
   if (!defaultState) return;
+
+  const existingAssignments = await ctx.db
+    .query('issueAssignees')
+    .withIndex('by_issue', q => q.eq('issueId', issueId))
+    .collect();
 
   for (const ghUsername of githubUsernames) {
     // Find Vector user by linked GitHub username
@@ -220,20 +229,42 @@ async function autoAssignFromPullRequest(
     if (!membership) continue;
 
     // Check not already assigned
-    const existingAssignment = await ctx.db
-      .query('issueAssignees')
-      .withIndex('by_issue_assignee', q =>
-        q.eq('issueId', issueId).eq('assigneeId', vectorUser._id),
-      )
-      .first();
-    if (existingAssignment) continue;
+    const existingAssignment = existingAssignments.find(
+      assignment => assignment.assigneeId === vectorUser._id,
+    );
+    if (existingAssignment) {
+      if (existingAssignment.stateId !== defaultState._id) {
+        await ctx.db.patch('issueAssignees', existingAssignment._id, {
+          stateId: defaultState._id,
+        });
+      }
+      continue;
+    }
 
-    // Create the assignment
-    await ctx.db.insert('issueAssignees', {
-      issueId,
-      assigneeId: vectorUser._id,
-      stateId: defaultState._id,
-    });
+    const unassignedAssignment = existingAssignments.find(
+      assignment => !assignment.assigneeId,
+    );
+    if (unassignedAssignment) {
+      await ctx.db.patch('issueAssignees', unassignedAssignment._id, {
+        assigneeId: vectorUser._id,
+        stateId: defaultState._id,
+      });
+      unassignedAssignment.assigneeId = vectorUser._id;
+      unassignedAssignment.stateId = defaultState._id;
+    } else {
+      const assignmentId = await ctx.db.insert('issueAssignees', {
+        issueId,
+        assigneeId: vectorUser._id,
+        stateId: defaultState._id,
+      });
+      existingAssignments.push({
+        _id: assignmentId,
+        _creationTime: Date.now(),
+        issueId,
+        assigneeId: vectorUser._id,
+        stateId: defaultState._id,
+      } as Doc<'issueAssignees'>);
+    }
 
     // Record activity
     const actorId = issue.createdBy ?? issue.reporterId ?? undefined;
@@ -251,6 +282,67 @@ async function autoAssignFromPullRequest(
       });
     }
   }
+}
+
+/**
+ * Auto-assign Vector users to an issue based on the linked PR's author and assignees.
+ * Only assigns users who have linked their GitHub account and are org members.
+ */
+async function autoAssignFromPullRequest(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  issueId: Id<'issues'>,
+  pullRequestId: Id<'githubPullRequests'>,
+) {
+  const pr = await ctx.db.get('githubPullRequests', pullRequestId);
+  if (!pr) return;
+
+  const githubUsernames: string[] = [];
+  if (pr.assigneeLogins) {
+    for (const login of pr.assigneeLogins) {
+      if (!githubUsernames.includes(login)) githubUsernames.push(login);
+    }
+  }
+  if (pr.authorLogin && !githubUsernames.includes(pr.authorLogin)) {
+    githubUsernames.push(pr.authorLogin);
+  }
+
+  await autoAssignFromGitHubLogins(
+    ctx,
+    organizationId,
+    issueId,
+    githubUsernames,
+  );
+}
+
+async function autoAssignFromGitHubIssue(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  issueId: Id<'issues'>,
+  githubIssueId: Id<'githubIssues'>,
+) {
+  const githubIssue = await ctx.db.get('githubIssues', githubIssueId);
+  if (!githubIssue) return;
+
+  const githubUsernames: string[] = [];
+  if (githubIssue.assigneeLogins) {
+    for (const login of githubIssue.assigneeLogins) {
+      if (!githubUsernames.includes(login)) githubUsernames.push(login);
+    }
+  }
+  if (
+    githubIssue.authorLogin &&
+    !githubUsernames.includes(githubIssue.authorLogin)
+  ) {
+    githubUsernames.push(githubIssue.authorLogin);
+  }
+
+  await autoAssignFromGitHubLogins(
+    ctx,
+    organizationId,
+    issueId,
+    githubUsernames,
+  );
 }
 
 async function syncArtifactLinksForIssues(args: {
@@ -381,15 +473,6 @@ async function syncArtifactLinksForIssues(args: {
     }
   }
 
-  const affectedIssueIds = new Set([
-    ...existingLinks.map(link => link.issueId),
-    ...targetIssueIds,
-  ]);
-
-  for (const issueId of affectedIssueIds) {
-    await applyWorkflowAutomationForIssue(ctx, issueId);
-  }
-
   // Auto-assign users from PR author/assignees when linking pull requests
   if (artifactType === 'pull_request') {
     for (const issueId of targetIssueIds) {
@@ -400,6 +483,26 @@ async function syncArtifactLinksForIssues(args: {
         artifactId as Id<'githubPullRequests'>,
       );
     }
+  }
+
+  if (artifactType === 'issue') {
+    for (const issueId of targetIssueIds) {
+      await autoAssignFromGitHubIssue(
+        ctx,
+        organizationId,
+        issueId,
+        artifactId as Id<'githubIssues'>,
+      );
+    }
+  }
+
+  const affectedIssueIds = new Set([
+    ...existingLinks.map(link => link.issueId),
+    ...targetIssueIds,
+  ]);
+
+  for (const issueId of affectedIssueIds) {
+    await applyWorkflowAutomationForIssue(ctx, issueId);
   }
 }
 
@@ -695,6 +798,7 @@ export const upsertGitHubIssue = internalMutation({
     state: v.union(v.literal('open'), v.literal('closed')),
     authorLogin: v.optional(v.string()),
     authorAvatarUrl: v.optional(v.string()),
+    assigneeLogins: v.optional(v.array(v.string())),
     closedAt: v.optional(v.number()),
     lastActivityAt: v.number(),
   },

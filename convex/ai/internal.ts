@@ -975,6 +975,15 @@ export const createIssue = internalMutation({
       );
     if (issueState && args.stateName) summary.push(`state: ${issueState.name}`);
 
+    await ctx.scheduler.runAfter(
+      0,
+      internal.github.actions.syncIssueLinksFromContent,
+      {
+        issueId,
+        actorId: args.userId,
+      },
+    );
+
     return {
       issueId: String(issueId),
       key,
@@ -1190,6 +1199,20 @@ export const updateIssue = internalMutation({
         );
       if (memberMatch === null) changes.push('unassigned');
       if (newState) changes.push(`state → ${newState.name}`);
+    }
+
+    if (
+      (args.title !== undefined && args.title !== issue.title) ||
+      (args.description !== undefined && args.description !== issue.description)
+    ) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.github.actions.syncIssueLinksFromContent,
+        {
+          issueId: issue._id,
+          actorId: args.userId,
+        },
+      );
     }
 
     return {

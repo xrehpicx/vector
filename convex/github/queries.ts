@@ -6,6 +6,7 @@ import { getAuthUserId } from '../authUtils';
 import { canViewIssue } from '../access';
 import { PERMISSIONS } from '../_shared/permissions';
 import { getSiteSettings } from '../platformAdmin/lib';
+import { buildArtifactExternalKey } from './shared';
 
 async function loadActiveIntegration(
   ctx: QueryCtx,
@@ -249,6 +250,144 @@ export const getRepositoryByFullName = internalQuery({
       .withIndex('by_full_name', q => q.eq('fullName', args.fullName))
       .filter(q => q.eq(q.field('organizationId'), args.organizationId))
       .first();
+  },
+});
+
+export const getIssueForLinkSync = internalQuery({
+  args: {
+    issueId: v.id('issues'),
+  },
+  handler: async (ctx, args) => {
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      return null;
+    }
+
+    return {
+      _id: issue._id,
+      organizationId: issue.organizationId,
+      key: issue.key,
+      title: issue.title,
+      description: issue.description ?? null,
+    } as const;
+  },
+});
+
+export const hasActiveLinkForIssueArtifact = internalQuery({
+  args: {
+    issueId: v.id('issues'),
+    artifactType: v.union(
+      v.literal('pull_request'),
+      v.literal('issue'),
+      v.literal('commit'),
+    ),
+    repoFullName: v.string(),
+    number: v.optional(v.number()),
+    sha: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const externalKey = buildArtifactExternalKey(
+      args.artifactType,
+      args.repoFullName,
+      args.artifactType === 'commit' ? (args.sha ?? '') : (args.number ?? 0),
+    );
+
+    const existing = await ctx.db
+      .query('githubArtifactLinks')
+      .withIndex('by_issue_active', q =>
+        q.eq('issueId', args.issueId).eq('active', true),
+      )
+      .filter(q =>
+        q.and(
+          q.eq(q.field('artifactType'), args.artifactType),
+          q.eq(q.field('matchReason'), externalKey),
+        ),
+      )
+      .first();
+
+    return Boolean(existing);
+  },
+});
+
+export const findStoredArtifactForLinking = internalQuery({
+  args: {
+    organizationId: v.id('organizations'),
+    artifactType: v.union(
+      v.literal('pull_request'),
+      v.literal('issue'),
+      v.literal('commit'),
+    ),
+    fullName: v.string(),
+    number: v.optional(v.number()),
+    sha: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const repository = await ctx.db
+      .query('githubRepositories')
+      .withIndex('by_full_name', q => q.eq('fullName', args.fullName))
+      .filter(q => q.eq(q.field('organizationId'), args.organizationId))
+      .first();
+
+    if (!repository) {
+      return null;
+    }
+
+    if (args.artifactType === 'pull_request') {
+      const artifact =
+        args.number === undefined
+          ? null
+          : await ctx.db
+              .query('githubPullRequests')
+              .withIndex('by_repo_number', q =>
+                q.eq('repositoryId', repository._id).eq('number', args.number!),
+              )
+              .first();
+      return artifact
+        ? {
+            repositoryId: repository._id,
+            repositoryFullName: repository.fullName,
+            pullRequestId: artifact._id,
+          }
+        : null;
+    }
+
+    if (args.artifactType === 'issue') {
+      const artifact =
+        args.number === undefined
+          ? null
+          : await ctx.db
+              .query('githubIssues')
+              .withIndex('by_repo_number', q =>
+                q.eq('repositoryId', repository._id).eq('number', args.number!),
+              )
+              .first();
+      return artifact
+        ? {
+            repositoryId: repository._id,
+            repositoryFullName: repository.fullName,
+            githubIssueId: artifact._id,
+          }
+        : null;
+    }
+
+    const artifact = !args.sha
+      ? null
+      : await ctx.db
+          .query('githubCommits')
+          .withIndex('by_org_sha', q =>
+            q.eq('organizationId', args.organizationId).eq('sha', args.sha!),
+          )
+          .first();
+
+    if (!artifact || artifact.repositoryId !== repository._id) {
+      return null;
+    }
+
+    return {
+      repositoryId: repository._id,
+      repositoryFullName: repository.fullName,
+      commitId: artifact._id,
+    };
   },
 });
 

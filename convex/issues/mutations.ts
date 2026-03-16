@@ -1,4 +1,5 @@
 import { mutation, type MutationCtx } from '../_generated/server';
+import { internal } from '../_generated/api';
 import { v, ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import { getAuthUserId } from '../authUtils';
@@ -277,6 +278,15 @@ export const create = mutation({
       }
     }
 
+    await ctx.scheduler.runAfter(
+      0,
+      internal.github.actions.syncIssueLinksFromContent,
+      {
+        issueId,
+        actorId: userId,
+      },
+    );
+
     return { issueId, key: issueKey } as const;
   },
 });
@@ -393,6 +403,21 @@ export const update = mutation({
         },
         snapshot,
       });
+    }
+
+    if (
+      (args.data.title !== undefined && args.data.title !== issue.title) ||
+      (args.data.description !== undefined &&
+        args.data.description !== issue.description)
+    ) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.github.actions.syncIssueLinksFromContent,
+        {
+          issueId: issue._id,
+          actorId: userId,
+        },
+      );
     }
 
     return { success: true } as const;

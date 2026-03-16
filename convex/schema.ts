@@ -647,6 +647,7 @@ export default defineSchema({
     state: v.union(v.literal('open'), v.literal('closed')),
     authorLogin: v.optional(v.string()),
     authorAvatarUrl: v.optional(v.string()),
+    assigneeLogins: v.optional(v.array(v.string())),
     closedAt: v.optional(v.number()),
     lastActivityAt: v.number(),
     lastSyncedAt: v.number(),
