@@ -540,9 +540,12 @@ interface DocumentsPageProps {
   params: Promise<{ orgSlug: string }>;
 }
 
+type ScopeTab = 'mine' | 'all';
+
 function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
   const router = useRouter();
   const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [scopeTab, setScopeTab] = useState<ScopeTab>('mine');
   const [editingFolder, setEditingFolder] = useState<{
     _id: string;
     name: string;
@@ -561,9 +564,13 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
   const folders = useQuery(api.documents.folderQueries.listFolders, {
     orgSlug,
   });
-  const documents = useQuery(api.documents.queries.list, {
+  const allDocuments = useQuery(api.documents.queries.list, {
     orgSlug,
   });
+  const myDocuments = useQuery(api.documents.queries.listMyDocuments, {
+    orgSlug,
+  });
+  const documents = scopeTab === 'mine' ? myDocuments : allDocuments;
   const removeMutation = useMutation(api.documents.mutations.remove);
   const updateDocMutation = useMutation(api.documents.mutations.update);
   const removeFolderMutation = useMutation(
@@ -703,11 +710,32 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
             <div className='flex items-center gap-1'>
               <MobileNavTrigger />
               <Button
-                variant='secondary'
+                variant={scopeTab === 'mine' ? 'secondary' : 'ghost'}
                 size='sm'
-                className='bg-secondary h-6 gap-2 rounded-xs px-3 text-xs font-normal'
+                className={cn(
+                  'h-6 gap-2 rounded-xs px-3 text-xs font-normal',
+                  scopeTab === 'mine' && 'bg-secondary',
+                )}
+                onClick={() => setScopeTab('mine')}
               >
-                <span>All documents</span>
+                <span>My docs</span>
+                <span className='text-muted-foreground text-xs'>
+                  {myDocuments?.length ?? 0}
+                </span>
+              </Button>
+              <Button
+                variant={scopeTab === 'all' ? 'secondary' : 'ghost'}
+                size='sm'
+                className={cn(
+                  'h-6 gap-2 rounded-xs px-3 text-xs font-normal',
+                  scopeTab === 'all' && 'bg-secondary',
+                )}
+                onClick={() => setScopeTab('all')}
+              >
+                <span>All docs</span>
+                <span className='text-muted-foreground text-xs'>
+                  {allDocuments?.length ?? 0}
+                </span>
               </Button>
             </div>
             <div className='flex items-center gap-1'>

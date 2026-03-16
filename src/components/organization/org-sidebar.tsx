@@ -51,7 +51,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
   const userTeams = userTeamsData ? withIds(userTeamsData) : [];
   const userProjects = userProjectsData ? withIds(userProjectsData) : [];
 
-  const userDocumentsData = useQuery(api.documents.queries.list, {
+  const userDocumentsData = useQuery(api.documents.queries.listMyDocuments, {
     orgSlug: orgSlug,
   });
   const userDocuments = userDocumentsData ?? [];
@@ -279,7 +279,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
         <div className='space-y-2'>
           <div className='flex items-center justify-between px-2'>
             <span className='text-muted-foreground text-xs font-normal tracking-wider uppercase'>
-              Documents
+              My Docs
             </span>
             <div className='flex items-center gap-1'>
               <Link

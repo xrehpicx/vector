@@ -778,6 +778,7 @@ export default defineSchema({
     .index('by_project', ['projectId'])
     .index('by_org_team', ['organizationId', 'teamId'])
     .index('by_org_project', ['organizationId', 'projectId'])
+    .index('by_org_createdBy', ['organizationId', 'createdBy'])
     .searchIndex('search_title', {
       searchField: 'title',
       filterFields: ['organizationId'],
