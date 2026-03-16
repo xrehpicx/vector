@@ -63,7 +63,7 @@ Vector also ships with a dedicated CLI package for terminal workflows.
 
 - Package README: [packages/vector-cli/README.md](packages/vector-cli/README.md)
 - Local repo entrypoint: `pnpm exec tsx src/cli/index.ts --help`
-- Published package target: `vcli`
+- Published package target: `vecli`
 
 ## Project Status
 

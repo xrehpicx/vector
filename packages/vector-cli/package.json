@@ -1,5 +1,5 @@
 {
-  "name": "vcli",
+  "name": "vecli",
   "version": "0.1.0",
   "description": "Command line interface for Vector workspaces.",
   "license": "Apache-2.0",
@@ -24,7 +24,7 @@
     "node": ">=20.19.0"
   },
   "bin": {
-    "vcli": "./dist/index.js"
+    "vecli": "dist/index.js"
   },
   "files": [
     "dist",
