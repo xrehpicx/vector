@@ -33,7 +33,7 @@ function runCli(args: string[]) {
   if (result.status !== 0) {
     throw new Error(
       [
-        `CLI command failed: vecli ${args.join(' ')}`,
+        `CLI command failed: vcli ${args.join(' ')}`,
         `exit code: ${String(result.status)}`,
         stdout && `stdout:\n${stdout}`,
         stderr && `stderr:\n${stderr}`,
@@ -48,8 +48,8 @@ function runCli(args: string[]) {
 
 describe('Vector CLI command surface', () => {
   it('requires an app URL when no flag, env var, or saved session is available', () => {
-    const tempHome = mkdtempSync(path.join(tmpdir(), 'vecli-home-'));
-    const tempCwd = mkdtempSync(path.join(tmpdir(), 'vecli-cwd-'));
+    const tempHome = mkdtempSync(path.join(tmpdir(), 'vcli-home-'));
+    const tempCwd = mkdtempSync(path.join(tmpdir(), 'vcli-cwd-'));
     const env: NodeJS.ProcessEnv = { ...process.env, HOME: tempHome };
     delete env.NEXT_PUBLIC_APP_URL;
 

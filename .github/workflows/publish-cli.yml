@@ -87,7 +87,7 @@ jobs:
           {
             echo "## CLI publish"
             echo
-            echo "- Package: \`vecli\`"
+            echo "- Package: \`@rechpic/vcli\`"
             echo "- Version: \`${{ steps.publish.outputs.version }}\`"
             echo "- npm tag: \`${{ steps.publish.outputs.npm_tag }}\`"
             echo "- Trigger: \`${{ github.event_name }}\`"

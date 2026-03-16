@@ -196,7 +196,7 @@ async function getRuntime(command: Command) {
 
 function requireSession(runtime: Runtime) {
   if (!runtime.session || Object.keys(runtime.session.cookies).length === 0) {
-    throw new Error('Not logged in. Run `vecli auth login` first.');
+    throw new Error('Not logged in. Run `vcli auth login` first.');
   }
   return runtime.session;
 }
@@ -205,7 +205,7 @@ function requireOrg(runtime: Runtime, explicit?: string) {
   const orgSlug = explicit ?? runtime.org;
   if (!orgSlug) {
     throw new Error(
-      'Organization slug is required. Pass `--org <slug>` or run `vecli org use <slug>`.',
+      'Organization slug is required. Pass `--org <slug>` or run `vcli org use <slug>`.',
     );
   }
   return orgSlug;
@@ -491,7 +491,7 @@ async function parseEstimatedTimes(
 const program = new Command();
 
 program
-  .name('vecli')
+  .name('vcli')
   .description('Vector CLI')
   .showHelpAfterError()
   .option(

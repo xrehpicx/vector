@@ -7,13 +7,13 @@ This package wraps the same auth and Convex-backed workflows used by the app, so
 ## Install
 
 ```bash
-npm install -g vecli
+npm install -g @rechpic/vcli
 ```
 
 Then verify the install:
 
 ```bash
-vecli --help
+vcli --help
 ```
 
 ## Requirements
@@ -27,7 +27,7 @@ The CLI talks to:
 - the Next.js app for auth routes
 - the Convex deployment for queries, mutations, and actions
 
-The app URL is required. `vecli` resolves it from:
+The app URL is required. `vcli` resolves it from:
 
 - `--app-url <url>`
 - the saved profile session
@@ -35,12 +35,12 @@ The app URL is required. `vecli` resolves it from:
 
 The Convex URL still defaults from:
 
-- `NEXT_PUBLIC_CONVEX_URL` or `CONVEX_URL` for Convex
+- `NEXT_PUBLIC_CONVEX_URL` or `CONVEX_URL`
 
 You can override either with flags:
 
 ```bash
-vecli --app-url http://localhost:3000 --convex-url https://<deployment>.convex.cloud --help
+vcli --app-url http://localhost:3000 --convex-url https://<deployment>.convex.cloud --help
 ```
 
 ## First Run
@@ -48,16 +48,16 @@ vecli --app-url http://localhost:3000 --convex-url https://<deployment>.convex.c
 Sign up or log in:
 
 ```bash
-vecli --app-url http://localhost:3000 auth signup --email you@example.com --username you --password 'secret'
-vecli --app-url http://localhost:3000 auth login you@example.com --password 'secret'
-vecli auth whoami
+vcli --app-url http://localhost:3000 auth signup --email you@example.com --username you --password 'secret'
+vcli --app-url http://localhost:3000 auth login you@example.com --password 'secret'
+vcli auth whoami
 ```
 
 Create and select an org:
 
 ```bash
-vecli org create --name "Acme" --slug acme
-vecli org use acme
+vcli org create --name "Acme" --slug acme
+vcli org use acme
 ```
 
 From there, most commands can rely on the active org. You can always override it with `--org <slug>`.
@@ -73,8 +73,8 @@ Sessions are stored per profile in:
 Examples:
 
 ```bash
-vecli --profile work auth login you@example.com --password 'secret'
-vecli --profile staging --app-url http://localhost:3001 auth whoami
+vcli --profile work auth login you@example.com --password 'secret'
+vcli --profile staging --app-url http://localhost:3001 auth whoami
 ```
 
 Use profiles when you work across multiple environments or accounts.
@@ -84,63 +84,63 @@ Use profiles when you work across multiple environments or accounts.
 Inspect the current session:
 
 ```bash
-vecli auth whoami
-vecli org current
-vecli org members acme
+vcli auth whoami
+vcli org current
+vcli org members acme
 ```
 
 Discover workspace metadata before mutating:
 
 ```bash
-vecli refdata acme
-vecli search --org acme "billing"
-vecli permission check issue:create --org acme
+vcli refdata acme
+vcli search --org acme "billing"
+vcli permission check issue:create --org acme
 ```
 
 Create core entities:
 
 ```bash
-vecli team create --org acme --key eng --name "Engineering"
-vecli project create --org acme --key api --name "API" --team eng
-vecli issue create --org acme --title "Ship CLI" --project api --team eng
-vecli document create --org acme --title "CLI Notes"
-vecli folder create --org acme --name "Runbooks"
+vcli team create --org acme --key eng --name "Engineering"
+vcli project create --org acme --key api --name "API" --team eng
+vcli issue create --org acme --title "Ship CLI" --project api --team eng
+vcli document create --org acme --title "CLI Notes"
+vcli folder create --org acme --name "Runbooks"
 ```
 
 Issue workflows:
 
 ```bash
-vecli issue list --org acme
-vecli issue assignments API-1
-vecli issue set-priority API-1 High
-vecli issue replace-assignees API-1 "alice,bob"
-vecli issue comment API-1 --body "Investigating now."
+vcli issue list --org acme
+vcli issue assignments API-1
+vcli issue set-priority API-1 High
+vcli issue replace-assignees API-1 "alice,bob"
+vcli issue comment API-1 --body "Investigating now."
 ```
 
 Invites and notifications:
 
 ```bash
-vecli org invite acme --email teammate@example.com
-vecli invite list
-vecli invite accept <inviteId>
-vecli notification inbox --filter unread
-vecli notification unread-count
+vcli org invite acme --email teammate@example.com
+vcli invite list
+vcli invite accept <inviteId>
+vcli notification inbox --filter unread
+vcli notification unread-count
 ```
 
 Settings metadata:
 
 ```bash
-vecli priority list acme
-vecli state list acme
-vecli status list acme
-vecli role list acme
+vcli priority list acme
+vcli state list acme
+vcli status list acme
+vcli role list acme
 ```
 
 Platform admin:
 
 ```bash
-vecli admin branding
-vecli admin signup-policy
+vcli admin branding
+vcli admin signup-policy
 ```
 
 ## JSON Output
@@ -148,8 +148,8 @@ vecli admin signup-policy
 Use `--json` for automation and scripts:
 
 ```bash
-vecli --json issue list --org acme
-vecli --json notification inbox --filter unread
+vcli --json issue list --org acme
+vcli --json notification inbox --filter unread
 ```
 
 For scripts, prefer:
@@ -162,7 +162,7 @@ For scripts, prefer:
 
 `Not logged in`
 
-- Run `vecli auth login` or `vecli auth signup`.
+- Run `vcli auth login` or `vcli auth signup`.
 
 `app URL is required`
 
@@ -170,7 +170,7 @@ For scripts, prefer:
 
 `Organization slug is required`
 
-- Pass `--org <slug>` or run `vecli org use <slug>`.
+- Pass `--org <slug>` or run `vcli org use <slug>`.
 
 Auth errors against the wrong app
 
@@ -189,9 +189,9 @@ Validation errors when creating teams or projects
 Inspect command groups directly:
 
 ```bash
-vecli auth --help
-vecli org --help
-vecli issue --help
-vecli notification --help
-vecli admin --help
+vcli auth --help
+vcli org --help
+vcli issue --help
+vcli notification --help
+vcli admin --help
 ```

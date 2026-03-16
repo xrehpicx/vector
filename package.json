@@ -27,7 +27,7 @@
     "build": "next build",
     "start": "next start",
     "cli": "tsx src/cli/index.ts",
-    "build:cli-package": "pnpm --filter vecli build",
+    "build:cli-package": "pnpm --filter @rechpic/vcli build",
     "test:cli": "vitest run src/cli/auth.test.ts src/cli/index.test.ts",
     "lint": "eslint .",
     "auth:generate": "cd convex/betterAuth && pnpm dlx @better-auth/cli generate -y",
