@@ -170,6 +170,29 @@ function normalizeMatch(value: string | undefined | null) {
   return value?.trim().toLowerCase();
 }
 
+function normalizeAppUrl(raw: string): string {
+  let url = raw.trim();
+  if (!/^https?:\/\//i.test(url)) {
+    const isLocal =
+      /^localhost(:\d+)?/i.test(url) || /^127\.0\.0\.1(:\d+)?/.test(url);
+    url = isLocal ? `http://${url}` : `https://${url}`;
+  }
+  // Strip trailing slash for consistency
+  return url.replace(/\/+$/, '');
+}
+
+async function resolveAppUrl(raw: string): Promise<string> {
+  const url = normalizeAppUrl(raw);
+  try {
+    const response = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+    // Use the final URL after redirects, stripped of trailing slash and path
+    const resolved = new URL(response.url).origin;
+    return resolved;
+  } catch {
+    return url;
+  }
+}
+
 async function fetchConvexUrl(appUrl: string): Promise<string> {
   try {
     const url = new URL('/api/config', appUrl).toString();
@@ -193,7 +216,7 @@ async function getRuntime(command: Command) {
   const session = await readSession(profile);
   const appUrlSource =
     options.appUrl ?? session?.appUrl ?? process.env.NEXT_PUBLIC_APP_URL;
-  const appUrl = requiredString(appUrlSource, 'app URL');
+  const appUrl = await resolveAppUrl(requiredString(appUrlSource, 'app URL'));
   let convexUrl =
     options.convexUrl ??
     session?.convexUrl ??
