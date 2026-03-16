@@ -17,6 +17,7 @@ import {
   snapshotForIssue,
 } from '../activities/lib';
 import { PERMISSIONS } from '../_shared/permissions';
+import { buildIssueSearchText } from '../issues/search';
 import {
   buildArtifactExternalKey,
   normalizeIssueKey,
@@ -907,6 +908,160 @@ export const syncPullRequestLinks = internalMutation({
       issueKeys: args.issueKeys,
       source: 'auto',
     });
+  },
+});
+
+export const createIssueFromPullRequestIfNeeded = internalMutation({
+  args: {
+    organizationId: v.id('organizations'),
+    pullRequestId: v.id('githubPullRequests'),
+  },
+  handler: async (ctx, args) => {
+    const integration = await getOrCreateIntegration(ctx, args.organizationId);
+    if (integration?.autoLinkEnabled === false) {
+      return { created: false } as const;
+    }
+
+    const existingLinks = await ctx.db
+      .query('githubArtifactLinks')
+      .withIndex('by_pr', q => q.eq('pullRequestId', args.pullRequestId))
+      .collect();
+    if (existingLinks.some(link => link.active)) {
+      return { created: false } as const;
+    }
+
+    const [organization, pullRequest] = await Promise.all([
+      ctx.db.get('organizations', args.organizationId),
+      ctx.db.get('githubPullRequests', args.pullRequestId),
+    ]);
+    if (!organization || !pullRequest) {
+      throw new ConvexError('PULL_REQUEST_NOT_FOUND');
+    }
+
+    const repository = await ctx.db.get(
+      'githubRepositories',
+      pullRequest.repositoryId,
+    );
+    if (!repository) {
+      throw new ConvexError('REPOSITORY_NOT_CONNECTED');
+    }
+
+    const defaultState =
+      (await ctx.db
+        .query('issueStates')
+        .withIndex('by_org_type', q =>
+          q.eq('organizationId', args.organizationId).eq('type', 'in_progress'),
+        )
+        .first()) ??
+      (await ctx.db
+        .query('issueStates')
+        .withIndex('by_org_type', q =>
+          q.eq('organizationId', args.organizationId).eq('type', 'todo'),
+        )
+        .first()) ??
+      (await ctx.db
+        .query('issueStates')
+        .withIndex('by_organization', q =>
+          q.eq('organizationId', args.organizationId),
+        )
+        .order('asc')
+        .first());
+
+    const linkedUser = pullRequest.authorLogin
+      ? await ctx.db
+          .query('users')
+          .withIndex('by_github_username', q =>
+            q.eq('githubUsername', pullRequest.authorLogin!),
+          )
+          .first()
+          .then(async user => {
+            if (!user) return null;
+            const membership = await ctx.db
+              .query('members')
+              .withIndex('by_org_user', q =>
+                q
+                  .eq('organizationId', args.organizationId)
+                  .eq('userId', user._id),
+              )
+              .first();
+            return membership ? user : null;
+          })
+      : null;
+
+    const nextNumber =
+      (
+        await ctx.db
+          .query('issues')
+          .withIndex('by_organization', q =>
+            q.eq('organizationId', args.organizationId),
+          )
+          .collect()
+      ).length + 1;
+    const issueKey = `${organization.slug.toUpperCase()}-${nextNumber}`;
+    const title =
+      pullRequest.title.trim() ||
+      `${repository.fullName}#${pullRequest.number}`;
+    const description = [
+      `Imported from GitHub PR ${repository.fullName}#${pullRequest.number}`,
+      pullRequest.url,
+      pullRequest.body?.trim() || null,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const issueId = await ctx.db.insert('issues', {
+      organizationId: args.organizationId,
+      key: issueKey,
+      sequenceNumber: nextNumber,
+      title,
+      description,
+      searchText: buildIssueSearchText({
+        key: issueKey,
+        title,
+        description,
+      }),
+      workflowStateId: defaultState?._id,
+      reporterId: linkedUser?._id,
+      visibility: 'organization',
+      createdBy: linkedUser?._id,
+    });
+
+    if (defaultState) {
+      await ctx.db.insert('issueAssignees', {
+        issueId,
+        assigneeId: linkedUser?._id,
+        stateId: defaultState._id,
+      });
+    }
+
+    const createdIssue = await ctx.db.get('issues', issueId);
+    if (createdIssue && linkedUser?._id) {
+      await recordActivity(ctx, {
+        scope: resolveIssueScope(createdIssue),
+        actorId: linkedUser._id,
+        entityType: 'issue',
+        eventType: 'issue_created',
+        snapshot: snapshotForIssue(createdIssue),
+      });
+    }
+
+    await syncArtifactLinksForIssues({
+      ctx,
+      organizationId: args.organizationId,
+      artifactType: 'pull_request',
+      artifactId: args.pullRequestId,
+      repoFullName: repository.fullName,
+      identifier: pullRequest.number,
+      issueKeys: [issueKey],
+      source: 'auto',
+      actorId: linkedUser?._id,
+    });
+
+    return {
+      created: true,
+      issueId,
+      issueKey,
+    } as const;
   },
 });
 

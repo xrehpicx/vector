@@ -31,6 +31,8 @@ import {
   StateSelector,
   PrioritySelector,
   IssueSelector,
+  MultiAssignmentStateSelector,
+  type AssignmentInfo,
 } from '@/components/issues/issue-selectors';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
 import {
@@ -165,7 +167,6 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
   const [estimatesValue, setEstimatesValue] = useState<Record<string, number>>(
     {},
   );
-  const [currentStateId, setCurrentStateId] = useState<string>('');
 
   useEffect(() => {
     void params.then(setResolvedParams);
@@ -198,6 +199,10 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     : null;
   const displayTitle = issue?.title ?? '';
   const displayDescription = issue?.description ?? '';
+  const assignments = useQuery(
+    api.issues.queries.getAssignments,
+    issue ? { issueId: issue._id } : 'skip',
+  );
 
   const states = useQuery(
     api.organizations.queries.listIssueStates,
@@ -300,7 +305,7 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
         : current,
     );
   });
-  const changeAssignmentStateMutation = useMutation(
+  const changeIssueWorkflowStateMutation = useMutation(
     api.issues.mutations.changeWorkflowState,
   ).withOptimisticUpdate((store, args) => {
     if (!issueQueryArgs) return;
@@ -315,6 +320,30 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
             workflowState: nextState ?? null,
           }
         : current,
+    );
+  });
+  const changeHeaderAssignmentStateMutation = useMutation(
+    api.issues.mutations.changeAssignmentState,
+  ).withOptimisticUpdate((store, args) => {
+    if (!issue) return;
+    const nextState =
+      states?.find(state => String(state._id) === String(args.stateId)) ?? null;
+    updateQuery(
+      store,
+      api.issues.queries.getAssignments,
+      { issueId: issue._id },
+      current =>
+        current
+          ? current.map(assignment =>
+              String(assignment._id) === String(args.assignmentId)
+                ? {
+                    ...assignment,
+                    stateId: args.stateId,
+                    state: nextState,
+                  }
+                : assignment,
+            )
+          : current,
     );
   });
   const changeVisibilityMutation = useMutation(
@@ -372,12 +401,10 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
     resolvedParams?.orgSlug || '',
     PERMISSIONS.ISSUE_DELETE,
   );
-
-  useEffect(() => {
-    if (issue?.workflowStateId) {
-      setCurrentStateId(String(issue.workflowStateId));
-    }
-  }, [issue?.workflowStateId]);
+  const { isAllowed: canChangeOtherAssignmentStates } = usePermissionCheck(
+    resolvedParams?.orgSlug || '',
+    PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
+  );
 
   useEffect(() => {
     if (issue) {
@@ -402,6 +429,44 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
 
   const estimateStates =
     states?.filter(state => ['done'].includes(state.type)) || [];
+  const assignmentList = assignments ?? [];
+  const currentUserId = user?._id ? String(user._id) : '';
+  const activeAssignments = assignmentList.filter(assignment =>
+    Boolean(assignment.assigneeId),
+  );
+  const currentUserAssignment =
+    currentUserId === ''
+      ? null
+      : (activeAssignments.find(
+          assignment => String(assignment.assigneeId) === currentUserId,
+        ) ?? null);
+  const singleVisibleAssignment =
+    currentUserAssignment ??
+    (activeAssignments.length === 1
+      ? activeAssignments[0]
+      : assignmentList.length === 1
+        ? assignmentList[0]
+        : null);
+  const headerAssignments: AssignmentInfo[] = assignmentList.map(
+    assignment => ({
+      assignmentId: String(assignment._id),
+      assigneeId: assignment.assigneeId ? String(assignment.assigneeId) : null,
+      assigneeName: assignment.assignee?.name ?? null,
+      assigneeEmail: assignment.assignee?.email ?? null,
+      assigneeImage:
+        assignment.assignee && 'image' in assignment.assignee
+          ? assignment.assignee.image
+          : null,
+      stateId: assignment.stateId ? String(assignment.stateId) : null,
+      stateIcon: assignment.state?.icon ?? null,
+      stateColor: assignment.state?.color ?? null,
+      stateName: assignment.state?.name ?? null,
+      stateType: assignment.state?.type ?? null,
+    }),
+  );
+  const displayedStateId = singleVisibleAssignment?.stateId
+    ? String(singleVisibleAssignment.stateId)
+    : issue?.workflowStateId || '';
   const hasGitHubApiAccess = Boolean(githubCapabilities?.hasApiAccess);
   const hasGitHubIntegration = Boolean(
     githubCapabilities?.hasWebhookIngestion || githubCapabilities?.hasApiAccess,
@@ -624,24 +689,40 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
             </div>
 
             <div className='flex items-center'>
-              <PermissionAwareSelector
-                orgSlug={resolvedParams.orgSlug}
-                permission={PERMISSIONS.ISSUE_STATE_UPDATE}
-                fallbackMessage="You don't have permission to change issue state"
-              >
-                <StateSelector
+              {assignmentList.length > 0 ? (
+                <MultiAssignmentStateSelector
+                  assignments={headerAssignments}
                   states={states ?? []}
-                  selectedState={issue.workflowStateId || ''}
-                  onStateSelect={stateId => {
-                    if (!issue || !user) return;
-                    void changeAssignmentStateMutation({
-                      issueId: issue._id,
+                  currentUserId={currentUserId}
+                  canChangeAll={canChangeOtherAssignmentStates}
+                  isLoading={assignments === undefined}
+                  onStateChange={(assignmentId, stateId) => {
+                    void changeHeaderAssignmentStateMutation({
+                      assignmentId: assignmentId as Id<'issueAssignees'>,
                       stateId: stateId as Id<'issueStates'>,
                     });
                   }}
-                  className='border-none bg-transparent shadow-none'
                 />
-              </PermissionAwareSelector>
+              ) : (
+                <PermissionAwareSelector
+                  orgSlug={resolvedParams.orgSlug}
+                  permission={PERMISSIONS.ISSUE_STATE_UPDATE}
+                  fallbackMessage="You don't have permission to change issue state"
+                >
+                  <StateSelector
+                    states={states ?? []}
+                    selectedState={issue.workflowStateId || ''}
+                    onStateSelect={stateId => {
+                      if (!issue || !user) return;
+                      void changeIssueWorkflowStateMutation({
+                        issueId: issue._id,
+                        stateId: stateId as Id<'issueStates'>,
+                      });
+                    }}
+                    className='border-none bg-transparent shadow-none'
+                  />
+                </PermissionAwareSelector>
+              )}
               <div className='bg-muted-foreground/20 h-4 w-px' />
 
               <PermissionAwareSelector
@@ -905,8 +986,8 @@ export default function IssueViewPage({ params }: IssueViewPageProps) {
                         new Date(issue.dueDate) < new Date() &&
                           states &&
                           !['done'].includes(
-                            states.find(s => s._id === currentStateId)?.type ||
-                              '',
+                            states.find(s => s._id === displayedStateId)
+                              ?.type || '',
                           )
                           ? 'text-red-500 dark:text-red-400'
                           : '',

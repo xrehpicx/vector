@@ -1099,11 +1099,20 @@ export const processWebhook = internalAction({
         payload.pull_request &&
         ensuredRepository
       ) {
-        await persistPullRequestPayload(ctx, {
+        const pullRequestId = await persistPullRequestPayload(ctx, {
           organizationId: integration.organizationId,
           repository: ensuredRepository,
           payload: payload.pull_request,
         });
+        if (payload.action === 'opened') {
+          await ctx.runMutation(
+            internal.github.mutations.createIssueFromPullRequestIfNeeded,
+            {
+              organizationId: integration.organizationId,
+              pullRequestId,
+            },
+          );
+        }
         return { success: true } as const;
       }
 
@@ -1261,11 +1270,20 @@ export const processWebhook = internalAction({
     }
 
     if (args.event === 'pull_request' && payload.pull_request) {
-      await persistPullRequestPayload(ctx, {
+      const pullRequestId = await persistPullRequestPayload(ctx, {
         organizationId,
         repository: ensuredRepository,
         payload: payload.pull_request,
       });
+      if (payload.action === 'opened') {
+        await ctx.runMutation(
+          internal.github.mutations.createIssueFromPullRequestIfNeeded,
+          {
+            organizationId,
+            pullRequestId,
+          },
+        );
+      }
       return { success: true } as const;
     }
 

@@ -1192,7 +1192,7 @@ export function MultiAssigneeSelector({
 }
 
 // Multi-Assignment State Selector -------------------------------------------
-interface AssignmentInfo {
+export interface AssignmentInfo {
   assignmentId: string;
   assigneeId: string | null;
   assigneeName: string | null;
@@ -1230,6 +1230,8 @@ export function MultiAssignmentStateSelector({
   const [searchQuery, setSearchQuery] = useState('');
 
   const activeAssignments = assignments.filter(a => a.assigneeId);
+  const visibleAssignments =
+    activeAssignments.length > 0 ? activeAssignments : assignments;
 
   // Find current user's assignment
   const currentUserAssignment = activeAssignments.find(
@@ -1247,20 +1249,48 @@ export function MultiAssignmentStateSelector({
       return <Circle className='text-muted-foreground size-4' />;
     }
 
-    if (activeAssignments.length === 1) {
-      const assignment = activeAssignments[0];
+    if (currentUserAssignment) {
+      const StateIcon = currentUserAssignment.stateIcon
+        ? getDynamicIcon(currentUserAssignment.stateIcon) || Circle
+        : Circle;
+      const stateColor = currentUserAssignment.stateColor || '#94a3b8';
+
+      return (
+        <div className='flex items-center gap-1.5'>
+          <StateIcon className='size-4' style={{ color: stateColor }} />
+          <span className='truncate text-sm font-medium'>
+            {currentUserAssignment.stateName || 'Status'}
+          </span>
+          {otherAssignments.length > 0 ? (
+            <span className='text-muted-foreground text-xs'>
+              +{otherAssignments.length}
+            </span>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (visibleAssignments.length === 1) {
+      const assignment = visibleAssignments[0];
       const StateIcon = assignment.stateIcon
         ? getDynamicIcon(assignment.stateIcon) || Circle
         : Circle;
       const stateColor = assignment.stateColor || '#94a3b8';
 
-      return <StateIcon className='size-4' style={{ color: stateColor }} />;
+      return (
+        <div className='flex items-center gap-1.5'>
+          <StateIcon className='size-4' style={{ color: stateColor }} />
+          <span className='truncate text-sm font-medium'>
+            {assignment.stateName || 'Status'}
+          </span>
+        </div>
+      );
     }
 
     // Multiple assignments – show highlighted state prominently if filtering
     const activeFilterAssignments =
       activeFilter !== 'all'
-        ? activeAssignments.filter(a => a.stateType === activeFilter)
+        ? visibleAssignments.filter(a => a.stateType === activeFilter)
         : [];
 
     if (activeFilter !== 'all' && activeFilterAssignments.length > 0) {
@@ -1270,7 +1300,7 @@ export function MultiAssignmentStateSelector({
         ? getDynamicIcon(primaryAssignment.stateIcon) || Circle
         : Circle;
 
-      const otherAssignments = activeAssignments.filter(
+      const otherAssignments = visibleAssignments.filter(
         a => a.stateType !== activeFilter,
       );
 
@@ -1306,7 +1336,7 @@ export function MultiAssignmentStateSelector({
       string,
       { color: string; count: number; icon: string | null }
     > = {};
-    activeAssignments.forEach(a => {
+    visibleAssignments.forEach(a => {
       const key = a.stateId || 'unknown';
       if (!distribution[key]) {
         distribution[key] = {
