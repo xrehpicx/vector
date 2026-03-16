@@ -7,7 +7,7 @@ This package wraps the same auth and Convex-backed workflows used by the app, so
 ## Install
 
 ```bash
-npm install -g vcli
+npm install -g @rehpic/vcli
 ```
 
 Then verify the install:
