@@ -255,7 +255,7 @@ describe('Vector CLI command surface', () => {
     [
       'folder',
       [
-        'list [slug]',
+        'list [options] [slug]',
         'create [options]',
         'update [options] <folderId>',
         'delete <folderId>',
