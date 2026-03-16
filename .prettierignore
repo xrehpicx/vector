@@ -11,3 +11,4 @@ node_modules/
 
 # Generated
 convex/_generated/
+convex/betterAuth/_generated/
