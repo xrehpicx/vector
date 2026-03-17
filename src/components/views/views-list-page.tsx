@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery, useMutation } from 'convex/react';
-import { api, useCachedPaginatedQuery } from '@/lib/convex';
+import { useMutation } from 'convex/react';
+import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
@@ -27,6 +27,7 @@ import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import type { Id } from '@/convex/_generated/dataModel';
+import type { FunctionReturnType } from 'convex/server';
 import { useScopedPermission } from '@/hooks/use-permissions';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import {
@@ -57,7 +58,7 @@ const VIEW_MODE_ICON = {
 } as const;
 
 type ViewItem = NonNullable<
-  ReturnType<typeof useQuery<typeof api.views.queries.listViewsPage>>
+  FunctionReturnType<typeof api.views.queries.listViewsPage>
 >['page'][number];
 
 export function ViewsListPage() {
@@ -72,7 +73,9 @@ export function ViewsListPage() {
     PERMISSIONS.VIEW_CREATE,
   );
 
-  const summary = useQuery(api.views.queries.getListSummary, { orgSlug });
+  const summary = useCachedQuery(api.views.queries.getListSummary, {
+    orgSlug,
+  });
   const { results, status, loadMore } = useCachedPaginatedQuery(
     api.views.queries.listViewsPage,
     { orgSlug, scope },

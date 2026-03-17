@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
@@ -155,7 +155,7 @@ export default function IssuesPage() {
   const [searchText, setSearchText] = useState('');
   const deferredSearch = useDeferredValue(searchText);
 
-  const user = useQuery(api.users.currentUser);
+  const user = useCachedQuery(api.users.currentUser);
   const currentUserId = user?._id || '';
 
   const [isDeleting, setIsDeleting] = useState(false);
@@ -185,14 +185,19 @@ export default function IssuesPage() {
     PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
   );
 
-  const states = useQuery(api.organizations.queries.listIssueStates, {
+  const states = useCachedQuery(api.organizations.queries.listIssueStates, {
     orgSlug,
   });
-  const priorities = useQuery(api.organizations.queries.listIssuePriorities, {
+  const priorities = useCachedQuery(
+    api.organizations.queries.listIssuePriorities,
+    {
+      orgSlug,
+    },
+  );
+  const teams = useCachedQuery(api.organizations.queries.listTeams, {
     orgSlug,
   });
-  const teams = useQuery(api.organizations.queries.listTeams, { orgSlug });
-  const projects = useQuery(api.organizations.queries.listProjects, {
+  const projects = useCachedQuery(api.organizations.queries.listProjects, {
     orgSlug,
   });
 
@@ -203,7 +208,7 @@ export default function IssuesPage() {
     searchQuery: deferredSearch || undefined,
   };
 
-  const summary = useQuery(api.issues.queries.getIssueListSummary, {
+  const summary = useCachedQuery(api.issues.queries.getIssueListSummary, {
     ...scopeQueryArgs,
     scope: scopeTab,
   });

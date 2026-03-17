@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  cloneElement,
-  isValidElement,
-  useState,
-  type ReactElement,
-  type SyntheticEvent,
-} from 'react';
+import { useState, type ReactElement, type SyntheticEvent } from 'react';
 
 // UI primitives
 import { Button } from '@/components/ui/button';
@@ -122,26 +116,16 @@ function stopPropagation(event: SyntheticEvent) {
   event.stopPropagation();
 }
 
-function guardTriggerElement(trigger: ReactElement) {
-  const triggerProps = trigger.props as {
-    onClick?: (event: SyntheticEvent) => void;
-    onPointerDown?: (event: SyntheticEvent) => void;
-  };
-
-  return cloneElement(trigger, {
-    onClick: (event: SyntheticEvent) => {
-      triggerProps.onClick?.(event);
-      stopPropagation(event);
-    },
-    onPointerDown: (event: SyntheticEvent) => {
-      triggerProps.onPointerDown?.(event);
-      stopPropagation(event);
-    },
-  });
-}
-
 function renderGuardedTrigger(trigger: ReactElement) {
-  return isValidElement(trigger) ? guardTriggerElement(trigger) : trigger;
+  return (
+    <div
+      className='contents'
+      onClick={stopPropagation}
+      onPointerDown={stopPropagation}
+    >
+      {trigger}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

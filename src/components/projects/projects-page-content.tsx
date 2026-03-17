@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useQuery, useMutation } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
 import type { Id } from '../../../convex/_generated/dataModel';
 import { ProjectsTable } from './projects-table';
@@ -144,7 +144,9 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   });
 
   // Queries
-  const summary = useQuery(api.projects.queries.getListSummary, { orgSlug });
+  const summary = useCachedQuery(api.projects.queries.getListSummary, {
+    orgSlug,
+  });
   const paginatedProjects = useCachedPaginatedQuery(
     api.projects.queries.listPage,
     {
@@ -162,10 +164,15 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
     api.projects.queries.listMyProjects,
     viewMode === 'kanban' ? { orgSlug } : 'skip',
   );
-  const statusesData = useQuery(api.organizations.queries.listProjectStatuses, {
+  const statusesData = useCachedQuery(
+    api.organizations.queries.listProjectStatuses,
+    {
+      orgSlug,
+    },
+  );
+  const teamsData = useCachedQuery(api.organizations.queries.listTeams, {
     orgSlug,
   });
-  const teamsData = useQuery(api.organizations.queries.listTeams, { orgSlug });
   const teamMetaById = new Map(
     (teamsData ?? []).map(team => [
       team._id,

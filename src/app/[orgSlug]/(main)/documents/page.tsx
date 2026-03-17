@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { useCachedPaginatedQuery } from '@/lib/convex';
+import { useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MobileNavTrigger } from '../layout';
@@ -562,10 +562,10 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
     }),
   );
 
-  const folders = useQuery(api.documents.folderQueries.listFolders, {
+  const folders = useCachedQuery(api.documents.folderQueries.listFolders, {
     orgSlug,
   });
-  const summary = useQuery(api.documents.queries.getListSummary, {
+  const summary = useCachedQuery(api.documents.queries.getListSummary, {
     orgSlug,
     unfiledOnly: true,
   });
