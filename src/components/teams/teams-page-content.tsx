@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 
 import { PageSkeleton } from '@/components/ui/table-skeleton';
 import { MobileNavTrigger } from '@/app/[orgSlug]/(main)/layout';
-import { usePaginatedQuery, useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { useQuery, useMutation } from 'convex/react';
+import { api, useCachedPaginatedQuery } from '@/lib/convex';
 import { Id } from '@/convex/_generated/dataModel';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +26,7 @@ export function TeamsPageContent({
   const [scopeTab, setScopeTab] = useState<ScopeTab>('mine');
 
   const summary = useQuery(api.teams.queries.getListSummary, { orgSlug });
-  const { results, status, loadMore } = usePaginatedQuery(
+  const { results, status, loadMore } = useCachedPaginatedQuery(
     api.teams.queries.listPage,
     { orgSlug, scope: scopeTab },
     { initialNumItems: 20 },

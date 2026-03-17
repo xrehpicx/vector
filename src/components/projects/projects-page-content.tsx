@@ -2,8 +2,8 @@
 
 import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { usePaginatedQuery, useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { useQuery, useMutation } from 'convex/react';
+import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
 import type { Id } from '../../../convex/_generated/dataModel';
 import { ProjectsTable } from './projects-table';
 import type { ProjectRowData } from './projects-table';
@@ -145,7 +145,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
 
   // Queries
   const summary = useQuery(api.projects.queries.getListSummary, { orgSlug });
-  const paginatedProjects = usePaginatedQuery(
+  const paginatedProjects = useCachedPaginatedQuery(
     api.projects.queries.listPage,
     {
       orgSlug,
@@ -154,11 +154,11 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
     },
     { initialNumItems: 20 },
   );
-  const allProjectsData = useQuery(
+  const allProjectsData = useCachedQuery(
     api.projects.queries.list,
     viewMode === 'kanban' ? { orgSlug } : 'skip',
   );
-  const myProjectsData = useQuery(
+  const myProjectsData = useCachedQuery(
     api.projects.queries.listMyProjects,
     viewMode === 'kanban' ? { orgSlug } : 'skip',
   );

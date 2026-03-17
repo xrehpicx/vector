@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { usePaginatedQuery, useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { useCachedPaginatedQuery } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MobileNavTrigger } from '../layout';
@@ -572,7 +573,7 @@ function DocumentsPageContent({ orgSlug }: { orgSlug: string }) {
     results: documents,
     status,
     loadMore,
-  } = usePaginatedQuery(
+  } = useCachedPaginatedQuery(
     api.documents.queries.listPage,
     {
       orgSlug,

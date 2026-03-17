@@ -1,7 +1,7 @@
 'use client';
 
-import { usePaginatedQuery, useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { useQuery, useMutation } from 'convex/react';
+import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -207,7 +207,7 @@ export default function IssuesPage() {
     ...scopeQueryArgs,
     scope: scopeTab,
   });
-  const paginatedIssues = usePaginatedQuery(
+  const paginatedIssues = useCachedPaginatedQuery(
     api.issues.queries.listIssuesPage,
     {
       ...scopeQueryArgs,
@@ -215,7 +215,7 @@ export default function IssuesPage() {
     },
     { initialNumItems: 20 },
   );
-  const kanbanIssuesData = useQuery(
+  const kanbanIssuesData = useCachedQuery(
     api.issues.queries.listIssues,
     viewMode === 'kanban'
       ? {

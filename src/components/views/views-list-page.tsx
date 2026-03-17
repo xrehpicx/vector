@@ -1,7 +1,7 @@
 'use client';
 
-import { usePaginatedQuery, useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { useQuery, useMutation } from 'convex/react';
+import { api, useCachedPaginatedQuery } from '@/lib/convex';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
@@ -73,7 +73,7 @@ export function ViewsListPage() {
   );
 
   const summary = useQuery(api.views.queries.getListSummary, { orgSlug });
-  const { results, status, loadMore } = usePaginatedQuery(
+  const { results, status, loadMore } = useCachedPaginatedQuery(
     api.views.queries.listViewsPage,
     { orgSlug, scope },
     { initialNumItems: 20 },
