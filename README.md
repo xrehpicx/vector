@@ -7,14 +7,43 @@
 </p>
 
 <p align="center">
-  Open source project management platform built with Next.js, Convex, and Better Auth.
+  Open source issue tracking and project management built because there was no truly open source alternative to Linear.
 </p>
 
-Vector is designed for teams that want issues, projects, teams, permissions, documents, and organization-level workflows in one codebase.
+Vector exists because I wanted the speed and focus of Linear, but without giving up source access, self-hosting, or the ability to shape the product for my own team.
 
-Quick links: [Features](#features) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [Environment Variables](#environment-variables) · [Development](#development) · [Documentation](#documentation) · [Contributing](#contributing)
+Most tools in this category are either:
+
+- not actually open source
+- source-available but not realistically self-hostable
+- open source, but missing the product quality and workflows that make Linear compelling
+
+So I made this.
+
+Vector is for teams that want a real open source Linear-style workspace for:
+
+- issues, projects, and teams
+- docs and linked project context
+- permissions and org-level administration
+- GitHub-linked development workflows
+- self-hosting and code-level customization
+
+Quick links: [Why Vector Exists](#why-vector-exists) · [Features](#features) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [Environment Variables](#environment-variables) · [Development](#development) · [Documentation](#documentation) · [Contributing](#contributing)
 
 ![Issues Kanban Board](public/screenshots/issues-kanban.png)
+
+## Why Vector Exists
+
+Linear set the bar for fast, focused project management. The problem was that there was no true open source alternative that felt serious enough to adopt and extend.
+
+Vector was built to close that gap:
+
+- open source from day one
+- designed for self-hosting, not just cloud-only usage
+- built to be modified by the team using it
+- shaped around the workflows people actually want from Linear-style tooling
+
+The goal is not to clone every Linear feature. The goal is to build an opinionated, high-quality open source alternative for teams that want control over their tooling.
 
 ## Features
 
@@ -26,6 +55,16 @@ Quick links: [Features](#features) · [Screenshots](#screenshots) · [Quick Star
 - Optional email and web-push notification delivery
 - Better Auth integration with Convex-backed user data
 - Type-safe frontend and backend with TypeScript
+
+## What You Get
+
+- A focused issue tracker with table and kanban views
+- Projects, teams, and org-level workflows in one app
+- Rich collaborative docs with mentions and slash commands
+- Role-based permissions for multi-tenant organizations
+- GitHub linking for pull requests, issues, and commits
+- A CLI for terminal-first workflows
+- A codebase you can actually run, inspect, fork, and change
 
 ## Screenshots
 
