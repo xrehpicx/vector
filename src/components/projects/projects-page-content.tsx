@@ -19,6 +19,7 @@ import { usePersistedViewMode } from '@/hooks/use-persisted-view-mode';
 import { updateProjectRows, updateQuery } from '@/lib/optimistic-updates';
 import type { ProjectGroupByField } from '@/lib/group-by';
 import { GroupBySelector } from '@/components/ui/group-by-selector';
+import { useConfirm } from '@/hooks/use-confirm';
 
 // Define project status types based on Convex schema
 type StatusType =
@@ -91,6 +92,7 @@ function getInitialProjectGroupBy(): ProjectGroupByField {
 export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [scopeTab, setScopeTab] = useState<ScopeTab>('mine');
   const [groupBy, setGroupByState] = useState<ProjectGroupByField>(
@@ -273,7 +275,15 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
     });
   };
 
-  const handleDelete = (projectId: string) => {
+  const handleDelete = async (projectId: string) => {
+    const ok = await confirmDelete({
+      title: 'Delete project',
+      description:
+        'This will permanently delete the project and cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     void deleteMutation({
       projectId: projectId as Id<'projects'>,
     });
@@ -332,6 +342,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
 
   return (
     <div className='bg-background h-full'>
+      <ConfirmDeleteDialog />
       <div className='flex flex-col'>
         {/* Header — scope tabs, status filters + actions */}
         <div className='scrollbar-none flex items-center justify-between gap-1 overflow-x-auto border-b p-1'>

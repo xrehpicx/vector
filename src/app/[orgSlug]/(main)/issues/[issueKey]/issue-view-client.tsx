@@ -428,6 +428,34 @@ export default function IssueViewClient({
     router.replace(`/${params.orgSlug}/issues`);
   }, [issue, params.orgSlug, router]);
 
+  // Listen for command-menu edit events
+  useEffect(() => {
+    const onEditTitle = () => {
+      if (issue) {
+        setTitleValue(issue.title);
+        setEditingTitle(true);
+      }
+    };
+    const onEditDescription = () => {
+      if (issue) {
+        setDescriptionValue(issue.description || '');
+        setEditingDescription(true);
+      }
+    };
+    window.addEventListener('command-menu:edit-issue-title', onEditTitle);
+    window.addEventListener(
+      'command-menu:edit-issue-description',
+      onEditDescription,
+    );
+    return () => {
+      window.removeEventListener('command-menu:edit-issue-title', onEditTitle);
+      window.removeEventListener(
+        'command-menu:edit-issue-description',
+        onEditDescription,
+      );
+    };
+  }, [issue]);
+
   const estimateStates =
     states?.filter(state => ['done'].includes(state.type)) || [];
   const assignmentList = assignments ?? [];

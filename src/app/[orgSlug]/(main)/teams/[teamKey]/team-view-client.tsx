@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useDeferredValue } from 'react';
+import { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { useQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
@@ -724,6 +724,34 @@ export default function TeamViewClient({
       visibility: args.visibility,
     }));
   });
+
+  // Listen for command-menu edit events
+  useEffect(() => {
+    const onEditName = () => {
+      if (team) {
+        setNameValue(team.name);
+        setEditingName(true);
+      }
+    };
+    const onEditDescription = () => {
+      if (team) {
+        setDescriptionValue(team.description || '');
+        setEditingDescription(true);
+      }
+    };
+    window.addEventListener('command-menu:edit-team-name', onEditName);
+    window.addEventListener(
+      'command-menu:edit-team-description',
+      onEditDescription,
+    );
+    return () => {
+      window.removeEventListener('command-menu:edit-team-name', onEditName);
+      window.removeEventListener(
+        'command-menu:edit-team-description',
+        onEditDescription,
+      );
+    };
+  }, [team]);
 
   const teamQueryErrorMessage = teamQuery.error?.message ?? '';
   const shouldShowNotFound =

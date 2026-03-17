@@ -11,13 +11,19 @@ export function updateQuery<Query extends FunctionReference<'query'>>(
   store: OptimisticLocalStore,
   query: Query,
   args: FunctionArgs<Query>,
-  update: (current: FunctionReturnType<Query>) => FunctionReturnType<Query>,
+  update: (
+    current: NonNullable<FunctionReturnType<Query>>,
+  ) => FunctionReturnType<Query>,
 ) {
   const current = store.getQuery(query, args);
-  if (current === undefined) {
+  if (current === undefined || current === null) {
     return;
   }
-  store.setQuery(query, args, update(current));
+  store.setQuery(
+    query,
+    args,
+    update(current as NonNullable<FunctionReturnType<Query>>),
+  );
 }
 
 type IssueListResult = FunctionReturnType<typeof api.issues.queries.listIssues>;

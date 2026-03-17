@@ -28,6 +28,21 @@ export const metadata: Metadata = {
   title: 'Vector',
   description: 'Project management platform',
   manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [
+      {
+        url: '/icons/vector-mark-gradient.svg',
+        type: 'image/svg+xml',
+        media: '(prefers-color-scheme: dark)',
+      },
+      {
+        url: '/icons/vector-mark-dark.svg',
+        type: 'image/svg+xml',
+        media: '(prefers-color-scheme: light)',
+      },
+    ],
+    apple: '/icons/vector-logo-180.png',
+  },
 };
 
 export const dynamic = 'force-dynamic';

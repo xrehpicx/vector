@@ -32,7 +32,7 @@ export const getByKey = query({
       .first();
 
     if (!project) {
-      throw new ConvexError('PROJECT_NOT_FOUND');
+      return null;
     }
 
     if (!(await canViewProject(ctx, project))) {
@@ -274,7 +274,7 @@ export const listMembers = query({
     }
 
     if (!project) {
-      throw new ConvexError('PROJECT_NOT_FOUND');
+      return [];
     }
 
     if (!(await canViewProject(ctx, project))) {

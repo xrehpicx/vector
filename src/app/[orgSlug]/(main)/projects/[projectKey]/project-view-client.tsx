@@ -553,6 +553,34 @@ export default function ProjectViewClient({
     );
   });
 
+  // Listen for command-menu edit events
+  useEffect(() => {
+    const onEditName = () => {
+      if (project) {
+        setTitleValue(project.name);
+        setEditingTitle(true);
+      }
+    };
+    const onEditDescription = () => {
+      if (project) {
+        setDescriptionValue(project.description || '');
+        setEditingDescription(true);
+      }
+    };
+    window.addEventListener('command-menu:edit-project-name', onEditName);
+    window.addEventListener(
+      'command-menu:edit-project-description',
+      onEditDescription,
+    );
+    return () => {
+      window.removeEventListener('command-menu:edit-project-name', onEditName);
+      window.removeEventListener(
+        'command-menu:edit-project-description',
+        onEditDescription,
+      );
+    };
+  }, [project]);
+
   const handleTitleSave = () => {
     if (!project) return;
     const nextTitle = titleValue.trim();

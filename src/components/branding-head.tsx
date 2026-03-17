@@ -33,5 +33,24 @@ export function BrandingHead() {
     meta.content = color;
   }, [resolvedTheme]);
 
+  // Switch favicon based on resolved theme (class-based, not prefers-color-scheme)
+  useEffect(() => {
+    const isDark = resolvedTheme === 'dark';
+    const svgHref = isDark
+      ? '/icons/vector-mark-gradient.svg'
+      : '/icons/vector-mark-dark.svg';
+
+    let link = document.querySelector<HTMLLinkElement>(
+      'link[rel="icon"][type="image/svg+xml"]',
+    );
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      link.type = 'image/svg+xml';
+      document.head.appendChild(link);
+    }
+    link.href = svgHref;
+  }, [resolvedTheme]);
+
   return null;
 }

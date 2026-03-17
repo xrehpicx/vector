@@ -102,6 +102,21 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
   const [confirmAction, ConfirmActionDialog] = useConfirm();
   const inputRef = useRef<AssistantInputHandle>(null);
 
+  // Listen for command menu "Message Vector" event
+  useEffect(() => {
+    const onFocusAssistant = () => {
+      setIsExpanded(true);
+      // Delay focus to allow the expansion animation to start
+      setTimeout(() => inputRef.current?.focus(), 150);
+    };
+    window.addEventListener('command-menu:focus-assistant', onFocusAssistant);
+    return () =>
+      window.removeEventListener(
+        'command-menu:focus-assistant',
+        onFocusAssistant,
+      );
+  }, []);
+
   const threadId = threadRow?.threadId;
   const uiMessages = useUIMessages(
     api.ai.queries.listThreadMessages,
@@ -443,7 +458,39 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
           onClick={() => setIsExpanded(prev => !prev)}
           className='text-muted-foreground hover:text-foreground flex items-center justify-between px-3 py-1.5 text-xs font-medium transition-colors'
         >
-          <span>{branding.name}</span>
+          <span className='flex items-center gap-1.5'>
+            <svg
+              width='14'
+              height='14'
+              viewBox='300 300 628 628'
+              fill='none'
+              xmlns='http://www.w3.org/2000/svg'
+              aria-hidden
+            >
+              <path
+                d='M444.705 796.719C545.526 890.195 703.034 884.24 796.51 783.42C889.986 682.599 884.032 525.091 783.211 431.615C682.391 338.139 524.882 344.093 431.406 444.913C337.93 545.734 343.884 703.243 444.705 796.719Z'
+                stroke='currentColor'
+                strokeWidth='49.7883'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              />
+              <path
+                d='M686.979 681.869L681.66 541.147L540.938 546.466'
+                stroke='currentColor'
+                strokeWidth='49.7883'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              />
+              <path
+                d='M546.257 687.188L681.66 541.146'
+                stroke='currentColor'
+                strokeWidth='49.7883'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              />
+            </svg>
+            {branding.name}
+          </span>
           <span className='flex items-center gap-1'>
             {isAssistantActive && (
               <span className='bg-foreground/40 size-1.5 animate-pulse rounded-full' />

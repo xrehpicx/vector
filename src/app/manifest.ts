@@ -41,6 +41,24 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
             sizes: 'any',
             purpose: 'maskable',
           },
+          {
+            src: '/icons/vector-logo-192.png',
+            type: 'image/png',
+            sizes: '192x192',
+            purpose: 'any',
+          },
+          {
+            src: '/icons/vector-logo-512.png',
+            type: 'image/png',
+            sizes: '512x512',
+            purpose: 'any',
+          },
+          {
+            src: '/icons/vector-logo-384.png',
+            type: 'image/png',
+            sizes: '384x384',
+            purpose: 'maskable',
+          },
         ],
   };
 }

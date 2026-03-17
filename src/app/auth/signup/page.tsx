@@ -99,13 +99,11 @@ function SignupForm() {
     <div className='flex min-h-dvh items-center justify-center px-4'>
       <div className='w-full max-w-sm'>
         <div className='mb-6 text-center'>
-          {branding.logoUrl && (
-            <img
-              src={branding.logoUrl}
-              alt={branding.name}
-              className='mx-auto mb-4 size-12 rounded-xl object-contain'
-            />
-          )}
+          <img
+            src={branding.logoUrl || '/icons/vector-logo.svg'}
+            alt={branding.name}
+            className='mx-auto mb-4 size-12 rounded-xl object-contain'
+          />
           <h2 className='text-2xl font-semibold tracking-tight'>
             Create your account
           </h2>
@@ -223,6 +221,7 @@ export default function SignupPage() {
         <div className='flex min-h-dvh items-center justify-center px-4'>
           <div className='w-full max-w-sm space-y-6'>
             <div className='flex flex-col items-center gap-2'>
+              <Skeleton className='size-12 rounded-xl' />
               <Skeleton className='h-7 w-48' />
               <Skeleton className='h-4 w-36' />
             </div>
