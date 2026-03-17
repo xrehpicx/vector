@@ -1,10 +1,10 @@
-<svg width="240" height="40" viewBox="0 0 240 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="220" height="36" viewBox="0 0 220 36" fill="none" xmlns="http://www.w3.org/2000/svg">
   <!-- Logo mark (white, for dark bg) -->
-  <g transform="translate(0, 0) scale(0.065)">
+  <g transform="translate(1 2) scale(0.052)">
     <path d="M444.705 796.719C545.526 890.195 703.034 884.24 796.51 783.42C889.986 682.599 884.032 525.091 783.211 431.615C682.391 338.139 524.882 344.093 431.406 444.913C337.93 545.734 343.884 703.243 444.705 796.719Z" stroke="white" stroke-width="49.7883" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M686.979 681.869L681.66 541.147L540.938 546.466" stroke="white" stroke-width="49.7883" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M546.257 687.188L681.66 541.146" stroke="white" stroke-width="49.7883" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
   <!-- Wordmark -->
-  <text x="52" y="29" font-family="'Urbanist', 'Inter', 'Segoe UI', sans-serif" font-size="26" font-weight="600" letter-spacing="-0.02em" fill="#FAFAFA">Vector</text>
+  <text x="42" y="26" font-family="'Urbanist', 'Avenir Next', 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="600" letter-spacing="-0.02em" fill="#FAFAFA">Vector</text>
 </svg>

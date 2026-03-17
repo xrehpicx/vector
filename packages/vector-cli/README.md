@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/xrehpicx/vector/main/public/icons/vector-wordmark-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/xrehpicx/vector/main/public/icons/vector-wordmark.svg">
-    <img alt="Vector" src="https://raw.githubusercontent.com/xrehpicx/vector/main/public/icons/vector-wordmark.svg" width="240">
+    <img alt="Vector" src="https://raw.githubusercontent.com/xrehpicx/vector/main/public/icons/vector-wordmark.svg" width="220">
   </picture>
 </p>
 
