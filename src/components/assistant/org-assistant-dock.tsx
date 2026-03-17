@@ -13,7 +13,6 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useConvexAuth } from 'convex/react';
 import { useAction, useMutation, useQuery } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
-import { useBranding } from '@/hooks/use-branding';
 import { Button } from '@/components/ui/button';
 import {
   AssistantInput,
@@ -58,7 +57,6 @@ const CHAT_PANEL_EXIT = {
 
 export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const branding = useBranding();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   useAssistantActions(orgSlug);
@@ -489,7 +487,7 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
                 strokeLinejoin='round'
               />
             </svg>
-            {branding.name}
+            Vector
           </span>
           <span className='flex items-center gap-1'>
             {isAssistantActive && (
