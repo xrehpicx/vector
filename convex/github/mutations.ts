@@ -65,6 +65,32 @@ async function getIssueStateIdByType(
     .then(state => state?._id ?? null);
 }
 
+async function getDefaultAssignmentState(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+) {
+  return (
+    (await ctx.db
+      .query('issueStates')
+      .withIndex('by_org_type', q =>
+        q.eq('organizationId', organizationId).eq('type', 'in_progress'),
+      )
+      .first()) ??
+    (await ctx.db
+      .query('issueStates')
+      .withIndex('by_org_type', q =>
+        q.eq('organizationId', organizationId).eq('type', 'todo'),
+      )
+      .first()) ??
+    (await ctx.db
+      .query('issueStates')
+      .withIndex('by_organization', q => q.eq('organizationId', organizationId))
+      .order('asc')
+      .first()) ??
+    null
+  );
+}
+
 function buildImportedPullRequestDescription(args: {
   repoFullName: string;
   number: number;
@@ -281,6 +307,28 @@ async function resolveOrgMemberByGitHubIdentity(
     }
   };
 
+  const addCandidateFromGitHubAccountId = async (accountId: string | null) => {
+    if (!accountId) return;
+
+    const account = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: 'account',
+      where: [
+        {
+          field: 'providerId',
+          operator: 'eq',
+          value: 'github',
+        },
+        {
+          field: 'accountId',
+          operator: 'eq',
+          value: accountId,
+        },
+      ],
+    });
+
+    await addCandidateFromBetterAuthUser(account?.userId ?? null);
+  };
+
   if (typeof identity.githubUserId === 'number') {
     addCandidate(
       await ctx.db
@@ -292,26 +340,7 @@ async function resolveOrgMemberByGitHubIdentity(
     );
 
     if (candidateUsers.length === 0) {
-      const account = await ctx.runQuery(
-        components.betterAuth.adapter.findOne,
-        {
-          model: 'account',
-          where: [
-            {
-              field: 'providerId',
-              operator: 'eq',
-              value: 'github',
-            },
-            {
-              field: 'accountId',
-              operator: 'eq',
-              value: String(identity.githubUserId),
-            },
-          ],
-        },
-      );
-
-      await addCandidateFromBetterAuthUser(account?.userId ?? null);
+      await addCandidateFromGitHubAccountId(String(identity.githubUserId));
     }
   }
 
@@ -324,6 +353,10 @@ async function resolveOrgMemberByGitHubIdentity(
         )
         .first(),
     );
+
+    if (candidateUsers.length === 0) {
+      await addCandidateFromGitHubAccountId(identity.githubUsername);
+    }
   }
 
   if (identity.email) {
@@ -516,13 +549,7 @@ async function autoAssignFromGitHubLogins(
   const issue = await ctx.db.get('issues', issueId);
   if (!issue) return;
 
-  // Get a default issue state for new assignments
-  const defaultState = await ctx.db
-    .query('issueStates')
-    .withIndex('by_org_type', q =>
-      q.eq('organizationId', organizationId).eq('type', 'in_progress'),
-    )
-    .first();
+  const defaultState = await getDefaultAssignmentState(ctx, organizationId);
   if (!defaultState) return;
 
   const existingAssignments = await ctx.db
@@ -1426,26 +1453,10 @@ export const createIssueFromPullRequestIfNeeded = internalMutation({
       throw new ConvexError('REPOSITORY_NOT_CONNECTED');
     }
 
-    const defaultState =
-      (await ctx.db
-        .query('issueStates')
-        .withIndex('by_org_type', q =>
-          q.eq('organizationId', args.organizationId).eq('type', 'in_progress'),
-        )
-        .first()) ??
-      (await ctx.db
-        .query('issueStates')
-        .withIndex('by_org_type', q =>
-          q.eq('organizationId', args.organizationId).eq('type', 'todo'),
-        )
-        .first()) ??
-      (await ctx.db
-        .query('issueStates')
-        .withIndex('by_organization', q =>
-          q.eq('organizationId', args.organizationId),
-        )
-        .order('asc')
-        .first());
+    const defaultState = await getDefaultAssignmentState(
+      ctx,
+      args.organizationId,
+    );
 
     const linkedUser = await resolveOrgMemberByGitHubIdentity(
       ctx,
