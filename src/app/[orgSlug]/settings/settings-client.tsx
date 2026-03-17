@@ -235,6 +235,10 @@ export default function OrgSettingsPageClient({
       { orgSlug: args.orgSlug },
       current => ({
         ...current,
+        subtitle:
+          args.data.subtitle !== undefined
+            ? (args.data.subtitle ?? undefined)
+            : current.subtitle,
         publicDescription:
           args.data.publicDescription !== undefined
             ? (args.data.publicDescription ?? undefined)
@@ -256,6 +260,10 @@ export default function OrgSettingsPageClient({
       { orgSlug: args.orgSlug },
       current => ({
         ...current,
+        subtitle:
+          args.data.subtitle !== undefined
+            ? (args.data.subtitle ?? null)
+            : current.subtitle,
         publicDescription:
           args.data.publicDescription !== undefined
             ? (args.data.publicDescription ?? null)
@@ -272,6 +280,7 @@ export default function OrgSettingsPageClient({
     );
   });
 
+  const [subtitle, setSubtitle] = useState('');
   const [publicDescription, setPublicDescription] = useState('');
   const [publicLandingViewId, setPublicLandingViewId] =
     useState<Id<'views'> | null>(null);
@@ -284,6 +293,7 @@ export default function OrgSettingsPageClient({
       return;
     }
 
+    setSubtitle(org.subtitle ?? '');
     setPublicDescription(org.publicDescription ?? '');
     setPublicLandingViewId(org.publicLandingViewId ?? null);
     setPublicSocialLinks(org.publicSocialLinks ?? []);
@@ -296,10 +306,12 @@ export default function OrgSettingsPageClient({
     .filter(view => view.visibility === 'public')
     .map(view => ({ _id: view._id, name: view.name }));
 
+  const originalSubtitle = org?.subtitle ?? '';
   const originalDescription = org?.publicDescription ?? '';
   const originalLandingViewId = org?.publicLandingViewId ?? null;
   const originalSocialLinks = org?.publicSocialLinks ?? [];
   const publicSettingsDirty =
+    subtitle !== originalSubtitle ||
     publicDescription !== originalDescription ||
     publicLandingViewId !== originalLandingViewId ||
     serializeSocialLinks(publicSocialLinks) !==
@@ -322,6 +334,7 @@ export default function OrgSettingsPageClient({
       await updateOrganization({
         orgSlug,
         data: {
+          subtitle,
           publicDescription,
           publicLandingViewId,
           publicSocialLinks,
@@ -471,6 +484,33 @@ export default function OrgSettingsPageClient({
           </div>
 
           <div className='space-y-4 p-3'>
+            <div className='space-y-2'>
+              <label className='text-sm font-medium'>Subtitle</label>
+              {isAdmin ? (
+                <Input
+                  value={subtitle}
+                  onChange={event => {
+                    setSubtitle(event.target.value);
+                    setHasPublicEdits(true);
+                  }}
+                  placeholder='Shown below your organization name in the public footer'
+                  className='h-8'
+                  maxLength={120}
+                />
+              ) : subtitle ? (
+                <div className='rounded-md border px-3 py-2 text-sm'>
+                  {subtitle}
+                </div>
+              ) : (
+                <div className='text-muted-foreground rounded-md border px-3 py-2 text-sm'>
+                  No subtitle
+                </div>
+              )}
+              <p className='text-muted-foreground text-xs'>
+                Short line shown under your organization name on public pages.
+              </p>
+            </div>
+
             <div className='space-y-2'>
               <label className='text-sm font-medium'>Landing view</label>
               {isAdmin ? (

@@ -183,6 +183,7 @@ export const getPublicProfileBySlug = query({
       name: org.name,
       slug: org.slug,
       logoUrl,
+      subtitle: org.subtitle ?? null,
       publicDescription: org.publicDescription ?? null,
       publicLandingViewId:
         publicLandingView &&

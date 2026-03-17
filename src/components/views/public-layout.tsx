@@ -54,6 +54,7 @@ export function PublicLayout({
   const redirectTo = pathname ?? `/${orgSlug}`;
   const showAuthActions = currentUser === null;
   const orgName = publicProfile?.name ?? orgSlug;
+  const orgSubtitle = publicProfile?.subtitle?.trim() || 'Public workspace';
 
   return (
     <div className='bg-background flex min-h-screen flex-col'>
@@ -77,8 +78,8 @@ export function PublicLayout({
                 )}
                 <div className='min-w-0'>
                   <div className='truncate text-sm font-medium'>{orgName}</div>
-                  <div className='text-muted-foreground text-xs'>
-                    Public workspace
+                  <div className='text-muted-foreground truncate text-xs'>
+                    {orgSubtitle}
                   </div>
                 </div>
               </div>

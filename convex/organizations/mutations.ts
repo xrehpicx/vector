@@ -1,6 +1,5 @@
 import { mutation, type MutationCtx } from '../_generated/server';
 import { v, ConvexError } from 'convex/values';
-import type { Id } from '../_generated/dataModel';
 import {
   getOrganizationBySlug,
   requireAuthUser,
@@ -428,6 +427,7 @@ export const update = mutation({
       name: v.optional(v.string()),
       slug: v.optional(v.string()),
       logo: v.optional(v.id('_storage')),
+      subtitle: v.optional(v.union(v.string(), v.null())),
       publicDescription: v.optional(v.union(v.string(), v.null())),
       publicLandingViewId: v.optional(v.union(v.id('views'), v.null())),
       publicSocialLinks: v.optional(
@@ -453,6 +453,13 @@ export const update = mutation({
     }
     if (args.data.slug && args.data.slug.length > 50) {
       throw new ConvexError('ORGANIZATION_SLUG_TOO_LONG');
+    }
+    if (
+      args.data.subtitle !== undefined &&
+      args.data.subtitle !== null &&
+      args.data.subtitle.trim().length > 120
+    ) {
+      throw new ConvexError('ORGANIZATION_SUBTITLE_TOO_LONG');
     }
     if (
       args.data.publicDescription !== undefined &&
@@ -527,6 +534,10 @@ export const update = mutation({
     }
     if (args.data.logo !== undefined) {
       updateData.logo = args.data.logo;
+    }
+    if (args.data.subtitle !== undefined) {
+      const trimmed = args.data.subtitle?.trim() ?? '';
+      updateData.subtitle = trimmed || undefined;
     }
     if (args.data.publicDescription !== undefined) {
       const trimmed = args.data.publicDescription?.trim() ?? '';

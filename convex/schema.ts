@@ -117,6 +117,7 @@ export default defineSchema({
     slug: v.string(),
     logo: v.optional(v.id('_storage')),
     metadata: v.optional(v.string()),
+    subtitle: v.optional(v.string()),
     publicDescription: v.optional(v.string()),
     publicLandingViewId: v.optional(v.id('views')),
     publicSocialLinks: v.optional(
