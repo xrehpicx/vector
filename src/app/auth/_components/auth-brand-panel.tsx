@@ -22,10 +22,16 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
 export function AuthLogo({ className }: { className?: string }) {
   return (
     <div className={cn('flex items-center justify-center gap-2.5', className)}>
+      {/* Black mark for light mode, white mark for dark mode */}
       <img
-        src='/icons/vector-logo.svg'
+        src='/icons/vector-mark-black.svg'
         alt='Vector'
-        className='size-9 rounded-lg'
+        className='size-9 dark:hidden'
+      />
+      <img
+        src='/icons/vector-mark-white.svg'
+        alt='Vector'
+        className='hidden size-9 dark:block'
       />
       <span className='font-title text-foreground text-xl font-semibold tracking-tight'>
         Vector

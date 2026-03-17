@@ -1,32 +1,10 @@
-<svg width="280" height="56" viewBox="0 0 280 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Logo mark -->
-  <rect width="56" height="56" rx="14" fill="url(#wmd_bg)"/>
-  <g clip-path="url(#wmd_clip)">
-    <path d="M20.28 36.34c4.6 4.26 11.78 4 15.98-1.26 4.26-4.6 4-11.78-1.26-15.98-4.6-4.26-11.78-4-15.98 1.26-4.26 4.6-4 11.78 1.26 15.98Z" stroke="url(#wmd_radial)" stroke-width="2.27" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M31.34 31.1l-.24-6.42-6.43.24" stroke="url(#wmd_lin1)" stroke-width="2.27" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M24.91 31.34l6.18-6.66" stroke="url(#wmd_lin2)" stroke-width="2.27" stroke-linecap="round" stroke-linejoin="round"/>
+<svg width="240" height="40" viewBox="0 0 240 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Logo mark (white, for dark bg) -->
+  <g transform="translate(0, 0) scale(0.065)">
+    <path d="M444.705 796.719C545.526 890.195 703.034 884.24 796.51 783.42C889.986 682.599 884.032 525.091 783.211 431.615C682.391 338.139 524.882 344.093 431.406 444.913C337.93 545.734 343.884 703.243 444.705 796.719Z" stroke="white" stroke-width="49.7883" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M686.979 681.869L681.66 541.147L540.938 546.466" stroke="white" stroke-width="49.7883" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M546.257 687.188L681.66 541.146" stroke="white" stroke-width="49.7883" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
   <!-- Wordmark -->
-  <text x="72" y="37" font-family="'Urbanist', 'Inter', 'Segoe UI', sans-serif" font-size="28" font-weight="600" letter-spacing="-0.02em" fill="#FAFAFA">Vector</text>
-  <defs>
-    <radialGradient id="wmd_bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(55.38 -.00001) rotate(134.657) scale(78.8)">
-      <stop stop-color="#191919"/>
-      <stop offset="1" stop-color="#0A0A0A"/>
-    </radialGradient>
-    <radialGradient id="wmd_radial" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(28 28) rotate(132.835) scale(11.35)">
-      <stop stop-color="white"/>
-      <stop offset="1" stop-color="#44DAFF"/>
-    </radialGradient>
-    <linearGradient id="wmd_lin1" x1="31.1" y1="24.68" x2="28" y2="28" gradientUnits="userSpaceOnUse">
-      <stop stop-color="white"/>
-      <stop offset="1" stop-color="#44DAFF"/>
-    </linearGradient>
-    <linearGradient id="wmd_lin2" x1="31.1" y1="24.84" x2="24.93" y2="31.5" gradientUnits="userSpaceOnUse">
-      <stop stop-color="white"/>
-      <stop offset="1" stop-color="#44DAFF"/>
-    </linearGradient>
-    <clipPath id="wmd_clip">
-      <rect width="27.26" height="27.26" fill="white" transform="translate(27.28 8.76) rotate(42.84)"/>
-    </clipPath>
-  </defs>
+  <text x="52" y="29" font-family="'Urbanist', 'Inter', 'Segoe UI', sans-serif" font-size="26" font-weight="600" letter-spacing="-0.02em" fill="#FAFAFA">Vector</text>
 </svg>
