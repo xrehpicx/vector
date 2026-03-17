@@ -28,7 +28,7 @@ Vector is for teams that want a real open source Linear-style workspace for:
 - GitHub-linked development workflows
 - self-hosting and code-level customization
 
-Quick links: [Why Vector Exists](#why-vector-exists) · [Features](#features) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [Environment Variables](#environment-variables) · [Development](#development) · [Documentation](#documentation) · [Contributing](#contributing)
+Quick links: [Why Vector Exists](#why-vector-exists) · [Features](#features) · [Entity Model](#entity-model) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [Environment Variables](#environment-variables) · [Development](#development) · [Documentation](#documentation) · [Contributing](#contributing)
 
 ![Issues Kanban Board](public/screenshots/issues-kanban.png)
 
@@ -65,6 +65,18 @@ The goal is not to clone every Linear feature. The goal is to build an opinionat
 - GitHub linking for pull requests, issues, and commits
 - A CLI for terminal-first workflows
 - A codebase you can actually run, inspect, fork, and change
+
+## Entity Model
+
+Vector’s core workspace entities are:
+
+- Issues: the unit of work that moves through statuses, priorities, assignments, and discussion.
+- Teams: groups of people that own work and organize responsibility.
+- Projects: larger initiatives that collect related issues under shared ownership and status.
+- Documents: longer-form collaborative knowledge like specs, notes, and context.
+- Views: saved issue configurations that define filters, layout, grouping, and sharing behavior.
+
+For the fuller explanation of how these entities relate and what each one is for, see [docs/product/04-entities.md](docs/product/04-entities.md).
 
 ## Screenshots
 
@@ -260,6 +272,7 @@ SMTP and VAPID settings are optional. If you leave them unset locally, the core 
 Start with:
 
 - Contributor docs: [docs/index.md](docs/index.md)
+- Entity model: [docs/product/04-entities.md](docs/product/04-entities.md)
 - Local setup: [docs/getting-started/01-local-setup.md](docs/getting-started/01-local-setup.md)
 - Environment variables: [docs/getting-started/02-environment-variables.md](docs/getting-started/02-environment-variables.md)
 - Common commands: [docs/getting-started/04-common-commands.md](docs/getting-started/04-common-commands.md)

@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { Lock, Globe, Calendar } from 'lucide-react';
 import { DynamicIcon } from '@/lib/dynamic-icons';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,7 +13,7 @@ interface PublicIssuePageProps {
 }
 
 export function PublicIssuePage({ orgSlug, issueKey }: PublicIssuePageProps) {
-  const issue = useQuery(api.og.queries.getPublicIssueFull, {
+  const issue = useCachedQuery(api.og.queries.getPublicIssueFull, {
     orgSlug,
     issueKey,
   });

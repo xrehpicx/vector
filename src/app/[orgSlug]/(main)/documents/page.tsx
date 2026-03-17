@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useMutation } from 'convex/react';
+import {
+  useCachedQuery,
+  useCachedPaginatedQuery,
+  useMutation,
+} from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
-import { useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MobileNavTrigger } from '../layout';

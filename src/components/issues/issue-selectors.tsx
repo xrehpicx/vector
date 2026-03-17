@@ -36,7 +36,7 @@ import {
 // Utils & helpers
 import { cn } from '@/lib/utils';
 import { getDynamicIcon, DynamicIcon } from '@/lib/dynamic-icons';
-import { useQuery } from 'convex/react';
+import { useCachedQuery } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { FunctionReturnType } from 'convex/server';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -1021,14 +1021,17 @@ export function MultiAssigneeSelector({
   const [searchQuery, setSearchQuery] = useState('');
 
   // Search members with debouncing
-  const searchResults = useQuery(api.organizations.queries.searchMembers, {
-    orgSlug,
-    query: searchQuery,
-    limit: 10,
-  });
+  const searchResults = useCachedQuery(
+    api.organizations.queries.searchMembers,
+    {
+      orgSlug,
+      query: searchQuery,
+      limit: 10,
+    },
+  );
 
   // Get organization members for display purposes (when we have selections but they're not in search)
-  const allMembers = useQuery(api.organizations.queries.listMembers, {
+  const allMembers = useCachedQuery(api.organizations.queries.listMembers, {
     orgSlug,
   });
 
@@ -1723,19 +1726,24 @@ export function IssueSelector({
     useState<ParentIssueSearchResult['selectedIssue']>(null);
   const debouncedQuery = useDebouncedValue(searchQuery.trim(), 150);
 
-  const issueOptionsData = useQuery(api.issues.queries.searchParentOptions, {
-    orgSlug,
-    query: debouncedQuery || undefined,
-    limit: 5,
-    excludeIssueId: excludeIssueId
-      ? (excludeIssueId as Id<'issues'>)
-      : undefined,
-    selectedIssueId: displayIssue ? (displayIssue as Id<'issues'>) : undefined,
-    relatedProjectId: relatedProjectId
-      ? (relatedProjectId as Id<'projects'>)
-      : undefined,
-    relatedTeamId: relatedTeamId ? (relatedTeamId as Id<'teams'>) : undefined,
-  });
+  const issueOptionsData = useCachedQuery(
+    api.issues.queries.searchParentOptions,
+    {
+      orgSlug,
+      query: debouncedQuery || undefined,
+      limit: 5,
+      excludeIssueId: excludeIssueId
+        ? (excludeIssueId as Id<'issues'>)
+        : undefined,
+      selectedIssueId: displayIssue
+        ? (displayIssue as Id<'issues'>)
+        : undefined,
+      relatedProjectId: relatedProjectId
+        ? (relatedProjectId as Id<'projects'>)
+        : undefined,
+      relatedTeamId: relatedTeamId ? (relatedTeamId as Id<'teams'>) : undefined,
+    },
+  );
 
   const availableIssues = issueOptionsData?.results ?? [];
   const selectedIssueObj: ParentIssueSearchResult['selectedIssue'] =

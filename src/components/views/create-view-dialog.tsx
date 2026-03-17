@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, cloneElement, isValidElement } from 'react';
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,16 +48,21 @@ function CreateViewDialogContent({
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const teams = useQuery(api.organizations.queries.listTeams, { orgSlug });
-  const projects = useQuery(api.organizations.queries.listProjects, {
+  const teams = useCachedQuery(api.organizations.queries.listTeams, {
     orgSlug,
   });
-  const states = useQuery(api.organizations.queries.listIssueStates, {
+  const projects = useCachedQuery(api.organizations.queries.listProjects, {
     orgSlug,
   });
-  const priorities = useQuery(api.organizations.queries.listIssuePriorities, {
+  const states = useCachedQuery(api.organizations.queries.listIssueStates, {
     orgSlug,
   });
+  const priorities = useCachedQuery(
+    api.organizations.queries.listIssuePriorities,
+    {
+      orgSlug,
+    },
+  );
 
   const createView = useMutation(api.views.mutations.createView);
 

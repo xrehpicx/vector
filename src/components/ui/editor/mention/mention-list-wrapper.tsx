@@ -6,8 +6,7 @@ import {
   useState,
   useEffect,
 } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import MentionList, {
   type MentionListHandle,
   type MentionItem,
@@ -46,7 +45,7 @@ const MentionListWrapper = forwardRef<
     },
   }));
 
-  const searchResults = useQuery(
+  const searchResults = useCachedQuery(
     api.search.queries.searchEntities,
     debouncedQuery ? { orgSlug, query: debouncedQuery, limit: 5 } : 'skip',
   );

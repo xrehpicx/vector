@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Github, Menu, Shield } from 'lucide-react';
-import { useAction, useQuery, api } from '@/lib/convex';
+import { api, useQuery, useAction } from '@/lib/convex';
 import { UserMenu } from '@/components/user-menu';
 import { PlatformAdminSidebar } from './platform-admin-sidebar';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';

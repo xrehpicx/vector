@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { Id } from '@/convex/_generated/dataModel';
-import { api } from '@/lib/convex';
-import { useMutation, useQuery } from 'convex/react';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import Markdown from 'react-markdown';
 import {
   Building,
@@ -213,16 +212,16 @@ function SocialPlatformSelector({
 export default function OrgSettingsPageClient({
   orgSlug,
 }: OrgSettingsPageClientProps) {
-  const user = useQuery(api.users.currentUser);
-  const org = useQuery(
+  const user = useCachedQuery(api.users.currentUser);
+  const org = useCachedQuery(
     api.organizations.queries.getBySlug,
     user?._id ? { orgSlug } : 'skip',
   );
-  const members = useQuery(
+  const members = useCachedQuery(
     api.organizations.queries.listMembersWithRoles,
     user?._id ? { orgSlug } : 'skip',
   );
-  const views = useQuery(
+  const views = useCachedQuery(
     api.views.queries.listViews,
     user?._id ? { orgSlug } : 'skip',
   );

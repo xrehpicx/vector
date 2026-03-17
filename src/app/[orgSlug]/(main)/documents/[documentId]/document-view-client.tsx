@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import type { FunctionReturnType } from 'convex/server';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -218,7 +218,7 @@ const HEARTBEAT_INTERVAL = 15_000; // 15 seconds
 function useDocumentPresence(documentId: string | null) {
   const heartbeatMutation = useMutation(api.documents.presence.heartbeat);
   const leaveMutation = useMutation(api.documents.presence.leave);
-  const viewers = useQuery(
+  const viewers = useCachedQuery(
     api.documents.presence.getViewers,
     documentId ? { documentId: documentId as Id<'documents'> } : 'skip',
   );
@@ -261,12 +261,12 @@ export default function DocumentViewClient({
   const isSavingRef = useRef(false);
   const documentIdRef = useRef<string | null>(null);
 
-  const liveDocument = useQuery(api.documents.queries.getById, {
+  const liveDocument = useCachedQuery(api.documents.queries.getById, {
     documentId: params.documentId as Id<'documents'>,
   });
   const document = liveDocument === undefined ? initialDocument : liveDocument;
 
-  const teamsQuery = useQuery(api.organizations.queries.listTeams, {
+  const teamsQuery = useCachedQuery(api.organizations.queries.listTeams, {
     orgSlug: params.orgSlug,
   });
   const teams = withIds(teamsQuery ?? initialTeams ?? []);

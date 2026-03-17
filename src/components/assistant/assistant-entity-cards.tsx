@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { DynamicIcon } from '@/lib/dynamic-icons';
 import { Circle, FileText, FolderKanban, Users } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -49,12 +48,15 @@ export function AssistantProjectCard({ projectKey }: { projectKey: string }) {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
 
-  const projects = useQuery(api.organizations.queries.listProjects, {
+  const projects = useCachedQuery(api.organizations.queries.listProjects, {
     orgSlug,
   });
-  const statuses = useQuery(api.organizations.queries.listProjectStatuses, {
-    orgSlug,
-  });
+  const statuses = useCachedQuery(
+    api.organizations.queries.listProjectStatuses,
+    {
+      orgSlug,
+    },
+  );
   const project = projects?.find(p => p.key === projectKey);
 
   const changeStatus = useMutation(api.projects.mutations.changeStatus);
@@ -146,7 +148,9 @@ export function AssistantTeamCard({ teamKey }: { teamKey: string }) {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
 
-  const teams = useQuery(api.organizations.queries.listTeams, { orgSlug });
+  const teams = useCachedQuery(api.organizations.queries.listTeams, {
+    orgSlug,
+  });
   const team = teams?.find(t => t.key === teamKey);
 
   if (teams === undefined) return <CardSkeleton />;
@@ -197,7 +201,7 @@ export function AssistantTeamCard({ teamKey }: { teamKey: string }) {
 export function AssistantDocumentCard({ documentId }: { documentId: string }) {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
-  const document = useQuery(api.documents.queries.getById, {
+  const document = useCachedQuery(api.documents.queries.getById, {
     documentId: documentId as Id<'documents'>,
   });
 

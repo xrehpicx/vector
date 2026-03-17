@@ -1,8 +1,7 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { api, useCachedQuery } from '@/lib/convex';
 import Link from 'next/link';
-import { api } from '@/lib/convex';
 import { DynamicIcon } from '@/lib/dynamic-icons';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,7 +18,7 @@ export function PublicDocumentPage({
   orgSlug,
   documentId,
 }: PublicDocumentPageProps) {
-  const document = useQuery(api.og.queries.getPublicDocumentFull, {
+  const document = useCachedQuery(api.og.queries.getPublicDocumentFull, {
     orgSlug,
     documentId,
   });

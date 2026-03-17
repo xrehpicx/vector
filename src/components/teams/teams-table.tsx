@@ -13,9 +13,8 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { formatDateHuman } from '@/lib/date';
-import { useMutation } from 'convex/react';
+import { api, useMutation } from '@/lib/convex';
 import { useConfirm } from '@/hooks/use-confirm';
-import { api } from '@/lib/convex';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
 import { IconPicker } from '@/components/ui/icon-picker';
 import { Id } from '@/convex/_generated/dataModel';

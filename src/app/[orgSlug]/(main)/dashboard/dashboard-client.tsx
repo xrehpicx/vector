@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useCachedQuery } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { PageSkeleton } from '@/components/ui/table-skeleton';
 import { Users, FolderOpen, GitBranch, Bug } from 'lucide-react';
@@ -11,9 +11,12 @@ interface DashboardClientProps {
 }
 
 export default function DashboardClient({ orgSlug }: DashboardClientProps) {
-  const orgStats = useQuery(api.organizations.queries.getOrganizationStats, {
-    orgSlug,
-  });
+  const orgStats = useCachedQuery(
+    api.organizations.queries.getOrganizationStats,
+    {
+      orgSlug,
+    },
+  );
 
   if (orgStats === undefined) {
     return <PageSkeleton />;

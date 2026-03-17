@@ -6,8 +6,7 @@ import {
   OrgSettingsSidebar,
   OrgOptionsDropdown,
 } from '@/components/organization';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { useParams, usePathname } from 'next/navigation';
 import { Doc } from '@/convex/_generated/dataModel';
 import { ArrowLeft, PanelLeft, Menu } from 'lucide-react';
@@ -64,16 +63,16 @@ export default function OrgSettingsLayout({
   const orgSlug = params.orgSlug as string;
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const user = useQuery(api.users.currentUser);
-  const members = useQuery(
+  const user = useCachedQuery(api.users.currentUser);
+  const members = useCachedQuery(
     api.organizations.queries.listMembersWithRoles,
     user?._id ? { orgSlug } : 'skip',
   );
-  const organization = useQuery(
+  const organization = useCachedQuery(
     api.organizations.queries.getBySlug,
     user?._id ? { orgSlug } : 'skip',
   );
-  const userOrganizations = useQuery(
+  const userOrganizations = useCachedQuery(
     api.users.getOrganizations,
     user?._id ? {} : 'skip',
   );

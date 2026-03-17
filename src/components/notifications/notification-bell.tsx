@@ -1,16 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from 'convex/react';
+import { api, useCachedQuery } from '@/lib/convex';
 import { Bell } from 'lucide-react';
-import { api } from '@/lib/convex';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { NotificationsSheet } from './notifications-sheet';
 
 export function NotificationBell({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
-  const unreadCount = useQuery(api.notifications.queries.unreadCount);
+  const unreadCount = useCachedQuery(api.notifications.queries.unreadCount);
   const count = unreadCount ?? 0;
 
   return (

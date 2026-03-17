@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { PermissionAwareButton } from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { Button } from '@/components/ui/button';
@@ -219,23 +218,25 @@ export function CreateIssueDialogContent({
   //   Fetch data (teams, projects, states)
   // ---------------------------------------------
   // Get teams and projects data
-  const teamsData = useQuery(api.organizations.queries.listTeams, { orgSlug });
-  const projectsData = useQuery(api.organizations.queries.listProjects, {
+  const teamsData = useCachedQuery(api.organizations.queries.listTeams, {
     orgSlug,
   });
-  const statesData = useQuery(api.organizations.queries.listIssueStates, {
+  const projectsData = useCachedQuery(api.organizations.queries.listProjects, {
     orgSlug,
   });
-  const membersData = useQuery(api.organizations.queries.listMembers, {
+  const statesData = useCachedQuery(api.organizations.queries.listIssueStates, {
     orgSlug,
   });
-  const prioritiesData = useQuery(
+  const membersData = useCachedQuery(api.organizations.queries.listMembers, {
+    orgSlug,
+  });
+  const prioritiesData = useCachedQuery(
     api.organizations.queries.listIssuePriorities,
     {
       orgSlug,
     },
   );
-  const currentUser = useQuery(api.users.currentUser);
+  const currentUser = useCachedQuery(api.users.currentUser);
 
   // Transform data to maintain frontend compatibility
   const teams = teamsData ? withIds(teamsData) : [];

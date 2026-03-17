@@ -2,7 +2,7 @@
 
 import React, { Suspense } from 'react';
 import { TeamsPageContent } from '@/components/teams/teams-page-content';
-import { useQuery } from 'convex/react';
+import { useCachedQuery } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { PageSkeleton } from '@/components/ui/table-skeleton';
 
@@ -11,7 +11,7 @@ interface TeamsPageProps {
 }
 
 function TeamsPageInner({ orgSlug }: { orgSlug: string }) {
-  const canCreateTeams = useQuery(api.permissions.queries.has, {
+  const canCreateTeams = useCachedQuery(api.permissions.queries.has, {
     orgSlug,
     permission: 'team:create',
   });

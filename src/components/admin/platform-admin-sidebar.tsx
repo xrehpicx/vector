@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Shield, Palette, Blocks } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useQuery } from '@/lib/convex';
-import { api } from '@/lib/convex';
+import { api, useQuery } from '@/lib/convex';
 
 export function PlatformAdminSidebar() {
   const pathname = usePathname();

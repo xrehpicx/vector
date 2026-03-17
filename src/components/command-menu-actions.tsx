@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useMutation } from '@/lib/convex';
 import { useScopedPermissions } from '@/hooks/use-permissions';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { toast } from 'sonner';

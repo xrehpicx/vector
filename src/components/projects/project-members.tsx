@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,7 +52,7 @@ export function ProjectMembersSection({
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
   const [confirm, ConfirmDialog] = useConfirm();
 
-  const project = useQuery(api.projects.queries.getByKey, {
+  const project = useCachedQuery(api.projects.queries.getByKey, {
     orgSlug,
     projectKey,
   });
@@ -60,14 +60,14 @@ export function ProjectMembersSection({
 
   // Fetch members for this project
   const members =
-    useQuery(
+    useCachedQuery(
       api.projects.queries.listMembers,
       projectId ? { projectId } : 'skip',
     ) ?? [];
 
   // Fetch organization members for filtering
   const orgMembers =
-    useQuery(api.organizations.queries.listMembers, {
+    useCachedQuery(api.organizations.queries.listMembers, {
       orgSlug,
     }) ?? [];
 
@@ -211,7 +211,7 @@ function AddMemberDialog({
   const [addingUserId, setAddingUserId] = useState<string | null>(null);
 
   const orgMembers =
-    useQuery(api.organizations.queries.listMembers, {
+    useCachedQuery(api.organizations.queries.listMembers, {
       orgSlug,
     }) ?? [];
 
@@ -309,7 +309,7 @@ function MembersList({
   removePending?: boolean;
   canEdit: boolean;
 }) {
-  const user = useQuery(api.users.currentUser);
+  const user = useCachedQuery(api.users.currentUser);
   const currentUserId = user?._id;
 
   return (

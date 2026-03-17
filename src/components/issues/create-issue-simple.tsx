@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,13 +62,13 @@ export function CreateIssueSimple({
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch data
-  const projectsData = useQuery(api.organizations.queries.listProjects, {
+  const projectsData = useCachedQuery(api.organizations.queries.listProjects, {
     orgSlug,
   });
-  const statesData = useQuery(api.organizations.queries.listIssueStates, {
+  const statesData = useCachedQuery(api.organizations.queries.listIssueStates, {
     orgSlug,
   });
-  const prioritiesData = useQuery(
+  const prioritiesData = useCachedQuery(
     api.organizations.queries.listIssuePriorities,
     {
       orgSlug,

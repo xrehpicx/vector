@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { DynamicIcon } from '@/lib/dynamic-icons';
 import { Circle } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -24,18 +23,24 @@ export function AssistantIssueCard({ issueKey }: { issueKey: string }) {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
 
-  const issue = useQuery(api.issues.queries.getByKey, { orgSlug, issueKey });
-  const assignments = useQuery(
+  const issue = useCachedQuery(api.issues.queries.getByKey, {
+    orgSlug,
+    issueKey,
+  });
+  const assignments = useCachedQuery(
     api.issues.queries.getAssignments,
     issue ? { issueId: issue._id } : 'skip',
   );
-  const states = useQuery(api.organizations.queries.listIssueStates, {
+  const states = useCachedQuery(api.organizations.queries.listIssueStates, {
     orgSlug,
   });
-  const priorities = useQuery(api.organizations.queries.listIssuePriorities, {
-    orgSlug,
-  });
-  const user = useQuery(api.users.currentUser);
+  const priorities = useCachedQuery(
+    api.organizations.queries.listIssuePriorities,
+    {
+      orgSlug,
+    },
+  );
+  const user = useCachedQuery(api.users.currentUser);
   const { isAllowed: canAssignIssues } = usePermissionCheck(
     orgSlug,
     PERMISSIONS.ISSUE_ASSIGN,

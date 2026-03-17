@@ -3,8 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Plus, Shield, Crown, Settings, UserCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { CreateRoleDialog } from './create-role-dialog';
 import { EditRoleDialog } from './edit-role-dialog';
 import { AssignRoleDialog } from './assign-role-dialog';
@@ -75,10 +74,10 @@ export function RolesPageContent({ orgSlug }: RolesPageContentProps) {
     PERMISSIONS.ORG_MANAGE_ROLES,
   );
 
-  const membersQuery = useQuery(api.organizations.queries.listMembers, {
+  const membersQuery = useCachedQuery(api.organizations.queries.listMembers, {
     orgSlug,
   });
-  const roleDocsQuery = useQuery(api.roles.index.list, { orgSlug });
+  const roleDocsQuery = useCachedQuery(api.roles.index.list, { orgSlug });
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { owner: 0, admin: 0, member: 0 };

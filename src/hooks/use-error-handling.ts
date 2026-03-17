@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { analyzeError, type ErrorInfo } from '@/lib/error-handling';
-import { useMutation } from 'convex/react';
+import { useMutation } from '@/lib/convex';
 import type { FunctionReference } from 'convex/server';
 import { toast } from 'sonner';
 

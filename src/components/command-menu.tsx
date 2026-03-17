@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useParams, usePathname } from 'next/navigation';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { useScopedPermissions } from '@/hooks/use-permissions';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import {
@@ -87,31 +86,31 @@ export function CommandMenu() {
   );
 
   // Search entities when user types (debounced via Convex reactivity)
-  const searchResults = useQuery(
+  const searchResults = useCachedQuery(
     api.search.queries.searchEntities,
     search.length >= 2 ? { orgSlug, query: search, limit: 5 } : 'skip',
   );
 
   // Fetch workspace options when command menu is open and on a contextual page
-  const workspaceOptions = useQuery(
+  const workspaceOptions = useCachedQuery(
     api.organizations.queries.getWorkspaceOptions,
     open && pageContext ? { orgSlug } : 'skip',
   );
 
   // Fetch current entity data when on a contextual page
-  const issueData = useQuery(
+  const issueData = useCachedQuery(
     api.issues.queries.getByKey,
     open && pageContext?.type === 'issue'
       ? { orgSlug, issueKey: pageContext.issueKey }
       : 'skip',
   );
-  const teamData = useQuery(
+  const teamData = useCachedQuery(
     api.teams.queries.getByKey,
     open && pageContext?.type === 'team'
       ? { orgSlug, teamKey: pageContext.teamKey }
       : 'skip',
   );
-  const projectData = useQuery(
+  const projectData = useCachedQuery(
     api.projects.queries.getByKeyOrNull,
     open && pageContext?.type === 'project'
       ? { orgSlug, projectKey: pageContext.projectKey }

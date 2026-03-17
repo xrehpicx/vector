@@ -3,8 +3,7 @@
 import { Blocks, Github, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { useParams } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -13,11 +12,14 @@ export default function IntegrationsPage() {
   const paramsObj = useParams();
   const orgSlug = paramsObj.orgSlug as string;
 
-  const user = useQuery(api.users.currentUser);
-  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
-    orgSlug,
-  });
-  const githubSettings = useQuery(api.github.queries.getOrgSettings, {
+  const user = useCachedQuery(api.users.currentUser);
+  const members = useCachedQuery(
+    api.organizations.queries.listMembersWithRoles,
+    {
+      orgSlug,
+    },
+  );
+  const githubSettings = useCachedQuery(api.github.queries.getOrgSettings, {
     orgSlug,
   });
 

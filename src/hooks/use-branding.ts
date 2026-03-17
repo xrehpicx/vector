@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { DEFAULT_BRANDING, type Branding } from '@/lib/branding';
 
 /**
@@ -9,6 +8,6 @@ import { DEFAULT_BRANDING, type Branding } from '@/lib/branding';
  * so consumers never see undefined.
  */
 export function useBranding(): Branding {
-  const result = useQuery(api.platformAdmin.queries.getBranding, {});
+  const result = useCachedQuery(api.platformAdmin.queries.getBranding, {});
   return result ?? DEFAULT_BRANDING;
 }

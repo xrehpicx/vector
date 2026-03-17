@@ -14,6 +14,8 @@ This section covers local setup, environment variables, and everyday development
 
 This section explains the product, who it is for, and the main workflows it supports.
 
+- [Core workspace entities](./product/04-entities.md)
+
 ### 3. [Architecture](./architecture/01-stack.md)
 
 This section gives a high-level view of the stack, project structure, permissions model, and storage flow.

@@ -1,7 +1,6 @@
 'use client';
 import React from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import type { Permission } from '@/convex/_shared/permissions';
 import type { Id } from '../../convex/_generated/dataModel';
 
@@ -22,7 +21,7 @@ export function useScopedPermission(
 ) {
   const isClient = typeof window !== 'undefined';
 
-  const hasPermission = useQuery(
+  const hasPermission = useCachedQuery(
     api.permissions.queries.has,
     scope.orgSlug && permission && isClient
       ? {
@@ -63,7 +62,7 @@ export function useScopedPermissions(
 ) {
   const isClient = typeof window !== 'undefined';
 
-  const permissionMap = useQuery(
+  const permissionMap = useCachedQuery(
     api.permissions.queries.hasMultiple,
     scope.orgSlug && permissions.length > 0 && isClient
       ? {

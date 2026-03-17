@@ -16,7 +16,7 @@ import {
   GitPullRequest,
 } from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
-import { useAction, useMutation, useQuery } from 'convex/react';
+import { useCachedQuery, useMutation, useAction } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { formatDateHuman } from '@/lib/date';
 import Link from 'next/link';
@@ -196,8 +196,8 @@ export default function IssueViewClient({
     {},
   );
 
-  const user = useQuery(api.users.currentUser);
-  const githubCapabilities = useQuery(
+  const user = useCachedQuery(api.users.currentUser);
+  const githubCapabilities = useCachedQuery(
     api.github.queries.getGitHubCapabilities,
     { orgSlug: params.orgSlug },
   );
@@ -212,7 +212,7 @@ export default function IssueViewClient({
   const [isLinkingGithub, setIsLinkingGithub] = useState(false);
   const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
 
-  const liveIssue = useQuery(api.issues.queries.getByKey, {
+  const liveIssue = useCachedQuery(api.issues.queries.getByKey, {
     orgSlug: params.orgSlug,
     issueKey: params.issueKey,
   });
@@ -224,12 +224,12 @@ export default function IssueViewClient({
       : '';
   const displayTitle = issue?.title ?? '';
   const displayDescription = issue?.description ?? '';
-  const assignments = useQuery(
+  const assignments = useCachedQuery(
     api.issues.queries.getAssignments,
     issue ? { issueId: issue._id } : 'skip',
   );
 
-  const liveWorkspaceOptions = useQuery(
+  const liveWorkspaceOptions = useCachedQuery(
     api.organizations.queries.getWorkspaceOptions,
     { orgSlug: params.orgSlug },
   );

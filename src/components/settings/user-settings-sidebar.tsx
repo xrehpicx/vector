@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { User, Mail, Bell, Settings, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useQuery } from '@/lib/convex';
-import { api } from '@/lib/convex';
+import { api, useQuery } from '@/lib/convex';
 
 interface SettingsNavItem {
   label: string;

@@ -3,8 +3,7 @@
 import { ProfileForm } from '@/components/profile-form';
 import { redirect } from 'next/navigation';
 import { useEffect } from 'react';
-import { useQuery } from '@/lib/convex';
-import { api } from '@/lib/convex';
+import { api, useQuery } from '@/lib/convex';
 import { User } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 

@@ -12,8 +12,7 @@ import {
 } from '@/components/ui/responsive-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useMutation } from '@/lib/convex';
 import type { Permission } from '@/convex/_shared/permissions';
 
 import { ALL_PERMISSIONS_WITH_GROUP } from '@/lib/permission-groups';

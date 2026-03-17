@@ -24,8 +24,7 @@ import { CreateTeamButton } from '@/components/teams/create-team-button';
 import { CreateProjectButton } from '@/components/projects/create-project-button';
 import { ScopedPermissionGate } from '@/hooks/use-permissions';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { withIds } from '@/lib/convex-helpers';
 import type { ReactNode } from 'react';
 import { DynamicIcon } from '@/lib/dynamic-icons';
@@ -49,11 +48,11 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
   const pathname = usePathname();
 
   // Fetch only teams/projects the user is a member of
-  const userTeamsData = useQuery(api.teams.queries.listMyTeams, {
+  const userTeamsData = useCachedQuery(api.teams.queries.listMyTeams, {
     orgSlug: orgSlug,
   });
 
-  const userProjectsData = useQuery(api.projects.queries.listMyProjects, {
+  const userProjectsData = useCachedQuery(api.projects.queries.listMyProjects, {
     orgSlug: orgSlug,
   });
 
@@ -61,11 +60,16 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
   const userTeams = userTeamsData ? withIds(userTeamsData) : [];
   const userProjects = userProjectsData ? withIds(userProjectsData) : [];
 
-  const userDocumentsData = useQuery(api.documents.queries.listMyDocuments, {
-    orgSlug: orgSlug,
-  });
+  const userDocumentsData = useCachedQuery(
+    api.documents.queries.listMyDocuments,
+    {
+      orgSlug: orgSlug,
+    },
+  );
   const userDocuments = userDocumentsData ?? [];
-  const visibleViewsData = useQuery(api.views.queries.listViews, { orgSlug });
+  const visibleViewsData = useCachedQuery(api.views.queries.listViews, {
+    orgSlug,
+  });
   const visibleViews = visibleViewsData ?? [];
 
   const navItems: NavItem[] = [

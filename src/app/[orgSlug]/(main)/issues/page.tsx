@@ -1,7 +1,11 @@
 'use client';
 
-import { useMutation } from 'convex/react';
-import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
+import {
+  api,
+  useCachedQuery,
+  useCachedPaginatedQuery,
+  useMutation,
+} from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { useParams, useSearchParams } from 'next/navigation';

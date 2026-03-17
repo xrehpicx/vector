@@ -11,8 +11,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { UserAvatar } from '@/components/user-avatar';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { OrganizationRoleId } from '@/lib/organization-role-types';
 
@@ -34,7 +33,7 @@ export function AssignRoleDialog({
   );
 
   const members =
-    useQuery(api.organizations.queries.listMembers, { orgSlug }) || [];
+    useCachedQuery(api.organizations.queries.listMembers, { orgSlug }) || [];
   const assignMutation = useMutation(api.roles.index.assign);
 
   const [isSubmitting, setIsSubmitting] = useState(false);

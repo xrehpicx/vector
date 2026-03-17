@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { Bell, Check, Laptop, Send, Smartphone, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/lib/convex';
 import {
   isPushSupported,
   subscribeCurrentBrowserToPush,
@@ -19,7 +18,9 @@ import {
 } from '@/lib/optimistic-updates';
 
 type Preferences = NonNullable<
-  ReturnType<typeof useQuery<typeof api.notifications.queries.getPreferences>>
+  ReturnType<
+    typeof useCachedQuery<typeof api.notifications.queries.getPreferences>
+  >
 >;
 
 const channelConfig = [
@@ -48,8 +49,8 @@ const categoryLabels: Record<string, { title: string; description: string }> = {
 };
 
 export function NotificationPreferencesPage() {
-  const preferences = useQuery(api.notifications.queries.getPreferences);
-  const subscriptions = useQuery(
+  const preferences = useCachedQuery(api.notifications.queries.getPreferences);
+  const subscriptions = useCachedQuery(
     api.notifications.queries.listPushSubscriptions,
   );
   const updatePreferences = useMutation(

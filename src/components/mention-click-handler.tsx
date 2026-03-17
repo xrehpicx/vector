@@ -7,8 +7,7 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import type { Id } from '@/convex/_generated/dataModel';
 import { UserAvatar } from '@/components/user-avatar';
 import { Mail } from 'lucide-react';
@@ -111,7 +110,9 @@ import { forwardRef } from 'react';
 
 const MentionUserPopover = forwardRef<HTMLDivElement, MentionUserPopoverProps>(
   ({ userId, anchorRect }, ref) => {
-    const user = useQuery(api.users.getUser, { userId: userId as Id<'users'> });
+    const user = useCachedQuery(api.users.getUser, {
+      userId: userId as Id<'users'>,
+    });
 
     // Position below the mention chip
     const top = anchorRect.bottom + 6;

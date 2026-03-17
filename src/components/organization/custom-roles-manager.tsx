@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { Plus, Check } from 'lucide-react';
@@ -45,7 +45,7 @@ export function CustomRolesManager({
     useState<OrganizationRoleId | null>(null);
 
   // Fetch all custom (non-system) roles for this organization
-  const allRoles = useQuery(api.roles.index.list, { orgSlug });
+  const allRoles = useCachedQuery(api.roles.index.list, { orgSlug });
 
   const assignMutation = useMutation(api.roles.index.assign);
   const removeAssignmentMutation = useMutation(

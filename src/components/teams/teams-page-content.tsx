@@ -6,8 +6,12 @@ import { Button } from '@/components/ui/button';
 
 import { PageSkeleton } from '@/components/ui/table-skeleton';
 import { MobileNavTrigger } from '@/app/[orgSlug]/(main)/layout';
-import { useMutation } from 'convex/react';
-import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
+import {
+  api,
+  useCachedQuery,
+  useCachedPaginatedQuery,
+  useMutation,
+} from '@/lib/convex';
 import { Id } from '@/convex/_generated/dataModel';
 import { cn } from '@/lib/utils';
 

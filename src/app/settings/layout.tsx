@@ -2,8 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
-import { useQuery } from '@/lib/convex';
-import { api } from '@/lib/convex';
+import { api, useQuery } from '@/lib/convex';
 import { usePathname } from 'next/navigation';
 import { UserSettingsSidebar } from '@/components/settings/user-settings-sidebar';
 import { UserMenu } from '@/components/user-menu';

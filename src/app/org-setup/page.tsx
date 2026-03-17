@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation, api } from '@/lib/convex';
+import { api, useQuery, useMutation } from '@/lib/convex';
 import { OrgSetupForm } from '@/components/organization';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

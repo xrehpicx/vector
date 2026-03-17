@@ -1,15 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { api } from '@/lib/convex';
 import type { Id } from '@/convex/_generated/dataModel';
 
 export function useAssistantActions(orgSlug: string) {
   const router = useRouter();
-  const pendingActions = useQuery(api.ai.queries.listPendingActions, {
+  const pendingActions = useCachedQuery(api.ai.queries.listPendingActions, {
     orgSlug,
   });
   const markCompleted = useMutation(api.ai.mutations.markActionCompleted);

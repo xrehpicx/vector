@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useCachedQuery } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { FileText } from 'lucide-react';
 import { DynamicIcon } from '@/lib/dynamic-icons';
@@ -19,7 +19,7 @@ export function LinkedDocuments({
   mentionType,
   entityId,
 }: LinkedDocumentsProps) {
-  const docs = useQuery(api.documents.queries.listByMention, {
+  const docs = useCachedQuery(api.documents.queries.listByMention, {
     orgSlug,
     mentionType,
     entityId,

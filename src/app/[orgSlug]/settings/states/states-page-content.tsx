@@ -11,7 +11,7 @@ import {
   PrioritiesManagementDialog,
   PrioritiesManagementPopover,
 } from '@/components/organization';
-import { useQuery, useMutation } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { toast } from 'sonner';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
@@ -81,18 +81,24 @@ const groupStatesByType = <T extends { type: string }>(
 };
 
 export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
-  const issueStates = useQuery(api.organizations.queries.listIssueStates, {
-    orgSlug,
-  });
-  const projectStatuses = useQuery(
+  const issueStates = useCachedQuery(
+    api.organizations.queries.listIssueStates,
+    {
+      orgSlug,
+    },
+  );
+  const projectStatuses = useCachedQuery(
     api.organizations.queries.listProjectStatuses,
     {
       orgSlug,
     },
   );
-  const priorities = useQuery(api.organizations.queries.listIssuePriorities, {
-    orgSlug,
-  });
+  const priorities = useCachedQuery(
+    api.organizations.queries.listIssuePriorities,
+    {
+      orgSlug,
+    },
+  );
 
   const createIssueState = useMutation(
     api.organizations.mutations.createIssueState,

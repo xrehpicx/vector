@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useMutation } from '@/lib/convex';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {

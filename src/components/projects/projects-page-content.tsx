@@ -2,8 +2,12 @@
 
 import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useMutation } from 'convex/react';
-import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
+import {
+  api,
+  useCachedQuery,
+  useCachedPaginatedQuery,
+  useMutation,
+} from '@/lib/convex';
 import type { Id } from '../../../convex/_generated/dataModel';
 import { ProjectsTable } from './projects-table';
 import type { ProjectRowData } from './projects-table';

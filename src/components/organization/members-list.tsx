@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { useMemo } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
@@ -369,12 +368,17 @@ function InviteActions({
 }
 
 export function MembersList({ orgSlug }: { orgSlug: string }) {
-  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
+  const members = useCachedQuery(
+    api.organizations.queries.listMembersWithRoles,
+    {
+      orgSlug,
+    },
+  );
+  const invites = useCachedQuery(api.organizations.queries.listInvites, {
     orgSlug,
   });
-  const invites = useQuery(api.organizations.queries.listInvites, { orgSlug });
-  const currentUser = useQuery(api.users.getCurrentUser);
-  const allRoles = useQuery(api.roles.index.list, { orgSlug });
+  const currentUser = useCachedQuery(api.users.getCurrentUser);
+  const allRoles = useCachedQuery(api.roles.index.list, { orgSlug });
   const [showInvite, setShowInvite] = useState(false);
   const isMobile = useIsMobile();
 

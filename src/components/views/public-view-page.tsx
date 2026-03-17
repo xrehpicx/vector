@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import {
   Lock,
   ChevronLeft,
@@ -29,12 +28,12 @@ const PAGE_SIZE = 50;
 export function PublicViewPage({ orgSlug, viewId }: PublicViewPageProps) {
   const [page, setPage] = useState(1);
 
-  const view = useQuery(api.views.queries.getPublicView, {
+  const view = useCachedQuery(api.views.queries.getPublicView, {
     orgSlug,
     viewId,
   });
 
-  const issuesData = useQuery(
+  const issuesData = useCachedQuery(
     api.views.queries.listPublicViewIssues,
     view ? { viewId, page, pageSize: PAGE_SIZE } : 'skip',
   );

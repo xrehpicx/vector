@@ -1,6 +1,6 @@
 'use client';
 
-import { useAction, useMutation, api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation, useAction } from '@/lib/convex';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -30,7 +30,6 @@ import { toast } from 'sonner';
 import { getGitHubLinkErrorMessage } from '@/lib/error-handling';
 import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '@/convex/_generated/dataModel';
-import { useQuery } from 'convex/react';
 
 const STALE_AFTER_MS = 5 * 60 * 1000;
 
@@ -400,10 +399,10 @@ export function IssueDevelopmentSection({
   issueId: Id<'issues'>;
   issueKey: string;
 }) {
-  const development = useQuery(api.github.queries.getIssueDevelopment, {
+  const development = useCachedQuery(api.github.queries.getIssueDevelopment, {
     issueId,
   });
-  const githubCapabilities = useQuery(
+  const githubCapabilities = useCachedQuery(
     api.github.queries.getGitHubCapabilities,
     {
       orgSlug,

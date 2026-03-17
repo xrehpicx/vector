@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMutation, usePaginatedQuery } from 'convex/react';
+import { api, useMutation } from '@/lib/convex';
+import { usePaginatedQuery } from 'convex/react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Bell,
@@ -13,7 +14,6 @@ import {
   MessageSquare,
   UserPlus,
 } from 'lucide-react';
-import { api } from '@/lib/convex';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/user-avatar';
 import { Button } from '@/components/ui/button';

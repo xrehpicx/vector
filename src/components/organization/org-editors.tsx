@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Edit, Check, X, Loader2, AlertCircle } from 'lucide-react';
@@ -350,7 +349,7 @@ export function OrgLogoEditor({ orgSlug, initialValue }: LogoEditorProps) {
   const updateLogoWithStorageId = useMutation(
     api.organizations.mutations.updateLogoWithStorageId,
   );
-  const getLogoUrl = useQuery(api.organizations.queries.getLogoUrl, {
+  const getLogoUrl = useCachedQuery(api.organizations.queries.getLogoUrl, {
     orgSlug,
   });
 

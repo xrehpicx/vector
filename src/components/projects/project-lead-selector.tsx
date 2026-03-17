@@ -18,7 +18,7 @@ import {
 import { UserAvatar } from '@/components/user-avatar';
 import { cn } from '@/lib/utils';
 import { Check, User } from 'lucide-react';
-import { useQuery } from 'convex/react';
+import { useCachedQuery } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import type { FunctionReturnType } from 'convex/server';
 import { useAccess } from '@/components/ui/permission-aware';
@@ -65,20 +65,20 @@ export function ProjectLeadSelector({
   const displayLead = selectedLead;
 
   const { viewOnly } = useAccess();
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const currentUser = useCachedQuery(api.users.getCurrentUser);
   const currentUserId = currentUser?._id;
 
   // Fetch organization members (for project creation)
   const orgMembers: OrgMember[] =
-    useQuery(api.organizations.queries.listMembers, { orgSlug }) ?? [];
-  const project = useQuery(
+    useCachedQuery(api.organizations.queries.listMembers, { orgSlug }) ?? [];
+  const project = useCachedQuery(
     api.projects.queries.getByKey,
     projectKey ? { orgSlug, projectKey } : 'skip',
   );
 
   // Fetch project members if projectKey and project ID are available
   const projectMembers: ProjectMember[] =
-    useQuery(
+    useCachedQuery(
       api.projects.queries.listMembers,
       projectKey && project?._id ? { projectId: project._id } : 'skip',
     ) ?? [];

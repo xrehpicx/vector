@@ -1,8 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
-import { useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useMutation } from '@/lib/convex';
 import { useState } from 'react';
 import type { Id } from '@/convex/_generated/dataModel';
 import type {

@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
-import { useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useMutation } from '@/lib/convex';
 import { Loader2 } from 'lucide-react';
 
 export function OrgSetupForm() {

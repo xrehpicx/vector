@@ -2,8 +2,7 @@
 
 import { Settings2 } from 'lucide-react';
 import { PrioritiesPageContent } from './priorities-page-content';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { useParams } from 'next/navigation';
 import { notFound } from 'next/navigation';
 
@@ -15,10 +14,13 @@ export default function PrioritiesSettingsPage({}: PrioritiesSettingsPageProps) 
   const paramsObj = useParams();
   const orgSlug = paramsObj.orgSlug as string;
 
-  const user = useQuery(api.users.currentUser);
-  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
-    orgSlug,
-  });
+  const user = useCachedQuery(api.users.currentUser);
+  const members = useCachedQuery(
+    api.organizations.queries.listMembersWithRoles,
+    {
+      orgSlug,
+    },
+  );
 
   const userRole = members?.find(m => m.userId === user?._id)?.role || 'member';
   const isOwner = userRole === 'owner';

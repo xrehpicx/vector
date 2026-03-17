@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { Lock, Globe, Calendar } from 'lucide-react';
 import { DynamicIcon } from '@/lib/dynamic-icons';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,7 +16,7 @@ export function PublicProjectPage({
   orgSlug,
   projectKey,
 }: PublicProjectPageProps) {
-  const project = useQuery(api.og.queries.getPublicProjectFull, {
+  const project = useCachedQuery(api.og.queries.getPublicProjectFull, {
     orgSlug,
     projectKey,
   });

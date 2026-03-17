@@ -12,8 +12,7 @@ import {
 } from '@/components/ui/responsive-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import type { Permission } from '@/convex/_shared/permissions';
 import type { OrganizationRoleId } from '@/lib/organization-role-types';
 
@@ -38,12 +37,12 @@ export function EditRoleDialog({
     [],
   );
 
-  const role = useQuery(api.roles.index.get, {
+  const role = useCachedQuery(api.roles.index.get, {
     orgSlug: orgSlug,
     roleId,
   });
 
-  const rolePermissionsQuery = useQuery(api.roles.index.getPermissions, {
+  const rolePermissionsQuery = useCachedQuery(api.roles.index.getPermissions, {
     roleId,
   });
 

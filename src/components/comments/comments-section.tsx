@@ -7,7 +7,8 @@ import {
   useRef,
   useSyncExternalStore,
 } from 'react';
-import { useQuery, useMutation, usePaginatedQuery } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
+import { usePaginatedQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { UserAvatar } from '@/components/user-avatar';
@@ -713,7 +714,7 @@ export function IssueCommentsSection({
   const [pendingComments, setPendingComments] = useState<PendingComment[]>([]);
   const localIdBase = useId();
 
-  const comments = useQuery(api.issues.queries.listComments, {
+  const comments = useCachedQuery(api.issues.queries.listComments, {
     issueId,
   });
 
@@ -786,7 +787,7 @@ export function DocumentCommentsSection({
   const [pendingComments, setPendingComments] = useState<PendingComment[]>([]);
   const localIdBase = useId();
 
-  const comments = useQuery(api.documents.queries.listComments, {
+  const comments = useCachedQuery(api.documents.queries.listComments, {
     documentId,
   });
 

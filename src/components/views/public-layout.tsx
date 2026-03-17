@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useQuery } from 'convex/react';
+import { api, useCachedQuery } from '@/lib/convex';
 import {
   Github,
   Globe,
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { buttonVariants } from '@/components/ui/button';
-import { api } from '@/lib/convex';
 import { useBranding } from '@/hooks/use-branding';
 import type { SocialLinkPlatform } from '@/lib/social-links';
 import { cn } from '@/lib/utils';
@@ -45,8 +44,8 @@ export function PublicLayout({
 }) {
   const pathname = usePathname();
   const branding = useBranding();
-  const currentUser = useQuery(api.users.currentUser);
-  const publicProfile = useQuery(
+  const currentUser = useCachedQuery(api.users.currentUser);
+  const publicProfile = useCachedQuery(
     api.organizations.queries.getPublicProfileBySlug,
     { orgSlug },
   );

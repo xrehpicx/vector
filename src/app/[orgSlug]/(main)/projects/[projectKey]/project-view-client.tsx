@@ -13,7 +13,7 @@ import {
   Columns3,
   Trash2,
 } from 'lucide-react';
-import { useMutation, useQuery } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import type { FunctionReturnType } from 'convex/server';
 import { Button } from '@/components/ui/button';
@@ -287,9 +287,9 @@ export default function ProjectViewClient({
   const [issuePage, setIssuePage] = useState(1);
   const ISSUE_PAGE_SIZE = 25;
 
-  const user = useQuery(api.users.currentUser);
+  const user = useCachedQuery(api.users.currentUser);
 
-  const liveProject = useQuery(api.projects.queries.getByKey, {
+  const liveProject = useCachedQuery(api.projects.queries.getByKey, {
     orgSlug: params.orgSlug,
     projectKey: params.projectKey,
   });
@@ -340,7 +340,7 @@ export default function ProjectViewClient({
       canEditProject)
   );
 
-  const liveWorkspaceOptions = useQuery(
+  const liveWorkspaceOptions = useCachedQuery(
     api.organizations.queries.getWorkspaceOptions,
     { orgSlug: params.orgSlug },
   );
@@ -352,7 +352,7 @@ export default function ProjectViewClient({
   const teams = workspaceOptions?.teams;
   const issueStates = workspaceOptions?.issueStates;
   const issuePriorities = workspaceOptions?.issuePriorities;
-  const liveProjectIssuesData = useQuery(
+  const liveProjectIssuesData = useCachedQuery(
     api.issues.queries.listIssues,
     project?._id
       ? {

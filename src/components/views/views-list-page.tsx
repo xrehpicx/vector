@@ -1,7 +1,11 @@
 'use client';
 
-import { useMutation } from 'convex/react';
-import { api, useCachedPaginatedQuery, useCachedQuery } from '@/lib/convex';
+import {
+  api,
+  useCachedQuery,
+  useCachedPaginatedQuery,
+  useMutation,
+} from '@/lib/convex';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {

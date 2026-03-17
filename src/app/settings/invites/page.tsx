@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,7 +22,7 @@ const header = (
 );
 
 export default function InvitesPage() {
-  const invites = useQuery(api.users.getPendingInvitations);
+  const invites = useCachedQuery(api.users.getPendingInvitations);
   const acceptInvite = useMutation(
     api.organizations.mutations.acceptInvitation,
   );

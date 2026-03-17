@@ -10,14 +10,13 @@ import {
   Shield,
   Webhook,
 } from 'lucide-react';
-import { useAction, useMutation, api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation, useAction } from '@/lib/convex';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useQuery } from 'convex/react';
 import { formatDateHuman } from '@/lib/date';
 import { toast } from 'sonner';
 
@@ -52,7 +51,9 @@ function IntegrationRow({
 }
 
 export function GitHubIntegrationSettings({ orgSlug }: { orgSlug: string }) {
-  const settings = useQuery(api.github.queries.getOrgSettings, { orgSlug });
+  const settings = useCachedQuery(api.github.queries.getOrgSettings, {
+    orgSlug,
+  });
   const rotateWebhookSecret = useAction(api.github.actions.rotateWebhookSecret);
   const setAutoLinkEnabled = useMutation(
     api.github.mutations.setAutoLinkEnabled,

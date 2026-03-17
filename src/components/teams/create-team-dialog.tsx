@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { Input } from '@/components/ui/input';
 import { RichEditor } from '@/components/ui/rich-editor';
 import { Button } from '@/components/ui/button';
@@ -55,7 +54,7 @@ export function CreateTeamDialogContent({
 
   // Get organization members for lead selection
   const orgMembersData =
-    useQuery(api.organizations.queries.listMembers, { orgSlug }) ?? [];
+    useCachedQuery(api.organizations.queries.listMembers, { orgSlug }) ?? [];
 
   // Transform orgMembers to match the expected Member interface
   const orgMembers = orgMembersData.map(member => ({

@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +25,7 @@ import { UserAvatar } from '@/components/user-avatar';
 import { useTheme } from 'next-themes';
 
 export function UserMenu() {
-  const user = useQuery(api.users.currentUser);
+  const user = useCachedQuery(api.users.currentUser);
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const isDark = theme === 'dark';

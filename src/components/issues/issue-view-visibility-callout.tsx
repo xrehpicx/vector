@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { Globe, Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -14,9 +13,12 @@ interface IssueViewVisibilityCalloutProps {
 export function IssueViewVisibilityCallout({
   issueId,
 }: IssueViewVisibilityCalloutProps) {
-  const matchingViews = useQuery(api.views.queries.getViewsContainingIssue, {
-    issueId,
-  });
+  const matchingViews = useCachedQuery(
+    api.views.queries.getViewsContainingIssue,
+    {
+      issueId,
+    },
+  );
   const excludeIssue = useMutation(api.views.mutations.excludeIssueFromView);
   const includeIssue = useMutation(api.views.mutations.includeIssueInView);
 

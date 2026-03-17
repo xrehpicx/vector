@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery } from '@/lib/convex';
-import { api } from '@/lib/convex';
+import { api, useQuery } from '@/lib/convex';
 import { User, Mail, Bell, Settings } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';

@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { Lock, Globe, Users } from 'lucide-react';
 import { DynamicIcon } from '@/lib/dynamic-icons';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,7 +12,7 @@ interface PublicTeamPageProps {
 }
 
 export function PublicTeamPage({ orgSlug, teamKey }: PublicTeamPageProps) {
-  const team = useQuery(api.og.queries.getPublicTeamFull, {
+  const team = useCachedQuery(api.og.queries.getPublicTeamFull, {
     orgSlug,
     teamKey,
   });

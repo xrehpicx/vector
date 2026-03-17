@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { PrioritiesManagementDialog } from '@/components/organization/priorities-management-dialog';
-import { useQuery, useMutation } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { toast } from 'sonner';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
@@ -23,9 +23,12 @@ interface PrioritiesPageContentProps {
 }
 
 export function PrioritiesPageContent({ orgSlug }: PrioritiesPageContentProps) {
-  const priorities = useQuery(api.organizations.queries.listIssuePriorities, {
-    orgSlug,
-  });
+  const priorities = useCachedQuery(
+    api.organizations.queries.listIssuePriorities,
+    {
+      orgSlug,
+    },
+  );
 
   const createMutation = useMutation(
     api.organizations.mutations.createIssuePriority,

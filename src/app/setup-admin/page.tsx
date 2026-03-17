@@ -27,8 +27,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, ShieldCheck } from 'lucide-react';
 import { extractAuthErrorMessage } from '@/lib/auth-error-handler';
 import Link from 'next/link';
-import { useAction } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useAction } from '@/lib/convex';
 
 export const dynamic = 'force-dynamic';
 

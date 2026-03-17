@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { useQuery, api } from '@/lib/convex';
+import { api, useQuery } from '@/lib/convex';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // --- Post-login redirect logic -----------------------------------------------------------

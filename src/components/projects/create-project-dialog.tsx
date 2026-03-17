@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichEditor } from '@/components/ui/rich-editor';
@@ -64,7 +63,7 @@ export function CreateProjectDialogContent({
 
   // Get teams
   const teamsData =
-    useQuery(api.organizations.queries.listTeams, { orgSlug }) ?? [];
+    useCachedQuery(api.organizations.queries.listTeams, { orgSlug }) ?? [];
   const teams = teamsData.map(team => ({
     id: team._id,
     name: team.name,
@@ -75,7 +74,9 @@ export function CreateProjectDialogContent({
 
   // Get project statuses from organization
   const statusesData =
-    useQuery(api.organizations.queries.listProjectStatuses, { orgSlug }) ?? [];
+    useCachedQuery(api.organizations.queries.listProjectStatuses, {
+      orgSlug,
+    }) ?? [];
   const statuses = statusesData.map(status => ({
     _id: status._id,
     name: status.name,

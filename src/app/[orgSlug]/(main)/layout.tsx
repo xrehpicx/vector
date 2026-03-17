@@ -27,8 +27,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery } from '@/lib/convex';
 import { useParams, usePathname } from 'next/navigation';
 import { Doc } from '@/convex/_generated/dataModel';
 
@@ -186,12 +185,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
   } = useResizableSidebar();
 
   // Fetch current user and organization data
-  const user = useQuery(api.users.currentUser);
-  const organization = useQuery(
+  const user = useCachedQuery(api.users.currentUser);
+  const organization = useCachedQuery(
     api.organizations.queries.getBySlug,
     user?._id ? { orgSlug } : 'skip',
   );
-  const userOrganizations = useQuery(
+  const userOrganizations = useCachedQuery(
     api.users.getOrganizations,
     user?._id ? {} : 'skip',
   );

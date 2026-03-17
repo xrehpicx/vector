@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -244,12 +244,12 @@ function FolderContent({
   const [editing, setEditing] = useState(false);
   const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
 
-  const folders = useQuery(api.documents.folderQueries.listFolders, {
+  const folders = useCachedQuery(api.documents.folderQueries.listFolders, {
     orgSlug,
   });
   const folder = folders?.find(f => f._id === folderId);
 
-  const documents = useQuery(api.documents.queries.list, {
+  const documents = useCachedQuery(api.documents.queries.list, {
     orgSlug,
     folderId: folderId as Id<'documentFolders'>,
   });

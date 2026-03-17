@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { OrgRoleBadge } from '@/components/organization/role-badge';
-import { useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useMutation } from '@/lib/convex';
 import { cn } from '@/lib/utils';
 import {
   Popover,

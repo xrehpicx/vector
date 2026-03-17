@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -62,18 +61,23 @@ export function ViewDetailPage() {
   const orgSlug = params.orgSlug;
   const viewId = params.viewId as Id<'views'>;
 
-  const view = useQuery(api.views.queries.getById, { viewId });
-  const user = useQuery(api.users.currentUser);
+  const view = useCachedQuery(api.views.queries.getById, { viewId });
+  const user = useCachedQuery(api.users.currentUser);
   const currentUserId = user?._id ?? '';
 
-  const states = useQuery(api.organizations.queries.listIssueStates, {
+  const states = useCachedQuery(api.organizations.queries.listIssueStates, {
     orgSlug,
   });
-  const priorities = useQuery(api.organizations.queries.listIssuePriorities, {
+  const priorities = useCachedQuery(
+    api.organizations.queries.listIssuePriorities,
+    {
+      orgSlug,
+    },
+  );
+  const teams = useCachedQuery(api.organizations.queries.listTeams, {
     orgSlug,
   });
-  const teams = useQuery(api.organizations.queries.listTeams, { orgSlug });
-  const projects = useQuery(api.organizations.queries.listProjects, {
+  const projects = useCachedQuery(api.organizations.queries.listProjects, {
     orgSlug,
   });
 
@@ -86,7 +90,7 @@ export function ViewDetailPage() {
   const isListView = viewMode === 'table' || viewMode === 'timeline';
 
   // Build query args from view filters
-  const issuesData = useQuery(
+  const issuesData = useCachedQuery(
     api.views.queries.listViewIssues,
     view
       ? {

@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { OrganizationRoleId } from '@/lib/organization-role-types';
 import { Button } from '@/components/ui/button';
@@ -31,7 +30,7 @@ export function CustomRoleAssigner({
   const [open, setOpen] = useState(false);
 
   // Fetch custom (non-system) roles for this organization
-  const roles = useQuery(api.roles.index.list, { orgSlug }) || [];
+  const roles = useCachedQuery(api.roles.index.list, { orgSlug }) || [];
   const assignMutation = useMutation(api.roles.index.assign);
   const [isAssigning, setIsAssigning] = useState(false);
 

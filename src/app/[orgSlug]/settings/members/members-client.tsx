@@ -26,7 +26,7 @@ import {
   ResponsiveDialogTitle,
 } from '@/components/ui/responsive-dialog';
 import { AssignRoleDialog } from '@/components/organization/assign-role-dialog';
-import { useMutation, useQuery } from 'convex/react';
+import { useCachedQuery, useMutation } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { toast } from 'sonner';
 import { useState } from 'react';
@@ -40,9 +40,12 @@ interface MembersSettingsPageClientProps {
 export default function MembersSettingsPageClient({
   orgSlug,
 }: MembersSettingsPageClientProps) {
-  const members = useQuery(api.organizations.queries.listMembersWithRoles, {
-    orgSlug,
-  });
+  const members = useCachedQuery(
+    api.organizations.queries.listMembersWithRoles,
+    {
+      orgSlug,
+    },
+  );
   const removeMember = useMutation(api.organizations.mutations.removeMember);
   const [selectedMember, setSelectedMember] = useState<Doc<'members'> | null>(
     null,

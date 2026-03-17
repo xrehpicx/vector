@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
 import {
   ResponsiveDialog,
@@ -215,7 +214,7 @@ export function IssueAssignments({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   // Current user info
-  const currentUser = useQuery(api.users.currentUser);
+  const currentUser = useCachedQuery(api.users.currentUser);
   const currentUserId = currentUser?._id || '';
 
   // Permission check (manage assignments)
@@ -225,7 +224,7 @@ export function IssueAssignments({
   );
 
   // Fetch assignments for this issue
-  const assignments = useQuery(api.issues.queries.getAssignments, {
+  const assignments = useCachedQuery(api.issues.queries.getAssignments, {
     issueId,
   });
   const isAssignmentsLoading = assignments === undefined;

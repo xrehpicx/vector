@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Authenticated, Unauthenticated, AuthLoading } from 'convex/react';
-import { useQuery } from 'convex/react';
+import { useCachedQuery } from '@/lib/convex';
 import { api } from '../../../convex/_generated/api';
 import { extractAuthErrorMessage } from '@/lib/auth-error-handler';
 import { authClient } from '@/lib/auth-client';
@@ -134,7 +134,7 @@ function SignInForm() {
 }
 
 function UserProfile() {
-  const user = useQuery(api.users.currentUser);
+  const user = useCachedQuery(api.users.currentUser);
 
   if (!user) {
     return (

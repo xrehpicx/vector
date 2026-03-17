@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useAction, useMutation, useQuery } from 'convex/react';
-import { api } from '@/lib/convex';
+import { api, useCachedQuery, useMutation, useAction } from '@/lib/convex';
 import { authClient } from '@/lib/auth-client';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,7 +30,7 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export function ProfileForm() {
-  const user = useQuery(api.users.currentUser);
+  const user = useCachedQuery(api.users.currentUser);
   const updateProfile = useMutation(api.users.updateProfile);
   const generateProfileImageUploadUrl = useMutation(
     api.users.generateProfileImageUploadUrl,
@@ -275,7 +274,7 @@ export function ProfileForm() {
 function GitHubConnectionSection() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const githubConnection = useQuery(api.users.getGitHubConnection);
+  const githubConnection = useCachedQuery(api.users.getGitHubConnection);
   const unlinkGitHub = useMutation(api.users.unlinkGitHubIdentity);
   const syncGitHubIdentity = useAction(
     api.users.syncGitHubIdentityFromLinkedAccount,
