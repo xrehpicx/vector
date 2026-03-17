@@ -12,6 +12,8 @@ import { LayoutList, Columns3, Search, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { IssuesKanban } from '@/components/issues/issues-kanban';
+import type { IssueGroupByField } from '@/lib/group-by';
+import { GroupBySelector } from '@/components/ui/group-by-selector';
 import { PageSkeleton, KanbanSkeleton } from '@/components/ui/table-skeleton';
 import {
   ProjectSelector,
@@ -55,6 +57,26 @@ const filterTabs = [
 ];
 
 const ISSUES_LAYOUT_STORAGE_KEY = 'vector:issues-list-layout';
+const ISSUES_GROUP_BY_STORAGE_KEY = 'vector:issues-group-by';
+const VALID_ISSUE_GROUP_BY: IssueGroupByField[] = [
+  'none',
+  'priority',
+  'status',
+  'assignee',
+  'team',
+  'project',
+];
+
+function getInitialGroupBy(): IssueGroupByField {
+  if (typeof window === 'undefined') return 'priority';
+  const urlVal = new URLSearchParams(window.location.search).get('groupBy');
+  if (urlVal && VALID_ISSUE_GROUP_BY.includes(urlVal as IssueGroupByField))
+    return urlVal as IssueGroupByField;
+  const stored = localStorage.getItem(ISSUES_GROUP_BY_STORAGE_KEY);
+  if (stored && VALID_ISSUE_GROUP_BY.includes(stored as IssueGroupByField))
+    return stored as IssueGroupByField;
+  return 'priority';
+}
 
 export default function IssuesPage() {
   const params = useParams();
@@ -62,6 +84,24 @@ export default function IssuesPage() {
   const orgSlug = params.orgSlug as string;
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [scopeTab, setScopeTab] = useState<ScopeTab>('mine');
+  const [groupBy, setGroupByState] =
+    useState<IssueGroupByField>(getInitialGroupBy);
+  const setGroupBy = useCallback((val: IssueGroupByField) => {
+    setGroupByState(val);
+    localStorage.setItem(ISSUES_GROUP_BY_STORAGE_KEY, val);
+    const sp = new URLSearchParams(window.location.search);
+    if (val === 'priority') {
+      sp.delete('groupBy');
+    } else {
+      sp.set('groupBy', val);
+    }
+    const qs = sp.toString();
+    window.history.replaceState(
+      null,
+      '',
+      qs ? `?${qs}` : window.location.pathname,
+    );
+  }, []);
 
   const viewParam = searchParams.get('view');
   const queryMode: ViewMode | null = viewParam === 'table' ? 'table' : null;
@@ -113,7 +153,11 @@ export default function IssuesPage() {
   const changeAssignmentStateMutation = useMutation(
     api.issues.mutations.changeWorkflowState,
   );
-  const { isAllowed: canChangeAll } = usePermissionCheck(
+  const { isAllowed: canAssignIssues } = usePermissionCheck(
+    orgSlug,
+    PERMISSIONS.ISSUE_ASSIGN,
+  );
+  const { isAllowed: canUpdateAssignmentStates } = usePermissionCheck(
     orgSlug,
     PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
   );
@@ -331,24 +375,28 @@ export default function IssuesPage() {
                 </span>
               </Button>
             ))}
-            <div className='bg-border mx-1 h-4 w-px shrink-0' />
-            {visibleTabs.map(tab => (
-              <Button
-                key={tab.key}
-                variant={activeFilter === tab.key ? 'secondary' : 'ghost'}
-                size='sm'
-                className={cn(
-                  'h-6 shrink-0 gap-2 rounded-xs px-3 text-xs font-normal',
-                  activeFilter === tab.key && 'bg-secondary',
-                )}
-                onClick={() => setActiveFilter(tab.key)}
-              >
-                <span>{tab.label}</span>
-                <span className='text-muted-foreground text-xs'>
-                  {tab.count}
-                </span>
-              </Button>
-            ))}
+            {viewMode !== 'kanban' && (
+              <>
+                <div className='bg-border mx-1 h-4 w-px shrink-0' />
+                {visibleTabs.map(tab => (
+                  <Button
+                    key={tab.key}
+                    variant={activeFilter === tab.key ? 'secondary' : 'ghost'}
+                    size='sm'
+                    className={cn(
+                      'h-6 shrink-0 gap-2 rounded-xs px-3 text-xs font-normal',
+                      activeFilter === tab.key && 'bg-secondary',
+                    )}
+                    onClick={() => setActiveFilter(tab.key)}
+                  >
+                    <span>{tab.label}</span>
+                    <span className='text-muted-foreground text-xs'>
+                      {tab.count}
+                    </span>
+                  </Button>
+                ))}
+              </>
+            )}
           </div>
 
           {/* View switcher + filters + create */}
@@ -381,11 +429,29 @@ export default function IssuesPage() {
                 variant={viewMode === 'kanban' ? 'secondary' : 'ghost'}
                 size='sm'
                 className='h-6 rounded-l-none px-2'
-                onClick={() => setViewMode('kanban')}
+                onClick={() => {
+                  setViewMode('kanban');
+                  setActiveFilter('all');
+                }}
               >
                 <Columns3 className='size-3.5' />
               </Button>
             </div>
+
+            {/* Group by selector */}
+            <GroupBySelector<IssueGroupByField>
+              options={[
+                { value: 'none', label: 'No grouping' },
+                { value: 'priority', label: 'Priority' },
+                { value: 'status', label: 'Status' },
+                { value: 'assignee', label: 'Assignee' },
+                { value: 'team', label: 'Team' },
+                { value: 'project', label: 'Project' },
+              ]}
+              value={groupBy}
+              onChange={setGroupBy}
+              className='h-6 text-xs'
+            />
 
             {/* Team filter */}
             <PermissionAware
@@ -455,8 +521,9 @@ export default function IssuesPage() {
                 onAssignmentStateChange={handleAssignmentStateChange}
                 isUpdatingAssignmentStates={isUpdatingAssignmentStates}
                 currentUserId={currentUserId}
-                canChangeAll={canChangeAll}
+                canManageAssignees={canAssignIssues}
                 activeFilter={activeFilter}
+                groupBy={groupBy}
               />
             </div>
 
@@ -504,7 +571,8 @@ export default function IssuesPage() {
               teams={teams ?? []}
               projects={projects ?? []}
               currentUserId={currentUserId}
-              canChangeAll={canChangeAll}
+              canManageAssignees={canAssignIssues}
+              canUpdateAssignmentStates={canUpdateAssignmentStates}
               onStateChange={(_issueId, assignmentId, stateId) => {
                 void handleAssignmentStateChange(assignmentId, stateId);
               }}
@@ -516,6 +584,7 @@ export default function IssuesPage() {
               onProjectChange={handleProjectChange}
               onDelete={handleDelete}
               deletePending={isDeleting}
+              groupBy={groupBy}
             />
           </motion.div>
         )}

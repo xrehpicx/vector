@@ -49,12 +49,17 @@ export const getByKey = query({
       .map(assignment => assignment.stateId)
       .filter((id): id is Id<'issueStates'> => Boolean(id));
 
-    const assigneeUsers = await Promise.all(
-      assignees.map(async assignee => {
-        if (!assignee.assigneeId) return null;
-        return await ctx.db.get('users', assignee.assigneeId);
-      }),
-    ).then(users => users.filter(isDefined));
+    const assigneeUsers = Array.from(
+      (
+        await loadDocMap(
+          ctx,
+          'users',
+          assignees
+            .map(assignee => assignee.assigneeId)
+            .filter((id): id is Id<'users'> => Boolean(id)),
+        )
+      ).values(),
+    );
     const assigneeStateMap =
       assigneeStateIds.length > 0
         ? await loadDocMap(ctx, 'issueStates', assigneeStateIds)
@@ -91,25 +96,39 @@ export const getByKey = query({
         ? await loadDocMap(ctx, 'issueStates', childAssignmentStateIds)
         : new Map<Id<'issueStates'>, Doc<'issueStates'>>();
 
-    const children = await Promise.all(
-      childIssues.map(async child => {
-        const childPriority = child.priorityId
-          ? await ctx.db.get('issuePriorities', child.priorityId)
-          : null;
-        const state = child.workflowStateId
-          ? await ctx.db.get('issueStates', child.workflowStateId)
-          : resolveWorkflowStateFromAssignments(
-              childAssignmentsByIssue.get(child._id) ?? [],
-              childAssignmentStateMap,
-            );
+    const [childPriorityMap, childWorkflowStateMap] = await Promise.all([
+      loadDocMap(
+        ctx,
+        'issuePriorities',
+        childIssues
+          .map(child => child.priorityId)
+          .filter((id): id is Id<'issuePriorities'> => Boolean(id)),
+      ),
+      loadDocMap(
+        ctx,
+        'issueStates',
+        childIssues
+          .map(child => child.workflowStateId)
+          .filter((id): id is Id<'issueStates'> => Boolean(id)),
+      ),
+    ]);
 
-        return {
-          ...child,
-          priority: childPriority,
-          state,
-        };
-      }),
-    );
+    const children = childIssues.map(child => {
+      const state = child.workflowStateId
+        ? (childWorkflowStateMap.get(child.workflowStateId) ?? null)
+        : resolveWorkflowStateFromAssignments(
+            childAssignmentsByIssue.get(child._id) ?? [],
+            childAssignmentStateMap,
+          );
+
+      return {
+        ...child,
+        priority: child.priorityId
+          ? (childPriorityMap.get(child.priorityId) ?? null)
+          : null,
+        state,
+      };
+    });
 
     return {
       ...issue,

@@ -29,6 +29,8 @@ import {
 } from '@/components/issues/issue-selectors';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
 import { formatDateHuman } from '@/lib/date';
+import { groupIssues, type IssueGroupByField } from '@/lib/group-by';
+import { GroupSection } from '@/components/ui/group-section';
 
 // Re-exported entity from the selector module give us fully-typed data
 import type {
@@ -68,8 +70,9 @@ export interface IssuesTableProps {
   onAssignmentStateChange: (assignmentId: string, stateId: string) => void;
   isUpdatingAssignmentStates?: boolean;
   currentUserId: string;
-  canChangeAll?: boolean;
+  canManageAssignees?: boolean;
   activeFilter: string;
+  groupBy?: IssueGroupByField;
 }
 
 export function IssuesTable({
@@ -89,8 +92,9 @@ export function IssuesTable({
   onAssignmentStateChange,
   isUpdatingAssignmentStates: _isUpdatingAssignmentStates = false,
   currentUserId,
-  canChangeAll = false,
+  canManageAssignees = false,
   activeFilter,
+  groupBy = 'none',
 }: IssuesTableProps) {
   const router = useRouter();
   const groupedIssues = React.useMemo(() => {
@@ -175,6 +179,11 @@ export function IssuesTable({
     [groupedIssues, activeFilter],
   );
 
+  const groups = React.useMemo(() => {
+    if (!groupBy || groupBy === 'none') return null;
+    return groupIssues(sortedGrouped, groupBy);
+  }, [sortedGrouped, groupBy]);
+
   if (issues.length === 0) {
     return (
       <div className='text-muted-foreground flex items-center justify-center py-12 text-sm'>
@@ -183,211 +192,236 @@ export function IssuesTable({
     );
   }
 
+  const renderIssueRow = ({
+    row: issue,
+    assigneeIds,
+    assignments,
+  }: (typeof sortedGrouped)[number]) => {
+    // Priority icon / color
+    const PriorityIcon = issue.priorityIcon
+      ? getDynamicIcon(issue.priorityIcon) || Circle
+      : Circle;
+    const priorityColor = issue.priorityColor || '#94a3b8';
+
+    // Prefer showing the current viewer's assignment state
+    const viewerAssignment = assignments.find(
+      a => a.assigneeId === currentUserId,
+    );
+    const displayStateId = viewerAssignment?.stateId ?? issue.workflowStateId;
+
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 8 }}
+        transition={{ duration: 0.2 }}
+        key={issue.id}
+        onClick={e => {
+          const target = e.target as HTMLElement;
+          if (
+            target.closest(
+              'button, [role="combobox"], [data-radix-popper-content-wrapper], a',
+            )
+          ) {
+            return;
+          }
+          router.push(`/${orgSlug}/issues/${issue.key}`);
+        }}
+        className='hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors'
+      >
+        {/* Priority Selector */}
+        <PermissionAware
+          orgSlug={orgSlug}
+          permission={PERMISSIONS.ISSUE_PRIORITY_UPDATE}
+          fallbackMessage="You don't have permission to change issue priority"
+        >
+          <PrioritySelector
+            priorities={priorities as Priority[]}
+            selectedPriority={issue.priorityId || ''}
+            onPrioritySelect={pid => onPriorityChange(issue.id, pid)}
+            displayMode='labelOnly'
+            trigger={
+              <Button
+                variant='ghost'
+                size='icon'
+                className='size-6 shrink-0 rounded-md'
+                aria-label='Change issue priority'
+              >
+                <PriorityIcon
+                  className='size-4'
+                  style={{ color: priorityColor }}
+                />
+              </Button>
+            }
+            className='border-none bg-transparent p-0 shadow-none'
+          />
+        </PermissionAware>
+
+        {/* Issue Key */}
+        <div className='hidden flex-shrink-0 items-center gap-2 sm:flex'>
+          <span className='text-muted-foreground font-mono text-xs'>
+            {issue.key}
+          </span>
+          {issue.parentIssueKey && (
+            <div className='hidden items-center gap-1 md:flex'>
+              <ArrowUp className='text-muted-foreground/60 h-3 w-3' />
+              <span className='text-muted-foreground/60 font-mono text-xs'>
+                {issue.parentIssueKey}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <PermissionAware
+          orgSlug={orgSlug}
+          permission={PERMISSIONS.ISSUE_STATE_UPDATE}
+          fallbackMessage="You don't have permission to change issue state"
+        >
+          <StateSelector
+            states={states}
+            selectedState={displayStateId || ''}
+            onStateSelect={stateId =>
+              onAssignmentStateChange(issue.id, stateId)
+            }
+            displayMode='labelOnly'
+            className='border-none bg-transparent p-0 shadow-none'
+          />
+        </PermissionAware>
+
+        {/* Title */}
+        <div className='min-w-0 flex-1'>
+          <Link
+            href={`/${orgSlug}/issues/${issue.key}`}
+            className='hover:text-primary block truncate text-sm font-medium transition-colors'
+          >
+            {issue.title}
+          </Link>
+        </div>
+
+        {/* Team / Project selectors - hidden on mobile */}
+        <div className='hidden md:contents'>
+          {issue.teamKey && (
+            <PermissionAware
+              orgSlug={orgSlug}
+              permission={PERMISSIONS.ISSUE_EDIT}
+              fallbackMessage="You don't have permission to change issue team"
+            >
+              <TeamSelector
+                teams={teams}
+                selectedTeam={
+                  teams.find(t => t.key === issue.teamKey)?._id || ''
+                }
+                onTeamSelect={tid => onTeamChange(issue.id, tid)}
+              />
+            </PermissionAware>
+          )}
+
+          {issue.projectKey && (
+            <PermissionAware
+              orgSlug={orgSlug}
+              permission={PERMISSIONS.ISSUE_EDIT}
+              fallbackMessage="You don't have permission to change issue project"
+            >
+              <ProjectSelector
+                projects={projects}
+                selectedProject={
+                  projects.find(p => p.key === issue.projectKey)?._id || ''
+                }
+                onProjectSelect={pid => onProjectChange(issue.id, pid)}
+              />
+            </PermissionAware>
+          )}
+        </div>
+
+        {/* PR link + Last Updated - hidden on mobile */}
+        <div className='hidden flex-shrink-0 items-center gap-2 sm:flex'>
+          {issue.linkedPrs && issue.linkedPrs.length > 0 ? (
+            <Link
+              href={issue.linkedPrs[0].url}
+              target='_blank'
+              rel='noreferrer'
+              onClick={e => e.stopPropagation()}
+              className='text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs transition-colors'
+            >
+              <GitPullRequest className='size-3' />
+              <span className='font-mono'>#{issue.linkedPrs[0].number}</span>
+            </Link>
+          ) : null}
+          <span className='text-muted-foreground text-xs'>
+            {formatDateHuman(new Date(issue.updatedAt))}
+          </span>
+        </div>
+
+        {/* Assignees */}
+        <MultiAssigneeSelector
+          orgSlug={orgSlug}
+          selectedAssigneeIds={assigneeIds}
+          onAssigneesChange={ids => onAssigneesChange(issue.id!, ids)}
+          isLoading={isUpdatingAssignees}
+          highlightAssigneeId={null}
+          assignments={assignments}
+          activeFilter={activeFilter}
+          currentUserId={currentUserId}
+          canManageAll={canManageAssignees}
+        />
+
+        {/* Actions */}
+        <div className='flex-shrink-0'>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='h-6 w-6 p-0'
+                aria-label='Open issue actions'
+              >
+                <MoreHorizontal className='size-4' />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuItem
+                variant='destructive'
+                disabled={deletePending}
+                onClick={() => onDelete(issue.id!)}
+              >
+                <Trash2 className='size-4' />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </motion.div>
+    );
+  };
+
+  if (groups) {
+    return (
+      <div>
+        {groups.map(group => (
+          <GroupSection
+            key={group.key}
+            label={group.label}
+            count={group.items.length}
+            icon={group.icon}
+            color={group.color}
+            avatar={group.avatar}
+          >
+            <div className='divide-y'>
+              <AnimatePresence initial={false}>
+                {group.items.map(renderIssueRow)}
+              </AnimatePresence>
+            </div>
+          </GroupSection>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className='divide-y'>
       <AnimatePresence initial={false}>
-        {sortedGrouped.map(({ row: issue, assigneeIds, assignments }) => {
-          // Priority icon / color
-          const PriorityIcon = issue.priorityIcon
-            ? getDynamicIcon(issue.priorityIcon) || Circle
-            : Circle;
-          const priorityColor = issue.priorityColor || '#94a3b8';
-
-          // Prefer showing the current viewer's assignment state
-          const viewerAssignment = assignments.find(
-            a => a.assigneeId === currentUserId,
-          );
-          const displayStateId =
-            viewerAssignment?.stateId ?? issue.workflowStateId;
-
-          return (
-            <motion.div
-              layout
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.2 }}
-              key={issue.id}
-              onClick={e => {
-                const target = e.target as HTMLElement;
-                if (
-                  target.closest(
-                    'button, [role="combobox"], [data-radix-popper-content-wrapper], a',
-                  )
-                ) {
-                  return;
-                }
-                router.push(`/${orgSlug}/issues/${issue.key}`);
-              }}
-              className='hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors'
-            >
-              {/* Priority Selector */}
-              <PermissionAware
-                orgSlug={orgSlug}
-                permission={PERMISSIONS.ISSUE_PRIORITY_UPDATE}
-                fallbackMessage="You don't have permission to change issue priority"
-              >
-                <PrioritySelector
-                  priorities={priorities as Priority[]}
-                  selectedPriority={issue.priorityId || ''}
-                  onPrioritySelect={pid => onPriorityChange(issue.id, pid)}
-                  displayMode='labelOnly'
-                  trigger={
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='size-6 shrink-0 rounded-md'
-                      aria-label='Change issue priority'
-                    >
-                      <PriorityIcon
-                        className='size-4'
-                        style={{ color: priorityColor }}
-                      />
-                    </Button>
-                  }
-                  className='border-none bg-transparent p-0 shadow-none'
-                />
-              </PermissionAware>
-
-              {/* Issue Key */}
-              <div className='hidden flex-shrink-0 items-center gap-2 sm:flex'>
-                <span className='text-muted-foreground font-mono text-xs'>
-                  {issue.key}
-                </span>
-                {issue.parentIssueKey && (
-                  <div className='hidden items-center gap-1 md:flex'>
-                    <ArrowUp className='text-muted-foreground/60 h-3 w-3' />
-                    <span className='text-muted-foreground/60 font-mono text-xs'>
-                      {issue.parentIssueKey}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <PermissionAware
-                orgSlug={orgSlug}
-                permission={PERMISSIONS.ISSUE_STATE_UPDATE}
-                fallbackMessage="You don't have permission to change issue state"
-              >
-                <StateSelector
-                  states={states}
-                  selectedState={displayStateId || ''}
-                  onStateSelect={stateId =>
-                    onAssignmentStateChange(issue.id, stateId)
-                  }
-                  displayMode='labelOnly'
-                  className='border-none bg-transparent p-0 shadow-none'
-                />
-              </PermissionAware>
-
-              {/* Title */}
-              <div className='min-w-0 flex-1'>
-                <Link
-                  href={`/${orgSlug}/issues/${issue.key}`}
-                  className='hover:text-primary block truncate text-sm font-medium transition-colors'
-                >
-                  {issue.title}
-                </Link>
-              </div>
-
-              {/* Team / Project selectors - hidden on mobile */}
-              <div className='hidden md:contents'>
-                {issue.teamKey && (
-                  <PermissionAware
-                    orgSlug={orgSlug}
-                    permission={PERMISSIONS.ISSUE_EDIT}
-                    fallbackMessage="You don't have permission to change issue team"
-                  >
-                    <TeamSelector
-                      teams={teams}
-                      selectedTeam={
-                        teams.find(t => t.key === issue.teamKey)?._id || ''
-                      }
-                      onTeamSelect={tid => onTeamChange(issue.id, tid)}
-                    />
-                  </PermissionAware>
-                )}
-
-                {issue.projectKey && (
-                  <PermissionAware
-                    orgSlug={orgSlug}
-                    permission={PERMISSIONS.ISSUE_EDIT}
-                    fallbackMessage="You don't have permission to change issue project"
-                  >
-                    <ProjectSelector
-                      projects={projects}
-                      selectedProject={
-                        projects.find(p => p.key === issue.projectKey)?._id ||
-                        ''
-                      }
-                      onProjectSelect={pid => onProjectChange(issue.id, pid)}
-                    />
-                  </PermissionAware>
-                )}
-              </div>
-
-              {/* PR link + Last Updated - hidden on mobile */}
-              <div className='hidden flex-shrink-0 items-center gap-2 sm:flex'>
-                {issue.linkedPrs && issue.linkedPrs.length > 0 ? (
-                  <Link
-                    href={issue.linkedPrs[0].url}
-                    target='_blank'
-                    rel='noreferrer'
-                    onClick={e => e.stopPropagation()}
-                    className='text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs transition-colors'
-                  >
-                    <GitPullRequest className='size-3' />
-                    <span className='font-mono'>
-                      #{issue.linkedPrs[0].number}
-                    </span>
-                  </Link>
-                ) : null}
-                <span className='text-muted-foreground text-xs'>
-                  {formatDateHuman(new Date(issue.updatedAt))}
-                </span>
-              </div>
-
-              {/* Assignees */}
-              <MultiAssigneeSelector
-                orgSlug={orgSlug}
-                selectedAssigneeIds={assigneeIds}
-                onAssigneesChange={ids => onAssigneesChange(issue.id!, ids)}
-                isLoading={isUpdatingAssignees}
-                highlightAssigneeId={null}
-                assignments={assignments}
-                activeFilter={activeFilter}
-                currentUserId={currentUserId}
-                canManageAll={canChangeAll}
-              />
-
-              {/* Actions */}
-              <div className='flex-shrink-0'>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      className='h-6 w-6 p-0'
-                      aria-label='Open issue actions'
-                    >
-                      <MoreHorizontal className='size-4' />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align='end'>
-                    <DropdownMenuItem
-                      variant='destructive'
-                      disabled={deletePending}
-                      onClick={() => onDelete(issue.id!)}
-                    >
-                      <Trash2 className='size-4' />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </motion.div>
-          );
-        })}
+        {sortedGrouped.map(renderIssueRow)}
       </AnimatePresence>
     </div>
   );

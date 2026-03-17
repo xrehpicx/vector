@@ -17,6 +17,8 @@ import { MobileNavTrigger } from '@/app/[orgSlug]/(main)/layout';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePersistedViewMode } from '@/hooks/use-persisted-view-mode';
 import { updateProjectRows, updateQuery } from '@/lib/optimistic-updates';
+import type { ProjectGroupByField } from '@/lib/group-by';
+import { GroupBySelector } from '@/components/ui/group-by-selector';
 
 // Define project status types based on Convex schema
 type StatusType =
@@ -67,12 +69,49 @@ interface ProjectsPageContentProps {
 type ViewMode = 'table' | 'kanban';
 
 const PROJECTS_LAYOUT_STORAGE_KEY = 'vector:projects-list-layout';
+const PROJECTS_GROUP_BY_STORAGE_KEY = 'vector:projects-group-by';
+const VALID_PROJECT_GROUP_BY: ProjectGroupByField[] = [
+  'none',
+  'status',
+  'team',
+  'lead',
+];
+
+function getInitialProjectGroupBy(): ProjectGroupByField {
+  if (typeof window === 'undefined') return 'status';
+  const urlVal = new URLSearchParams(window.location.search).get('groupBy');
+  if (urlVal && VALID_PROJECT_GROUP_BY.includes(urlVal as ProjectGroupByField))
+    return urlVal as ProjectGroupByField;
+  const stored = localStorage.getItem(PROJECTS_GROUP_BY_STORAGE_KEY);
+  if (stored && VALID_PROJECT_GROUP_BY.includes(stored as ProjectGroupByField))
+    return stored as ProjectGroupByField;
+  return 'status';
+}
 
 export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [scopeTab, setScopeTab] = useState<ScopeTab>('mine');
+  const [groupBy, setGroupByState] = useState<ProjectGroupByField>(
+    getInitialProjectGroupBy,
+  );
+  const setGroupBy = useCallback((val: ProjectGroupByField) => {
+    setGroupByState(val);
+    localStorage.setItem(PROJECTS_GROUP_BY_STORAGE_KEY, val);
+    const sp = new URLSearchParams(window.location.search);
+    if (val === 'status') {
+      sp.delete('groupBy');
+    } else {
+      sp.set('groupBy', val);
+    }
+    const qs = sp.toString();
+    window.history.replaceState(
+      null,
+      '',
+      qs ? `?${qs}` : window.location.pathname,
+    );
+  }, []);
 
   const viewParam = searchParams.get('view');
   const queryMode: ViewMode | null = viewParam === 'kanban' ? 'kanban' : null;
@@ -115,33 +154,45 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
   const membersData = useQuery(api.organizations.queries.listMembers, {
     orgSlug,
   });
+  const teamMetaById = new Map(
+    (teamsData ?? []).map(team => [
+      team._id,
+      { name: team.name, key: team.key },
+    ]),
+  );
 
   // Transform helper
   const transformProjects = (
     data: typeof allProjectsData | typeof myProjectsData,
   ): ProjectRowData[] =>
-    (data ?? []).map(project => ({
-      id: project._id,
-      name: project.name,
-      description: project.description,
-      key: project.key,
-      updatedAt: new Date(project._creationTime),
-      createdAt: new Date(project._creationTime),
-      icon: project.icon,
-      color: project.color,
-      statusId: project.status?._id,
-      statusName: project.status?.name,
-      statusColor: project.status?.color,
-      statusIcon: project.status?.icon,
-      statusType: project.status?.type,
-      teamId: project.teamId,
-      teamName: undefined,
-      teamKey: undefined,
-      leadId: project.lead?._id,
-      leadName: project.lead?.name,
-      leadEmail: project.lead?.email,
-      leadImage: project.lead?.image,
-    }));
+    (data ?? []).map(project => {
+      const teamMeta = project.teamId
+        ? teamMetaById.get(project.teamId)
+        : undefined;
+
+      return {
+        id: project._id,
+        name: project.name,
+        description: project.description,
+        key: project.key,
+        updatedAt: new Date(project._creationTime),
+        createdAt: new Date(project._creationTime),
+        icon: project.icon,
+        color: project.color,
+        statusId: project.status?._id,
+        statusName: project.status?.name,
+        statusColor: project.status?.color,
+        statusIcon: project.status?.icon,
+        statusType: project.status?.type,
+        teamId: project.teamId,
+        teamName: teamMeta?.name,
+        teamKey: teamMeta?.key,
+        leadId: project.lead?._id,
+        leadName: project.lead?.name,
+        leadEmail: project.lead?.email,
+        leadImage: project.lead?.image,
+      };
+    });
 
   const allProjects = transformProjects(allProjectsData);
   const myProjects = transformProjects(myProjectsData);
@@ -324,27 +375,31 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
               </span>
             </Button>
 
-            {/* Separator */}
-            <div className='bg-border mx-1 h-4 w-px shrink-0' />
+            {viewMode !== 'kanban' && (
+              <>
+                {/* Separator */}
+                <div className='bg-border mx-1 h-4 w-px shrink-0' />
 
-            {/* Status filter tabs */}
-            {visibleTabs.map(tab => (
-              <Button
-                key={tab.key}
-                variant={activeFilter === tab.key ? 'secondary' : 'ghost'}
-                size='sm'
-                className={cn(
-                  'h-6 shrink-0 gap-2 rounded-xs px-3 text-xs font-normal',
-                  activeFilter === tab.key && 'bg-secondary',
-                )}
-                onClick={() => setActiveFilter(tab.key)}
-              >
-                <span>{tab.label}</span>
-                <span className='text-muted-foreground text-xs'>
-                  {tab.count}
-                </span>
-              </Button>
-            ))}
+                {/* Status filter tabs */}
+                {visibleTabs.map(tab => (
+                  <Button
+                    key={tab.key}
+                    variant={activeFilter === tab.key ? 'secondary' : 'ghost'}
+                    size='sm'
+                    className={cn(
+                      'h-6 shrink-0 gap-2 rounded-xs px-3 text-xs font-normal',
+                      activeFilter === tab.key && 'bg-secondary',
+                    )}
+                    onClick={() => setActiveFilter(tab.key)}
+                  >
+                    <span>{tab.label}</span>
+                    <span className='text-muted-foreground text-xs'>
+                      {tab.count}
+                    </span>
+                  </Button>
+                ))}
+              </>
+            )}
           </div>
 
           <div className='flex shrink-0 items-center gap-1'>
@@ -362,11 +417,29 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
                 variant={viewMode === 'kanban' ? 'secondary' : 'ghost'}
                 size='sm'
                 className='h-6 rounded-l-none px-2'
-                onClick={() => setViewMode('kanban')}
+                onClick={() => {
+                  setViewMode('kanban');
+                  setActiveFilter('all');
+                }}
               >
                 <Columns3 className='size-3.5' />
               </Button>
             </div>
+
+            {/* Group by selector */}
+            {viewMode === 'table' && (
+              <GroupBySelector<ProjectGroupByField>
+                options={[
+                  { value: 'none', label: 'No grouping' },
+                  { value: 'status', label: 'Status' },
+                  { value: 'team', label: 'Team' },
+                  { value: 'lead', label: 'Lead' },
+                ]}
+                value={groupBy}
+                onChange={setGroupBy}
+                className='h-6 text-xs'
+              />
+            )}
 
             <CreateProjectButton
               className='h-6 shrink-0'
@@ -390,6 +463,7 @@ export function ProjectsPageContent({ orgSlug }: ProjectsPageContentProps) {
                 onLeadChange={handleLeadChange}
                 onDelete={handleDelete}
                 deletePending={false}
+                groupBy={groupBy}
               />
             </div>
 

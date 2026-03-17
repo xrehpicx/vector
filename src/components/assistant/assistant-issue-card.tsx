@@ -13,7 +13,10 @@ import {
   StateSelector,
   MultiAssigneeSelector,
 } from '@/components/issues/issue-selectors';
-import { PermissionAware } from '@/components/ui/permission-aware';
+import {
+  PermissionAware,
+  usePermissionCheck,
+} from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { useOptimisticValue } from '@/hooks/use-optimistic';
 
@@ -33,6 +36,10 @@ export function AssistantIssueCard({ issueKey }: { issueKey: string }) {
     orgSlug,
   });
   const user = useQuery(api.users.currentUser);
+  const { isAllowed: canAssignIssues } = usePermissionCheck(
+    orgSlug,
+    PERMISSIONS.ISSUE_ASSIGN,
+  );
 
   const changePriority = useMutation(api.issues.mutations.changePriority);
   const changeWorkflowState = useMutation(
@@ -190,7 +197,7 @@ export function AssistantIssueCard({ issueKey }: { issueKey: string }) {
       <div className='shrink-0'>
         <PermissionAware
           orgSlug={orgSlug}
-          permission={PERMISSIONS.ISSUE_EDIT}
+          permission={PERMISSIONS.ISSUE_ASSIGN}
           fallbackMessage='No permission to change assignees'
         >
           <MultiAssigneeSelector
@@ -218,7 +225,7 @@ export function AssistantIssueCard({ issueKey }: { issueKey: string }) {
             }))}
             activeFilter='all'
             currentUserId={user?._id ? String(user._id) : ''}
-            canManageAll={false}
+            canManageAll={canAssignIssues}
           />
         </PermissionAware>
       </div>

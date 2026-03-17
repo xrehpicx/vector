@@ -239,6 +239,7 @@ describe('Vector CLI command surface', () => {
         'replace-assignees <issueKey> <members>',
         'set-estimates [options] <issueKey>',
         'comment [options] <issueKey>',
+        'link-github <issueKey> <url>',
       ],
     ],
     [

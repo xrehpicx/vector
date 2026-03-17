@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import type { FunctionReturnType } from 'convex/server';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   FileText,
@@ -29,7 +30,6 @@ import type { Id } from '@/convex/_generated/dataModel';
 import {
   PermissionAwareSelector,
   useAccess,
-  usePermissionCheck,
 } from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { DocumentActivityFeed } from '@/components/activity/document-activity-feed';
@@ -52,9 +52,12 @@ import {
 import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { useScopedPermissions } from '@/hooks/use-permissions';
 
 interface DocumentDetailPageProps {
-  params: Promise<{ orgSlug: string; documentId: string }>;
+  params: { orgSlug: string; documentId: string };
+  initialDocument: FunctionReturnType<typeof api.documents.queries.getById>;
+  initialTeams: FunctionReturnType<typeof api.organizations.queries.listTeams>;
 }
 
 const DOCUMENT_COLOR_LABELS: Record<string, string> = {
@@ -242,11 +245,9 @@ function useDocumentPresence(documentId: string | null) {
 
 export default function DocumentViewClient({
   params,
+  initialDocument,
+  initialTeams,
 }: DocumentDetailPageProps) {
-  const [resolvedParams, setResolvedParams] = useState<{
-    orgSlug: string;
-    documentId: string;
-  } | null>(null);
   const [contentValue, setContentValue] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -256,28 +257,21 @@ export default function DocumentViewClient({
   const isSavingRef = useRef(false);
   const documentIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    void params.then(setResolvedParams);
-  }, [params]);
+  const liveDocument = useQuery(api.documents.queries.getById, {
+    documentId: params.documentId as Id<'documents'>,
+  });
+  const document = liveDocument === undefined ? initialDocument : liveDocument;
 
-  const document = useQuery(
-    api.documents.queries.getById,
-    resolvedParams
-      ? { documentId: resolvedParams.documentId as Id<'documents'> }
-      : 'skip',
-  );
-
-  const teamsData = useQuery(
-    api.organizations.queries.listTeams,
-    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
-  );
-  const teams = teamsData ? withIds(teamsData) : [];
+  const teamsQuery = useQuery(api.organizations.queries.listTeams, {
+    orgSlug: params.orgSlug,
+  });
+  const teams = withIds(teamsQuery ?? initialTeams ?? []);
 
   const updateMutation = useMutation(api.documents.mutations.update);
   const removeMutation = useMutation(api.documents.mutations.remove);
   const router = useRouter();
   const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
-  const viewers = useDocumentPresence(resolvedParams?.documentId ?? null);
+  const viewers = useDocumentPresence(params.documentId);
   const [displayIcon, setOptimisticIcon] = useOptimisticValue(
     document?.icon ?? null,
   );
@@ -285,14 +279,12 @@ export default function DocumentViewClient({
     document?.color ?? null,
   );
 
-  const { isAllowed: canEdit } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.DOCUMENT_EDIT,
+  const { permissions: documentPermissions } = useScopedPermissions(
+    { orgSlug: params.orgSlug },
+    [PERMISSIONS.DOCUMENT_EDIT, PERMISSIONS.DOCUMENT_DELETE],
   );
-  const { isAllowed: canDelete } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.DOCUMENT_DELETE,
-  );
+  const canEdit = documentPermissions[PERMISSIONS.DOCUMENT_EDIT] ?? false;
+  const canDelete = documentPermissions[PERMISSIONS.DOCUMENT_DELETE] ?? false;
 
   // Initialize content from server once
   useEffect(() => {
@@ -303,6 +295,11 @@ export default function DocumentViewClient({
       setInitialized(true);
     }
   }, [document, initialized]);
+
+  useEffect(() => {
+    if (document !== null) return;
+    router.replace(`/${params.orgSlug}/documents`);
+  }, [document, params.orgSlug, router]);
 
   const performSave = useCallback(
     async (content: string) => {
@@ -369,7 +366,11 @@ export default function DocumentViewClient({
     scheduleAutoSave(v);
   };
 
-  if (!resolvedParams || document === undefined) {
+  if (document === null) {
+    return null;
+  }
+
+  if (!document) {
     return <DocumentLoadingSkeleton />;
   }
 
@@ -380,7 +381,7 @@ export default function DocumentViewClient({
           <FileText className='text-muted-foreground mx-auto mb-4 size-12' />
           <h2 className='text-lg font-medium'>Document not found</h2>
           <Link
-            href={`/${resolvedParams.orgSlug}/documents`}
+            href={`/${params.orgSlug}/documents`}
             className='text-primary mt-2 inline-block text-sm hover:underline'
           >
             Back to documents
@@ -430,7 +431,7 @@ export default function DocumentViewClient({
     try {
       await removeMutation({ documentId: document._id });
       toast.success('Document deleted');
-      router.push(`/${resolvedParams.orgSlug}/documents`);
+      router.push(`/${params.orgSlug}/documents`);
     } catch {
       toast.error('Failed to delete document');
     }
@@ -449,14 +450,14 @@ export default function DocumentViewClient({
           <div className='flex h-8 items-center gap-1.5'>
             <MobileNavTrigger />
             <Link
-              href={`/${resolvedParams.orgSlug}/documents`}
+              href={`/${params.orgSlug}/documents`}
               className='text-muted-foreground hover:text-foreground shrink-0 text-xs transition-colors'
             >
               Documents
             </Link>
             <span className='text-muted-foreground/50 text-xs'>/</span>
             <PermissionAwareSelector
-              orgSlug={resolvedParams.orgSlug}
+              orgSlug={params.orgSlug}
               permission={PERMISSIONS.DOCUMENT_EDIT}
               fallbackMessage="You don't have permission to change document appearance"
             >
@@ -574,7 +575,7 @@ export default function DocumentViewClient({
                 mode='full'
                 disabled={!canEdit}
                 placeholder='Start writing... Use headings, lists, and more.'
-                orgSlug={resolvedParams.orgSlug}
+                orgSlug={params.orgSlug}
                 className='notion-editor'
               />
             </div>
@@ -583,7 +584,7 @@ export default function DocumentViewClient({
           {/* Activity Feed */}
           <div className='mt-20 border-t pt-8'>
             <DocumentActivityFeed
-              orgSlug={resolvedParams.orgSlug}
+              orgSlug={params.orgSlug}
               documentId={document._id}
             />
           </div>

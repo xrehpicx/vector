@@ -59,9 +59,7 @@ export const list = query({
       throw new ConvexError('ORGANIZATION_NOT_FOUND');
     }
 
-    let projectsQuery = ctx.db
-      .query('projects')
-      .withIndex('by_organization', q => q.eq('organizationId', org._id));
+    let allProjects: Doc<'projects'>[];
 
     if (args.teamId) {
       const team = await ctx.db
@@ -70,14 +68,23 @@ export const list = query({
           q.eq('organizationId', org._id).eq('key', args.teamId!),
         )
         .first();
-      if (team) {
-        projectsQuery = projectsQuery.filter(q =>
-          q.eq(q.field('teamId'), team._id),
-        );
-      }
-    }
 
-    const allProjects = await projectsQuery.collect();
+      if (!team) {
+        return [];
+      }
+
+      allProjects = await ctx.db
+        .query('projects')
+        .withIndex('by_org_team', q =>
+          q.eq('organizationId', org._id).eq('teamId', team._id),
+        )
+        .collect();
+    } else {
+      allProjects = await ctx.db
+        .query('projects')
+        .withIndex('by_organization', q => q.eq('organizationId', org._id))
+        .collect();
+    }
 
     const projectPromises = allProjects.map(async project => {
       const canView = await canViewProject(ctx, project);

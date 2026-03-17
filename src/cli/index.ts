@@ -2463,6 +2463,20 @@ issueCommand
     printOutput(result, runtime.json);
   });
 
+issueCommand
+  .command('link-github <issueKey> <url>')
+  .description('Link a GitHub pull request, issue, or commit URL to an issue')
+  .action(async (issueKey, url, _options, command) => {
+    const { client, runtime } = await getClient(command);
+    const orgSlug = requireOrg(runtime);
+    await runAction(client, api.github.actions.linkArtifactByUrl, {
+      orgSlug,
+      issueKey,
+      url,
+    });
+    printOutput({ success: true, issueKey, url }, runtime.json);
+  });
+
 const documentCommand = program.command('document').description('Documents');
 
 documentCommand

@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
 import { MoreHorizontal, Trash2, Circle } from 'lucide-react';
@@ -17,6 +18,8 @@ import type { Status, Team } from './project-selectors';
 import { ProjectLeadSelector } from './project-lead-selector';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
 import { TeamSelector } from '@/components/teams/team-selector';
+import { groupProjects, type ProjectGroupByField } from '@/lib/group-by';
+import { GroupSection } from '@/components/ui/group-section';
 
 // Permission system
 import { PermissionAware } from '@/components/ui/permission-aware';
@@ -63,6 +66,7 @@ export interface ProjectsTableProps {
   onDelete: (projectId: string) => void;
   deletePending?: boolean;
   canCreate?: boolean;
+  groupBy?: ProjectGroupByField;
 }
 
 export function ProjectsTable({
@@ -76,7 +80,13 @@ export function ProjectsTable({
   onDelete,
   deletePending = false,
   canCreate,
+  groupBy = 'none',
 }: ProjectsTableProps) {
+  const groups = React.useMemo(() => {
+    if (!groupBy || groupBy === 'none') return null;
+    return groupProjects(projects as ProjectRowData[], groupBy);
+  }, [projects, groupBy]);
+
   if (projects.length === 0) {
     return (
       <div className='text-muted-foreground flex flex-col items-center justify-center gap-1 py-12 text-sm'>
@@ -94,149 +104,161 @@ export function ProjectsTable({
     );
   }
 
+  const renderProjectRow = (project: ProjectRowData) => {
+    const ProjectIcon = project.icon
+      ? getDynamicIcon(project.icon) || Circle
+      : Circle;
+    const projectColor = project.color || '#94a3b8';
+
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 8 }}
+        transition={{ duration: 0.2 }}
+        key={project.id}
+        className='hover:bg-muted/50 flex items-center gap-2 px-3 py-1.5 transition-colors'
+      >
+        <div className='flex-shrink-0'>
+          <ProjectIcon className='size-4' style={{ color: projectColor }} />
+        </div>
+
+        <Link
+          href={`/${orgSlug}/projects/${project.key}`}
+          className='hover:text-primary flex min-w-0 flex-1 items-center gap-2 transition-colors'
+        >
+          <span className='block truncate text-sm font-medium'>
+            {project.name}
+          </span>
+          {project.description && (
+            <>
+              <div className='bg-muted hidden h-4 w-px sm:block' />
+              <p className='text-muted-foreground hidden max-w-xs truncate text-xs sm:block'>
+                {project.description}
+              </p>
+            </>
+          )}
+        </Link>
+
+        <div className='text-muted-foreground hidden flex-col text-xs md:flex'>
+          {project.startDate && (
+            <span>Start: {formatDateHuman(new Date(project.startDate))}</span>
+          )}
+          {project.dueDate && (
+            <span>Due: {formatDateHuman(new Date(project.dueDate))}</span>
+          )}
+          {!project.startDate && !project.dueDate && (
+            <span>Updated {formatDateHuman(project.updatedAt)}</span>
+          )}
+        </div>
+
+        <PermissionAware
+          orgSlug={orgSlug}
+          permission={PERMISSIONS.PROJECT_EDIT}
+          fallbackMessage="You don't have permission to change project status"
+        >
+          <StatusSelector
+            statuses={statuses}
+            selectedStatus={project.statusId || ''}
+            onStatusSelect={sid => onStatusChange(project.id, sid)}
+            displayMode='iconWhenUnselected'
+            className='border-none bg-transparent p-0 shadow-none'
+          />
+        </PermissionAware>
+
+        <div className='hidden sm:block'>
+          <PermissionAware
+            orgSlug={orgSlug}
+            permission={PERMISSIONS.PROJECT_EDIT}
+            fallbackMessage="You don't have permission to change project team"
+          >
+            <div className='flex-shrink-0'>
+              <TeamSelector
+                teams={teams}
+                selectedTeam={project.teamId || ''}
+                onTeamSelect={tid => onTeamChange(project.id, tid)}
+                displayMode='iconWhenUnselected'
+                className='border-none bg-transparent p-0 shadow-none'
+              />
+            </div>
+          </PermissionAware>
+        </div>
+
+        <div className='hidden sm:block'>
+          <PermissionAware
+            orgSlug={orgSlug}
+            permission={PERMISSIONS.PROJECT_LEAD_UPDATE}
+            fallbackMessage="You don't have permission to change project lead"
+          >
+            <ProjectLeadSelector
+              orgSlug={orgSlug}
+              projectKey={project.key}
+              selectedLead={project.leadId || ''}
+              onLeadSelect={(leadId: string) =>
+                onLeadChange(project.id, leadId)
+              }
+              displayMode='iconOnly'
+              className='border-none bg-transparent p-0 shadow-none'
+            />
+          </PermissionAware>
+        </div>
+
+        <div className='flex-shrink-0'>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='h-6 w-6 p-0'
+                aria-label='Open project actions'
+              >
+                <MoreHorizontal className='size-4' />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuItem
+                variant='destructive'
+                disabled={deletePending}
+                onClick={() => onDelete(project.id)}
+              >
+                <Trash2 className='size-4' />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </motion.div>
+    );
+  };
+
+  if (groups) {
+    return (
+      <div>
+        {groups.map(group => (
+          <GroupSection
+            key={group.key}
+            label={group.label}
+            count={group.items.length}
+            icon={group.icon}
+            color={group.color}
+            avatar={group.avatar}
+          >
+            <div className='divide-y'>
+              <AnimatePresence initial={false}>
+                {group.items.map(renderProjectRow)}
+              </AnimatePresence>
+            </div>
+          </GroupSection>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className='divide-y'>
       <AnimatePresence initial={false}>
-        {projects.map(project => {
-          // Project icon / color
-          const ProjectIcon = project.icon
-            ? getDynamicIcon(project.icon) || Circle
-            : Circle;
-          const projectColor = project.color || '#94a3b8';
-
-          return (
-            <motion.div
-              layout
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.2 }}
-              key={project.id}
-              className='hover:bg-muted/50 flex items-center gap-2 px-3 py-1.5 transition-colors'
-            >
-              {/* Project Icon */}
-              <div className='flex-shrink-0'>
-                <ProjectIcon
-                  className='size-4'
-                  style={{ color: projectColor }}
-                />
-              </div>
-
-              {/* Title */}
-              <Link
-                href={`/${orgSlug}/projects/${project.key}`}
-                className='hover:text-primary flex min-w-0 flex-1 items-center gap-2 transition-colors'
-              >
-                <span className='block truncate text-sm font-medium'>
-                  {project.name}
-                </span>
-                {project.description && (
-                  <>
-                    <div className='bg-muted hidden h-4 w-px sm:block' />
-                    <p className='text-muted-foreground hidden max-w-xs truncate text-xs sm:block'>
-                      {project.description}
-                    </p>
-                  </>
-                )}
-              </Link>
-
-              {/* Date Info - hidden on mobile */}
-              <div className='text-muted-foreground hidden flex-col text-xs md:flex'>
-                {project.startDate && (
-                  <span>
-                    Start: {formatDateHuman(new Date(project.startDate))}
-                  </span>
-                )}
-                {project.dueDate && (
-                  <span>Due: {formatDateHuman(new Date(project.dueDate))}</span>
-                )}
-                {!project.startDate && !project.dueDate && (
-                  <span>Updated {formatDateHuman(project.updatedAt)}</span>
-                )}
-              </div>
-
-              {/* Status Selector */}
-              <PermissionAware
-                orgSlug={orgSlug}
-                permission={PERMISSIONS.PROJECT_EDIT}
-                fallbackMessage="You don't have permission to change project status"
-              >
-                <StatusSelector
-                  statuses={statuses}
-                  selectedStatus={project.statusId || ''}
-                  onStatusSelect={sid => onStatusChange(project.id, sid)}
-                  displayMode='iconWhenUnselected'
-                  className='border-none bg-transparent p-0 shadow-none'
-                />
-              </PermissionAware>
-
-              {/* Team Selector - hidden on mobile */}
-              <div className='hidden sm:block'>
-                <PermissionAware
-                  orgSlug={orgSlug}
-                  permission={PERMISSIONS.PROJECT_EDIT}
-                  fallbackMessage="You don't have permission to change project team"
-                >
-                  <div className='flex-shrink-0'>
-                    <TeamSelector
-                      teams={teams}
-                      selectedTeam={project.teamId || ''}
-                      onTeamSelect={tid => onTeamChange(project.id, tid)}
-                      displayMode='iconWhenUnselected'
-                      className='border-none bg-transparent p-0 shadow-none'
-                    />
-                  </div>
-                </PermissionAware>
-              </div>
-
-              {/* Lead Selector - hidden on mobile */}
-              <div className='hidden sm:block'>
-                <PermissionAware
-                  orgSlug={orgSlug}
-                  permission={PERMISSIONS.PROJECT_LEAD_UPDATE}
-                  fallbackMessage="You don't have permission to change project lead"
-                >
-                  <ProjectLeadSelector
-                    orgSlug={orgSlug}
-                    projectKey={project.key}
-                    selectedLead={project.leadId || ''}
-                    onLeadSelect={(leadId: string) =>
-                      onLeadChange(project.id, leadId)
-                    }
-                    displayMode='iconOnly'
-                    className='border-none bg-transparent p-0 shadow-none'
-                  />
-                </PermissionAware>
-              </div>
-
-              {/* Actions */}
-              <div className='flex-shrink-0'>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      className='h-6 w-6 p-0'
-                      aria-label='Open project actions'
-                    >
-                      <MoreHorizontal className='size-4' />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align='end'>
-                    <DropdownMenuItem
-                      variant='destructive'
-                      disabled={deletePending}
-                      onClick={() => onDelete(project.id)}
-                    >
-                      <Trash2 className='size-4' />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </motion.div>
-          );
-        })}
+        {projects.map(renderProjectRow)}
       </AnimatePresence>
     </div>
   );

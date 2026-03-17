@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
 import { getConvexClient } from '@/lib/convex-server';
+import { fetchAuthQuery } from '@/lib/auth-server';
 import { api } from '@/convex/_generated/api';
 import DocumentViewClient from './document-view-client';
+import type { Id } from '@/convex/_generated/dataModel';
+import type { FunctionReturnType } from 'convex/server';
 
 interface DocumentViewPageProps {
   params: Promise<{ orgSlug: string; documentId: string }>;
@@ -49,5 +52,35 @@ export async function generateMetadata({
 export default async function DocumentViewPage({
   params,
 }: DocumentViewPageProps) {
-  return <DocumentViewClient params={params} />;
+  const p = await params;
+  let initialDocument: FunctionReturnType<
+    typeof api.documents.queries.getById
+  > = null;
+  let initialTeams: FunctionReturnType<
+    typeof api.organizations.queries.listTeams
+  > = [];
+
+  try {
+    const [document, workspaceOptions] = await Promise.all([
+      fetchAuthQuery(api.documents.queries.getById, {
+        documentId: p.documentId as Id<'documents'>,
+      }),
+      fetchAuthQuery(api.organizations.queries.getWorkspaceOptions, {
+        orgSlug: p.orgSlug,
+      }),
+    ]);
+    initialDocument = document;
+    initialTeams = workspaceOptions.teams;
+  } catch {
+    initialDocument = null;
+    initialTeams = [];
+  }
+
+  return (
+    <DocumentViewClient
+      params={{ orgSlug: p.orgSlug, documentId: p.documentId }}
+      initialDocument={initialDocument}
+      initialTeams={initialTeams}
+    />
+  );
 }

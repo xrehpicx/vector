@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { getConvexClient } from '@/lib/convex-server';
+import { fetchAuthQuery } from '@/lib/auth-server';
 import { api } from '@/convex/_generated/api';
 import IssueViewClient from './issue-view-client';
+import type { FunctionReturnType } from 'convex/server';
 
 interface IssueViewPageProps {
   params: Promise<{ orgSlug: string; issueKey: string }>;
@@ -51,5 +53,33 @@ export async function generateMetadata({
 }
 
 export default async function IssueViewPage({ params }: IssueViewPageProps) {
-  return <IssueViewClient params={params} />;
+  const p = await params;
+  let initialIssue: FunctionReturnType<typeof api.issues.queries.getByKey> =
+    null;
+  let initialWorkspaceOptions: FunctionReturnType<
+    typeof api.organizations.queries.getWorkspaceOptions
+  > | null = null;
+
+  try {
+    [initialIssue, initialWorkspaceOptions] = await Promise.all([
+      fetchAuthQuery(api.issues.queries.getByKey, {
+        orgSlug: p.orgSlug,
+        issueKey: p.issueKey,
+      }),
+      fetchAuthQuery(api.organizations.queries.getWorkspaceOptions, {
+        orgSlug: p.orgSlug,
+      }),
+    ]);
+  } catch {
+    initialIssue = null;
+    initialWorkspaceOptions = null;
+  }
+
+  return (
+    <IssueViewClient
+      params={{ orgSlug: p.orgSlug, issueKey: p.issueKey }}
+      initialIssue={initialIssue}
+      initialWorkspaceOptions={initialWorkspaceOptions}
+    />
+  );
 }

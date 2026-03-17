@@ -16,12 +16,13 @@ import {
   GitPullRequest,
 } from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
-import { useQuery, useMutation, useAction } from 'convex/react';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { formatDateHuman } from '@/lib/date';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { Id } from '@/convex/_generated/dataModel';
+import type { FunctionReturnType } from 'convex/server';
 
 // Re-use shared issue selectors
 import { IssueAssignments } from '@/components/issues/issue-assignments';
@@ -40,7 +41,6 @@ import {
   type VisibilityState,
 } from '@/components/ui/visibility-selector';
 import {
-  usePermissionCheck,
   PermissionAwareWrapper,
   PermissionAwareSelector,
 } from '@/components/ui/permission-aware';
@@ -67,9 +67,14 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import { useScopedPermissions } from '@/hooks/use-permissions';
 
 interface IssueViewPageProps {
-  params: Promise<{ orgSlug: string; issueKey: string }>;
+  params: { orgSlug: string; issueKey: string };
+  initialIssue: FunctionReturnType<typeof api.issues.queries.getByKey>;
+  initialWorkspaceOptions: FunctionReturnType<
+    typeof api.organizations.queries.getWorkspaceOptions
+  > | null;
 }
 
 // Loading skeleton component that matches the actual layout
@@ -173,12 +178,12 @@ function IssueLoadingSkeleton() {
   );
 }
 
-export default function IssueViewClient({ params }: IssueViewPageProps) {
+export default function IssueViewClient({
+  params,
+  initialIssue,
+  initialWorkspaceOptions,
+}: IssueViewPageProps) {
   const router = useRouter();
-  const [resolvedParams, setResolvedParams] = useState<{
-    orgSlug: string;
-    issueKey: string;
-  } | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState('');
   const [editingDescription, setEditingDescription] = useState(false);
@@ -190,14 +195,10 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
     {},
   );
 
-  useEffect(() => {
-    void params.then(setResolvedParams);
-  }, [params]);
-
   const user = useQuery(api.users.currentUser);
   const githubCapabilities = useQuery(
     api.github.queries.getGitHubCapabilities,
-    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
+    { orgSlug: params.orgSlug },
   );
 
   const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
@@ -210,15 +211,12 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
   const [isLinkingGithub, setIsLinkingGithub] = useState(false);
   const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
 
-  const issue = useQuery(
-    api.issues.queries.getByKey,
-    resolvedParams
-      ? { orgSlug: resolvedParams.orgSlug, issueKey: resolvedParams.issueKey }
-      : 'skip',
-  );
-  const issueQueryArgs = resolvedParams
-    ? { orgSlug: resolvedParams.orgSlug, issueKey: resolvedParams.issueKey }
-    : null;
+  const liveIssue = useQuery(api.issues.queries.getByKey, {
+    orgSlug: params.orgSlug,
+    issueKey: params.issueKey,
+  });
+  const issue = liveIssue === undefined ? initialIssue : liveIssue;
+  const issueQueryArgs = { orgSlug: params.orgSlug, issueKey: params.issueKey };
   const displayTitle = issue?.title ?? '';
   const displayDescription = issue?.description ?? '';
   const assignments = useQuery(
@@ -226,26 +224,19 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
     issue ? { issueId: issue._id } : 'skip',
   );
 
-  const states = useQuery(
-    api.organizations.queries.listIssueStates,
-    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
+  const liveWorkspaceOptions = useQuery(
+    api.organizations.queries.getWorkspaceOptions,
+    { orgSlug: params.orgSlug },
   );
-  const members = useQuery(
-    api.organizations.queries.listMembers,
-    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
-  );
-  const teams = useQuery(
-    api.organizations.queries.listTeams,
-    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
-  );
-  const projects = useQuery(
-    api.organizations.queries.listProjects,
-    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
-  );
-  const priorities = useQuery(
-    api.organizations.queries.listIssuePriorities,
-    resolvedParams ? { orgSlug: resolvedParams.orgSlug } : 'skip',
-  );
+  const workspaceOptions =
+    liveWorkspaceOptions === undefined
+      ? initialWorkspaceOptions
+      : liveWorkspaceOptions;
+  const states = workspaceOptions?.issueStates;
+  const members = workspaceOptions?.members;
+  const teams = workspaceOptions?.teams;
+  const projects = workspaceOptions?.projects;
+  const priorities = workspaceOptions?.issuePriorities;
 
   const updateTitleMutation = useMutation(
     api.issues.mutations.updateTitle,
@@ -395,38 +386,26 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
     );
   });
 
-  const { isAllowed: canEditIssue } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.ISSUE_EDIT,
+  const { permissions: issuePermissions } = useScopedPermissions(
+    { orgSlug: params.orgSlug },
+    [
+      PERMISSIONS.ISSUE_EDIT,
+      PERMISSIONS.ISSUE_PRIORITY_UPDATE,
+      PERMISSIONS.ISSUE_RELATION_UPDATE,
+      PERMISSIONS.ISSUE_DELETE,
+      PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
+    ],
   );
-
-  const { isAllowed: canEditPriority } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.ISSUE_PRIORITY_UPDATE,
-  );
-
-  const { isAllowed: canEditVisibility } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.ISSUE_EDIT,
-  );
-
-  const { isAllowed: canChangeTeam } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.ISSUE_RELATION_UPDATE,
-  );
-
-  const { isAllowed: canChangeProject } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.ISSUE_RELATION_UPDATE,
-  );
-  const { isAllowed: canDeleteIssue } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.ISSUE_DELETE,
-  );
-  const { isAllowed: canChangeOtherAssignmentStates } = usePermissionCheck(
-    resolvedParams?.orgSlug || '',
-    PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
-  );
+  const canEditIssue = issuePermissions[PERMISSIONS.ISSUE_EDIT] ?? false;
+  const canEditPriority =
+    issuePermissions[PERMISSIONS.ISSUE_PRIORITY_UPDATE] ?? false;
+  const canEditVisibility = canEditIssue;
+  const canChangeTeam =
+    issuePermissions[PERMISSIONS.ISSUE_RELATION_UPDATE] ?? false;
+  const canChangeProject = canChangeTeam;
+  const canDeleteIssue = issuePermissions[PERMISSIONS.ISSUE_DELETE] ?? false;
+  const canChangeOtherAssignmentStates =
+    issuePermissions[PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE] ?? false;
 
   useEffect(() => {
     if (issue) {
@@ -442,12 +421,12 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
   }, [editingEstimates, issue?.estimatedTimes]);
 
   useEffect(() => {
-    if (!resolvedParams || issue !== null) {
+    if (issue !== null) {
       return;
     }
 
-    router.replace(`/${resolvedParams.orgSlug}/issues`);
-  }, [issue, resolvedParams, router]);
+    router.replace(`/${params.orgSlug}/issues`);
+  }, [issue, params.orgSlug, router]);
 
   const estimateStates =
     states?.filter(state => ['done'].includes(state.type)) || [];
@@ -496,7 +475,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
     githubCapabilities?.hasAnyConfiguration,
   );
 
-  if (!resolvedParams || issue === undefined || states === undefined) {
+  if (states === undefined) {
     return <IssueLoadingSkeleton />;
   }
 
@@ -599,11 +578,11 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
 
   const handleLinkGithub = async () => {
     const trimmed = linkGithubUrl.trim();
-    if (!trimmed || !issue || !resolvedParams) return;
+    if (!trimmed || !issue) return;
     setIsLinkingGithub(true);
     try {
       await linkArtifactByUrl({
-        orgSlug: resolvedParams.orgSlug,
+        orgSlug: params.orgSlug,
         issueKey: issue.key,
         url: trimmed,
       });
@@ -617,7 +596,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
   };
 
   const handleDeleteIssue = async () => {
-    if (!issue || !resolvedParams || !canDeleteIssue) return;
+    if (!issue || !canDeleteIssue) return;
     const ok = await confirmDelete({
       title: 'Delete issue',
       description:
@@ -629,7 +608,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
     setIsDeletingIssue(true);
     try {
       await deleteIssueMutation({ issueId: issue._id });
-      router.push(`/${resolvedParams.orgSlug}/issues`);
+      router.push(`/${params.orgSlug}/issues`);
     } finally {
       setIsDeletingIssue(false);
     }
@@ -646,7 +625,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
             <div className='flex h-8 items-center gap-2'>
               <MobileNavTrigger />
               <Link
-                href={`/${resolvedParams.orgSlug}/issues`}
+                href={`/${params.orgSlug}/issues`}
                 className='text-muted-foreground hover:text-foreground text-sm transition-colors'
               >
                 <span className='hidden sm:inline'>Issues</span>
@@ -657,7 +636,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
               <div className='flex items-center'>
                 {/* Team & Project selectors */}
                 <PermissionAwareSelector
-                  orgSlug={resolvedParams.orgSlug}
+                  orgSlug={params.orgSlug}
                   permission={PERMISSIONS.ISSUE_RELATION_UPDATE}
                   fallbackMessage="You don't have permission to change issue team"
                 >
@@ -670,7 +649,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                   />
                 </PermissionAwareSelector>
                 <PermissionAwareSelector
-                  orgSlug={resolvedParams.orgSlug}
+                  orgSlug={params.orgSlug}
                   permission={PERMISSIONS.ISSUE_RELATION_UPDATE}
                   fallbackMessage="You don't have permission to change issue project"
                 >
@@ -686,12 +665,12 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                 </PermissionAwareSelector>
                 <div className='hidden sm:contents'>
                   <PermissionAwareSelector
-                    orgSlug={resolvedParams.orgSlug}
+                    orgSlug={params.orgSlug}
                     permission={PERMISSIONS.ISSUE_RELATION_UPDATE}
                     fallbackMessage="You don't have permission to change parent issue"
                   >
                     <IssueSelector
-                      orgSlug={resolvedParams.orgSlug}
+                      orgSlug={params.orgSlug}
                       selectedIssue={issue.parentIssueId || ''}
                       onIssueSelect={
                         canChangeProject ? handleParentIssueChange : () => {}
@@ -726,7 +705,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                 />
               ) : (
                 <PermissionAwareSelector
-                  orgSlug={resolvedParams.orgSlug}
+                  orgSlug={params.orgSlug}
                   permission={PERMISSIONS.ISSUE_STATE_UPDATE}
                   fallbackMessage="You don't have permission to change issue state"
                 >
@@ -746,7 +725,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
               )}
 
               <PermissionAwareSelector
-                orgSlug={resolvedParams.orgSlug}
+                orgSlug={params.orgSlug}
                 permission={PERMISSIONS.ISSUE_PRIORITY_UPDATE}
                 fallbackMessage="You don't have permission to change issue priority"
               >
@@ -760,7 +739,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                 />
               </PermissionAwareSelector>
               <PermissionAwareSelector
-                orgSlug={resolvedParams.orgSlug}
+                orgSlug={params.orgSlug}
                 permission={PERMISSIONS.ISSUE_EDIT}
                 fallbackMessage="You don't have permission to change issue visibility"
               >
@@ -790,7 +769,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                       <CommandGroup>
                         {hasGitHubIntegration ? (
                           <PermissionAwareSelector
-                            orgSlug={resolvedParams.orgSlug}
+                            orgSlug={params.orgSlug}
                             permission={PERMISSIONS.ISSUE_EDIT}
                             fallbackMessage="You don't have permission to link GitHub artifacts"
                           >
@@ -831,7 +810,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                             onSelect={() => {
                               setActionsOpen(false);
                               window.open(
-                                `/${resolvedParams.orgSlug}/settings/integrations/github`,
+                                `/${params.orgSlug}/settings/integrations/github`,
                                 '_blank',
                               );
                             }}
@@ -849,7 +828,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                           </CommandItem>
                         ) : null}
                         <PermissionAwareSelector
-                          orgSlug={resolvedParams.orgSlug}
+                          orgSlug={params.orgSlug}
                           permission={PERMISSIONS.ISSUE_DELETE}
                           fallbackMessage="You don't have permission to delete this issue"
                         >
@@ -963,7 +942,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                 </div>
               ) : (
                 <PermissionAwareWrapper
-                  orgSlug={resolvedParams.orgSlug}
+                  orgSlug={params.orgSlug}
                   permission={PERMISSIONS.ISSUE_EDIT}
                   fallbackMessage="You don't have permission to edit issue title"
                 >
@@ -1027,7 +1006,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                     onChange={setDescriptionValue}
                     placeholder='Add a description...'
                     mode='compact'
-                    orgSlug={resolvedParams.orgSlug}
+                    orgSlug={params.orgSlug}
                   />
                   <div className='flex items-center gap-3'>
                     <Button
@@ -1050,7 +1029,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                 </div>
               ) : (
                 <PermissionAwareWrapper
-                  orgSlug={resolvedParams.orgSlug}
+                  orgSlug={params.orgSlug}
                   permission={PERMISSIONS.ISSUE_EDIT}
                   fallbackMessage="You don't have permission to edit issue description"
                 >
@@ -1109,7 +1088,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
               <div className='mb-2 flex items-center justify-between'>
                 <h2 className='text-sm font-semibold'>Sub-Issues</h2>
                 <CreateIssueDialog
-                  orgSlug={resolvedParams.orgSlug}
+                  orgSlug={params.orgSlug}
                   defaultStates={{
                     parentIssueId: issue._id,
                     teamId: issue.teamId || undefined,
@@ -1130,7 +1109,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                     return (
                       <Link
                         key={child._id}
-                        href={`/${resolvedParams.orgSlug}/issues/${child.key}`}
+                        href={`/${params.orgSlug}/issues/${child.key}`}
                         className='hover:bg-muted/50 group flex items-center gap-3 rounded-md border p-2 transition-colors'
                       >
                         {/* Priority indicator */}
@@ -1182,20 +1161,20 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
 
             {/* Linked Documents */}
             <IssueDevelopmentSection
-              orgSlug={resolvedParams.orgSlug}
+              orgSlug={params.orgSlug}
               issueId={issue._id}
               issueKey={issue.key}
             />
 
             <LinkedDocuments
-              orgSlug={resolvedParams.orgSlug}
+              orgSlug={params.orgSlug}
               mentionType='issue'
               entityId={issue._id}
             />
 
             {/* Comments & Activity */}
             <IssueCommentsSection
-              orgSlug={resolvedParams.orgSlug}
+              orgSlug={params.orgSlug}
               issueId={issue._id}
               currentUser={
                 user
@@ -1219,7 +1198,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
               <div>
                 {states && members && (
                   <IssueAssignments
-                    orgSlug={resolvedParams.orgSlug}
+                    orgSlug={params.orgSlug}
                     issueId={issue._id}
                     states={states}
                     members={members}
@@ -1327,7 +1306,7 @@ export default function IssueViewClient({ params }: IssueViewPageProps) {
                               </div>
                             ) : (
                               <PermissionAwareWrapper
-                                orgSlug={resolvedParams.orgSlug}
+                                orgSlug={params.orgSlug}
                                 permission={PERMISSIONS.ISSUE_EDIT}
                                 fallbackMessage="You don't have permission to edit time estimates"
                               >

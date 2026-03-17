@@ -1,10 +1,150 @@
-import { query } from '../_generated/server';
+import { query, type QueryCtx } from '../_generated/server';
 import { v, ConvexError } from 'convex/values';
-import type { Doc } from '../_generated/dataModel';
+import type { Doc, Id } from '../_generated/dataModel';
 import { getAuthUserId } from '../authUtils';
 import { canViewIssue, canViewTeam, canViewProject } from '../access';
 import { requireOrgPermission } from '../authz';
 import { PERMISSIONS } from '../_shared/permissions';
+
+async function requireOrganizationMembership(ctx: QueryCtx, orgSlug: string) {
+  const userId = await getAuthUserId(ctx);
+  if (userId === null) {
+    throw new ConvexError('UNAUTHORIZED');
+  }
+
+  const org = await ctx.db
+    .query('organizations')
+    .withIndex('by_slug', q => q.eq('slug', orgSlug))
+    .first();
+
+  if (!org) {
+    throw new ConvexError('ORGANIZATION_NOT_FOUND');
+  }
+
+  const membership = await ctx.db
+    .query('members')
+    .withIndex('by_org_user', q =>
+      q.eq('organizationId', org._id).eq('userId', userId),
+    )
+    .first();
+
+  if (!membership) {
+    throw new ConvexError('FORBIDDEN');
+  }
+
+  return { userId, org, membership };
+}
+
+async function loadUsersById(ctx: QueryCtx, userIds: readonly Id<'users'>[]) {
+  const uniqueUserIds = Array.from(new Set(userIds));
+  const users = await Promise.all(
+    uniqueUserIds.map(id => ctx.db.get('users', id)),
+  );
+
+  return new Map(
+    uniqueUserIds.flatMap((id, index) => {
+      const user = users[index];
+      return user ? [[id, user]] : [];
+    }),
+  );
+}
+
+async function listOrganizationMembersInternal(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+) {
+  const members = await ctx.db
+    .query('members')
+    .withIndex('by_organization', q => q.eq('organizationId', organizationId))
+    .collect();
+
+  const userMap = await loadUsersById(
+    ctx,
+    members.map(member => member.userId),
+  );
+
+  return members.map(member => {
+    const user = userMap.get(member.userId);
+    return {
+      ...member,
+      user: user
+        ? {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+            username: user.username,
+            role: user.role,
+          }
+        : null,
+    };
+  });
+}
+
+async function listVisibleTeamsInternal(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+) {
+  const allTeams = await ctx.db
+    .query('teams')
+    .withIndex('by_organization', q => q.eq('organizationId', organizationId))
+    .collect();
+
+  const visibility = await Promise.all(
+    allTeams.map(async team => ({
+      team,
+      canView: await canViewTeam(ctx, team),
+    })),
+  );
+
+  return visibility.flatMap(({ team, canView }) => (canView ? [team] : []));
+}
+
+async function listVisibleProjectsInternal(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+) {
+  const allProjects = await ctx.db
+    .query('projects')
+    .withIndex('by_organization', q => q.eq('organizationId', organizationId))
+    .collect();
+
+  const visibility = await Promise.all(
+    allProjects.map(async project => ({
+      project,
+      canView: await canViewProject(ctx, project),
+    })),
+  );
+  const visibleProjects = visibility.flatMap(({ project, canView }) =>
+    canView ? [project] : [],
+  );
+
+  const statusIds = Array.from(
+    new Set(
+      visibleProjects
+        .map(project => project.statusId)
+        .filter((id): id is Id<'projectStatuses'> => Boolean(id)),
+    ),
+  );
+  const statuses = await Promise.all(
+    statusIds.map(id => ctx.db.get('projectStatuses', id)),
+  );
+  const statusMap = new Map(
+    statusIds.flatMap((id, index) => {
+      const status = statuses[index];
+      return status ? [[id, status]] : [];
+    }),
+  );
+
+  return visibleProjects.map(project => {
+    const status = project.statusId ? statusMap.get(project.statusId) : null;
+    return {
+      ...project,
+      statusColor: status?.color,
+      statusIcon: status?.icon,
+    };
+  });
+}
 
 /**
  * Get organization by slug
@@ -14,33 +154,7 @@ export const getBySlug = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', org._id).eq('userId', userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new ConvexError('FORBIDDEN');
-    }
-
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
     return org;
   },
 });
@@ -396,65 +510,8 @@ export const listMembers = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', org._id).eq('userId', userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new ConvexError('FORBIDDEN');
-    }
-
-    // Get all members
-    const members = await ctx.db
-      .query('members')
-      .withIndex('by_organization', q => q.eq('organizationId', org._id))
-      .collect();
-
-    // Get user details for each member
-    const memberUserIds = members.map(m => m.userId);
-    const users = await Promise.all(
-      memberUserIds.map(id => ctx.db.get('users', id)),
-    );
-    const userMap = new Map(memberUserIds.map((id, i) => [id, users[i]]));
-
-    // Combine results
-    const membersWithUsers = members.map(member => {
-      const user = userMap.get(member.userId);
-      return {
-        ...member,
-        user: user
-          ? {
-              _id: user._id,
-              name: user.name,
-              email: user.email,
-              image: user.image,
-              username: user.username,
-              role: user.role,
-            }
-          : null,
-      };
-    });
-
-    return membersWithUsers;
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
+    return listOrganizationMembersInternal(ctx, org._id);
   },
 });
 
@@ -555,49 +612,8 @@ export const listTeams = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', org._id).eq('userId', userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new ConvexError('FORBIDDEN');
-    }
-
-    // Get all teams
-    const allTeams = await ctx.db
-      .query('teams')
-      .withIndex('by_organization', q => q.eq('organizationId', org._id))
-      .collect();
-
-    // Filter teams based on visibility permissions
-    const teamPromises = allTeams.map(async team => {
-      const canView = await canViewTeam(ctx, team);
-      return canView ? team : null;
-    });
-    const visibleTeams = (await Promise.all(teamPromises)).filter(
-      (team): team is Doc<'teams'> => team !== null,
-    );
-
-    return visibleTeams;
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
+    return listVisibleTeamsInternal(ctx, org._id);
   },
 });
 
@@ -609,64 +625,8 @@ export const listProjects = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', org._id).eq('userId', userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new ConvexError('FORBIDDEN');
-    }
-
-    // Get all projects
-    const allProjects = await ctx.db
-      .query('projects')
-      .withIndex('by_organization', q => q.eq('organizationId', org._id))
-      .collect();
-
-    // Filter projects based on visibility permissions
-    const projectPromises = allProjects.map(async project => {
-      const canView = await canViewProject(ctx, project);
-      return canView ? project : null;
-    });
-    const visibleProjects = (await Promise.all(projectPromises)).filter(
-      (project): project is Doc<'projects'> => project !== null,
-    );
-
-    // Get project statuses and attach to projects
-    const projectsWithStatus = await Promise.all(
-      visibleProjects.map(async project => {
-        const status = project.statusId
-          ? await ctx.db.get('projectStatuses', project.statusId)
-          : null;
-
-        return {
-          ...project,
-          statusColor: status?.color,
-          statusIcon: status?.icon,
-        };
-      }),
-    );
-
-    return projectsWithStatus;
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
+    return listVisibleProjectsInternal(ctx, org._id);
   },
 });
 
@@ -678,34 +638,7 @@ export const listIssueStates = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', org._id).eq('userId', userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new ConvexError('FORBIDDEN');
-    }
-
-    // Get issue states
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
     const states = await ctx.db
       .query('issueStates')
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
@@ -723,34 +656,7 @@ export const listProjectStatuses = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', org._id).eq('userId', userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new ConvexError('FORBIDDEN');
-    }
-
-    // Get project statuses
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
     const statuses = await ctx.db
       .query('projectStatuses')
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
@@ -768,40 +674,50 @@ export const listIssuePriorities = query({
     orgSlug: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError('UNAUTHORIZED');
-    }
-
-    // Find organization
-    const org = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
-      .first();
-
-    if (!org) {
-      throw new ConvexError('ORGANIZATION_NOT_FOUND');
-    }
-
-    // Verify user is a member
-    const membership = await ctx.db
-      .query('members')
-      .withIndex('by_org_user', q =>
-        q.eq('organizationId', org._id).eq('userId', userId),
-      )
-      .first();
-
-    if (!membership) {
-      throw new ConvexError('FORBIDDEN');
-    }
-
-    // Get issue priorities
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
     const priorities = await ctx.db
       .query('issuePriorities')
       .withIndex('by_organization', q => q.eq('organizationId', org._id))
       .collect();
 
     return priorities;
+  },
+});
+
+export const getWorkspaceOptions = query({
+  args: {
+    orgSlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
+
+    const [members, teams, projects, issueStates, issuePriorities, statuses] =
+      await Promise.all([
+        listOrganizationMembersInternal(ctx, org._id),
+        listVisibleTeamsInternal(ctx, org._id),
+        listVisibleProjectsInternal(ctx, org._id),
+        ctx.db
+          .query('issueStates')
+          .withIndex('by_organization', q => q.eq('organizationId', org._id))
+          .collect(),
+        ctx.db
+          .query('issuePriorities')
+          .withIndex('by_organization', q => q.eq('organizationId', org._id))
+          .collect(),
+        ctx.db
+          .query('projectStatuses')
+          .withIndex('by_organization', q => q.eq('organizationId', org._id))
+          .collect(),
+      ]);
+
+    return {
+      members,
+      teams,
+      projects,
+      issueStates,
+      issuePriorities,
+      projectStatuses: statuses,
+    };
   },
 });
 

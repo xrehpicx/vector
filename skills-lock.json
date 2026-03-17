@@ -16,6 +16,11 @@
       "sourceType": "github",
       "computedHash": "3054123dedc1b7ded9b6404c6c641023683fe509103fe7dc148acda831d53d36"
     },
+    "convex-anti-patterns": {
+      "source": "fluid-tools/claude-skills",
+      "sourceType": "github",
+      "computedHash": "90358025aa310a053416e2a412835386386b474ee84f8684667bce215626726e"
+    },
     "convex-best-practices": {
       "source": "waynesutton/convexskills",
       "sourceType": "github",
@@ -46,6 +51,16 @@
       "sourceType": "github",
       "computedHash": "869a862d35e7fb024d244830b0968e231f8ff99fefa0f879270e13e14c4934fe"
     },
+    "convex-nextjs": {
+      "source": "tristanmanchester/agent-skills",
+      "sourceType": "github",
+      "computedHash": "f00c7021b5274584c0ea900bfcbc95b4641762a432f44fe26de05814ab982c6f"
+    },
+    "convex-performance-patterns": {
+      "source": "fluid-tools/claude-skills",
+      "sourceType": "github",
+      "computedHash": "e84f5265f8cda93e867d8d3951247a2366f4dd7966fa194d484089333506d34f"
+    },
     "convex-realtime": {
       "source": "waynesutton/convexskills",
       "sourceType": "github",
@@ -75,6 +90,11 @@
       "source": "wshobson/agents",
       "sourceType": "github",
       "computedHash": "d0e4d2ba5a99cdc6e264d3927d1d81e85e79f551c8e246fa0a86123217eaad94"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "afeca00ac2f492d88fdd010e73d91719a5b57c564bb4a73325b0bd77e11323ab"
     },
     "web-design-guidelines": {
       "source": "vercel-labs/agent-skills",

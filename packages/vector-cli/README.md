@@ -118,6 +118,7 @@ vcli issue assignments API-1
 vcli issue set-priority API-1 High
 vcli issue replace-assignees API-1 "alice,bob"
 vcli issue comment API-1 --body "Investigating now."
+vcli issue link-github API-1 "https://github.com/acme/api/pull/123"
 ```
 
 Invites and notifications:

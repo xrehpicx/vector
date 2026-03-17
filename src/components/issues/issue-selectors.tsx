@@ -942,7 +942,7 @@ export function MultiAssigneeSelector({
   highlightAssigneeId = null,
   assignments = [],
   activeFilter = 'all',
-  currentUserId = '',
+  currentUserId: _currentUserId = '',
   canManageAll = false,
 }: MultiAssigneeSelectorProps) {
   const [open, setOpen] = useState(false);
@@ -962,7 +962,7 @@ export function MultiAssigneeSelector({
 
   const handleToggleAssignee = (userId: string) => {
     if (isLoading) return;
-    if (!canManageAll && userId !== currentUserId) return; // permission guard
+    if (!canManageAll) return;
     const isSelected = selectedAssigneeIds.includes(userId);
     if (isSelected) {
       onAssigneesChange(selectedAssigneeIds.filter(id => id !== userId));
@@ -973,6 +973,7 @@ export function MultiAssigneeSelector({
 
   const handleUnassignAll = () => {
     if (isLoading) return;
+    if (!canManageAll) return;
     onAssigneesChange([]);
   };
 
@@ -1114,7 +1115,10 @@ export function MultiAssigneeSelector({
               <CommandItem
                 value='unassign'
                 onSelect={handleUnassignAll}
-                disabled={isLoading}
+                disabled={isLoading || !canManageAll}
+                className={cn(
+                  !canManageAll && 'pointer-events-none opacity-50',
+                )}
               >
                 <div className='flex w-full items-center gap-2'>
                   <div className='ml-6'>
@@ -1140,11 +1144,9 @@ export function MultiAssigneeSelector({
                   key={member.userId}
                   value={member.user?.name || member.user?.email}
                   onSelect={() => handleToggleAssignee(member.userId)}
-                  disabled={isLoading}
+                  disabled={isLoading || !canManageAll}
                   className={cn(
-                    !canManageAll &&
-                      member.userId !== currentUserId &&
-                      'pointer-events-none opacity-50',
+                    !canManageAll && 'pointer-events-none opacity-50',
                   )}
                 >
                   <div className='flex w-full items-center gap-3'>

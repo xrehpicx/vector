@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IconPicker } from '@/components/ui/icon-picker';
-import { notFound, useParams, useRouter } from 'next/navigation';
+import { notFound, useRouter } from 'next/navigation';
 import { formatDateHuman } from '@/lib/date';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
@@ -73,7 +73,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import {
-  usePermissionCheck,
   PermissionAware,
   PermissionGate,
 } from '@/components/ui/permission-aware';
@@ -98,6 +97,7 @@ import {
   updateQuery,
   updateTeamRows,
 } from '@/lib/optimistic-updates';
+import { useScopedPermissions } from '@/hooks/use-permissions';
 
 // Add Member Dialog
 function AddMemberDialog({
@@ -321,11 +321,23 @@ const DEFAULT_COLORS = [
   '#6b7280', // gray-500
 ];
 
-export default function TeamViewClient() {
-  const params = useParams();
+interface TeamViewClientProps {
+  params: { orgSlug: string; teamKey: string };
+  initialData: Partial<{
+    team: FunctionReturnType<typeof api.teams.queries.getByKey>;
+    teamIssues: FunctionReturnType<typeof api.issues.queries.listIssues>;
+    workspaceOptions: FunctionReturnType<
+      typeof api.organizations.queries.getWorkspaceOptions
+    > | null;
+  }> | null;
+}
+
+export default function TeamViewClient({
+  params,
+  initialData,
+}: TeamViewClientProps) {
   const router = useRouter();
-  const orgSlug = params.orgSlug as string;
-  const teamKey = params.teamKey as string;
+  const { orgSlug, teamKey } = params;
 
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
@@ -359,7 +371,7 @@ export default function TeamViewClient() {
     orgSlug,
     teamKey,
   });
-  const team = teamQuery.data;
+  const team = teamQuery.data ?? initialData?.team;
   const teamQueryArgs = { orgSlug, teamKey };
   const displayName = team?.name ?? '';
   const displayDescription = team?.description ?? '';
@@ -369,7 +381,7 @@ export default function TeamViewClient() {
   // Fetch team members
   const teamMembersQuery = useQuery(
     api.teams.queries.listMembers,
-    team?._id ? { teamId: team._id } : 'skip',
+    team?._id && activeTab === 'members' ? { teamId: team._id } : 'skip',
   );
   const teamMembers = teamMembersQuery.data;
   const filteredMembers = useMemo(() => {
@@ -386,7 +398,7 @@ export default function TeamViewClient() {
   // Fetch team issues
   const teamIssuesQuery = useQuery(
     api.issues.queries.listIssues,
-    team?._id
+    team?._id && activeTab === 'issues'
       ? {
           orgSlug,
           teamId: team._id,
@@ -394,12 +406,18 @@ export default function TeamViewClient() {
         }
       : 'skip',
   );
-  const teamIssuesData = teamIssuesQuery.data;
+  const teamIssuesData =
+    teamIssuesQuery.data ??
+    (activeTab === 'issues' && !deferredIssueSearch
+      ? initialData?.teamIssues
+      : undefined);
 
   // Fetch team projects
   const teamProjectsQuery = useQuery(
     api.projects.queries.list,
-    team?.key ? { orgSlug, teamId: team.key } : 'skip',
+    team?.key && activeTab === 'projects'
+      ? { orgSlug, teamId: team.key }
+      : 'skip',
   );
   const teamProjects = teamProjectsQuery.data ?? [];
   const teamIssuesQueryArgs = team?._id
@@ -414,40 +432,26 @@ export default function TeamViewClient() {
     : null;
 
   // Fetch supporting data for tables
-  const statesQuery = useQuery(api.organizations.queries.listIssueStates, {
-    orgSlug,
-  });
-  const states = statesQuery.data ?? [];
-
-  const prioritiesQuery = useQuery(
-    api.organizations.queries.listIssuePriorities,
-    {
-      orgSlug,
-    },
+  const workspaceOptionsQuery = useQuery(
+    api.organizations.queries.getWorkspaceOptions,
+    { orgSlug },
   );
-  const priorities = prioritiesQuery.data ?? [];
-
-  const teamsQuery = useQuery(api.organizations.queries.listTeams, { orgSlug });
-  const teams = teamsQuery.data ?? [];
-
-  const projectsQuery = useQuery(api.organizations.queries.listProjects, {
-    orgSlug,
-  });
-  const projects = projectsQuery.data ?? [];
+  const workspaceOptions =
+    workspaceOptionsQuery.data ?? initialData?.workspaceOptions ?? null;
+  const states = workspaceOptions?.issueStates ?? [];
+  const priorities = workspaceOptions?.issuePriorities ?? [];
+  const teams = workspaceOptions?.teams ?? [];
+  const projects = workspaceOptions?.projects ?? [];
 
   const teamDocumentsQuery = useQuery(
     api.documents.queries.list,
-    team?._id ? { orgSlug, teamId: team._id } : 'skip',
+    team?._id && activeTab === 'documents'
+      ? { orgSlug, teamId: team._id }
+      : 'skip',
   );
   const teamDocuments = teamDocumentsQuery.data ?? [];
 
-  const statusesQuery = useQuery(
-    api.organizations.queries.listProjectStatuses,
-    {
-      orgSlug,
-    },
-  );
-  const statuses = statusesQuery.data ?? [];
+  const statuses = workspaceOptions?.projectStatuses ?? [];
 
   // Determine if user can edit team (team lead or has permission)
   // Moved ABOVE any conditional early returns to keep hook order consistent
@@ -455,21 +459,20 @@ export default function TeamViewClient() {
     return team?._id ? { orgSlug, teamId: team._id } : { orgSlug };
   }, [orgSlug, team]);
 
-  const { isAllowed: canEditTeam } = usePermissionCheck(
-    orgSlug,
-    PERMISSIONS.TEAM_EDIT,
+  const { permissions: teamPermissions } = useScopedPermissions(
     permissionScope,
+    [
+      PERMISSIONS.TEAM_EDIT,
+      PERMISSIONS.TEAM_DELETE,
+      PERMISSIONS.ISSUE_ASSIGN,
+      PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
+    ],
   ); // Mutations with toast error handling - ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
-  const { isAllowed: canDeleteTeam } = usePermissionCheck(
-    orgSlug,
-    PERMISSIONS.TEAM_DELETE,
-    permissionScope,
-  );
-  const { isAllowed: canUpdateAssignmentStates } = usePermissionCheck(
-    orgSlug,
-    PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
-    permissionScope,
-  );
+  const canEditTeam = teamPermissions[PERMISSIONS.TEAM_EDIT] ?? false;
+  const canDeleteTeam = teamPermissions[PERMISSIONS.TEAM_DELETE] ?? false;
+  const canAssignIssues = teamPermissions[PERMISSIONS.ISSUE_ASSIGN] ?? false;
+  const canUpdateAssignmentStates =
+    teamPermissions[PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE] ?? false;
   const updateTeamMutation = useMutation(
     api.teams.mutations.update,
   ).withOptimisticUpdate((store, args) => {
@@ -722,31 +725,22 @@ export default function TeamViewClient() {
     }));
   });
 
-  // Check if any queries are still loading
-  const isLoading =
-    userQuery.isPending ||
-    teamQuery.isPending ||
-    teamMembersQuery.isPending ||
-    teamIssuesQuery.isPending ||
-    teamProjectsQuery.isPending ||
-    statesQuery.isPending ||
-    prioritiesQuery.isPending ||
-    teamsQuery.isPending ||
-    projectsQuery.isPending ||
-    statusesQuery.isPending;
+  const teamQueryErrorMessage = teamQuery.error?.message ?? '';
+  const shouldShowNotFound =
+    !team &&
+    teamQuery.isError &&
+    teamQueryErrorMessage.includes('TEAM_NOT_FOUND');
+  // Keep the skeleton only until the live team query settles if SSR data is missing.
+  const isLoading = !team && !teamQuery.isError;
 
   // Check for errors
   const hasError =
-    userQuery.isError ||
-    teamQuery.isError ||
+    (!team && teamQuery.isError && !shouldShowNotFound) ||
     teamMembersQuery.isError ||
     teamIssuesQuery.isError ||
     teamProjectsQuery.isError ||
-    statesQuery.isError ||
-    prioritiesQuery.isError ||
-    teamsQuery.isError ||
-    projectsQuery.isError ||
-    statusesQuery.isError;
+    teamDocumentsQuery.isError ||
+    workspaceOptionsQuery.isError;
 
   // Show loading state
   if (isLoading) {
@@ -820,14 +814,17 @@ export default function TeamViewClient() {
     );
   }
 
+  if (shouldShowNotFound) {
+    notFound();
+  }
+
   // Show error state
   if (hasError) {
     return <div>Error loading team data. Please try again.</div>;
   }
 
-  // Show not found if team doesn't exist
   if (!team) {
-    notFound();
+    return null;
   }
 
   const canEdit = !!(
@@ -842,8 +839,6 @@ export default function TeamViewClient() {
     setDescriptionValue(team.description || '');
     setKeyValue(team.key);
   }
-
-  if (!user) return null;
 
   const handleNameSave = async () => {
     if (!nameValue.trim() || !team) return;
@@ -1605,12 +1600,32 @@ export default function TeamViewClient() {
               <TabsContent value='members'>
                 <div className='px-3 sm:px-4'>
                   <div className='rounded-lg border'>
-                    <MembersList
-                      members={filteredMembers}
-                      onRemoveMember={canEdit ? handleRemoveMember : undefined}
-                      removePending={isUpdating}
-                      canEdit={canEdit}
-                    />
+                    {teamMembersQuery.data === undefined ? (
+                      <div className='divide-y'>
+                        {Array.from({ length: 4 }).map((_, i) => (
+                          <div
+                            key={i}
+                            className='flex items-center gap-3 px-3 py-2'
+                          >
+                            <Skeleton className='size-8 rounded-full' />
+                            <div className='flex-1 space-y-1'>
+                              <Skeleton className='h-4 w-28' />
+                              <Skeleton className='h-3 w-40' />
+                            </div>
+                            <Skeleton className='h-4 w-14' />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <MembersList
+                        members={filteredMembers}
+                        onRemoveMember={
+                          canEdit ? handleRemoveMember : undefined
+                        }
+                        removePending={isUpdating}
+                        canEdit={canEdit}
+                      />
+                    )}
                   </div>
                 </div>
               </TabsContent>
@@ -1653,7 +1668,8 @@ export default function TeamViewClient() {
                           teams={teams}
                           projects={projects}
                           currentUserId={user?._id || ''}
-                          canChangeAll={canUpdateAssignmentStates}
+                          canManageAssignees={canAssignIssues}
+                          canUpdateAssignmentStates={canUpdateAssignmentStates}
                           onStateChange={(issueId, _assignmentId, stateId) => {
                             void handleAssignmentStateChange(issueId, stateId);
                           }}
@@ -1697,7 +1713,7 @@ export default function TeamViewClient() {
                               }
                               isUpdatingAssignmentStates={isUpdatingIssues}
                               currentUserId={user?._id || ''}
-                              canChangeAll={canUpdateAssignmentStates}
+                              canManageAssignees={canAssignIssues}
                               activeFilter='all'
                             />
                           </div>
@@ -1726,7 +1742,16 @@ export default function TeamViewClient() {
               <TabsContent value='projects'>
                 <div className='px-3 sm:px-4'>
                   <div className='rounded-lg border'>
-                    {teamProjects && teamProjects.length > 0 ? (
+                    {teamProjectsQuery.data === undefined ? (
+                      <div className='space-y-3 p-4'>
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <div
+                            key={i}
+                            className='bg-muted/60 h-8 animate-pulse rounded'
+                          />
+                        ))}
+                      </div>
+                    ) : teamProjects.length > 0 ? (
                       <ProjectsTable
                         orgSlug={orgSlug}
                         projects={teamProjects.map(project => ({
@@ -1772,7 +1797,16 @@ export default function TeamViewClient() {
               <TabsContent value='documents'>
                 <div className='space-y-4 px-3 sm:px-4'>
                   <div className='rounded-lg border'>
-                    {teamDocuments && teamDocuments.length > 0 ? (
+                    {teamDocumentsQuery.data === undefined ? (
+                      <div className='space-y-3 p-4'>
+                        {Array.from({ length: 4 }).map((_, i) => (
+                          <div
+                            key={i}
+                            className='bg-muted/60 h-8 animate-pulse rounded'
+                          />
+                        ))}
+                      </div>
+                    ) : teamDocuments.length > 0 ? (
                       <div className='divide-y'>
                         {teamDocuments.map(doc => (
                           <Link

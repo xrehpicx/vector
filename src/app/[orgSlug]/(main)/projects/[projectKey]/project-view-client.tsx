@@ -13,8 +13,9 @@ import {
   Columns3,
   Trash2,
 } from 'lucide-react';
-import { useQuery, useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import type { FunctionReturnType } from 'convex/server';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichEditor } from '@/components/ui/rich-editor';
@@ -26,10 +27,7 @@ import { ProjectMembersSection } from '@/components/projects/project-members';
 import { ProjectActivityFeed } from '@/components/activity/project-activity-feed';
 import { LinkedDocuments } from '@/components/documents/linked-documents';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
-import {
-  usePermissionCheck,
-  PermissionAware,
-} from '@/components/ui/permission-aware';
+import { PermissionAware } from '@/components/ui/permission-aware';
 import { cn } from '@/lib/utils';
 import { IconPicker } from '@/components/ui/icon-picker';
 import {
@@ -66,9 +64,17 @@ import {
   updateIssueRows,
   updateQuery,
 } from '@/lib/optimistic-updates';
+import { useScopedPermissions } from '@/hooks/use-permissions';
 
 interface ProjectViewClientProps {
   params: { orgSlug: string; projectKey: string };
+  initialProject: FunctionReturnType<
+    typeof api.projects.queries.getByKey
+  > | null;
+  initialWorkspaceOptions: FunctionReturnType<
+    typeof api.organizations.queries.getWorkspaceOptions
+  > | null;
+  initialIssuesData: FunctionReturnType<typeof api.issues.queries.listIssues>;
 }
 
 // Default colors for project customization
@@ -231,7 +237,12 @@ function ProjectDateRangePicker({
   );
 }
 
-export default function ProjectViewClient({ params }: ProjectViewClientProps) {
+export default function ProjectViewClient({
+  params,
+  initialProject,
+  initialWorkspaceOptions,
+  initialIssuesData,
+}: ProjectViewClientProps) {
   const router = useRouter();
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
@@ -274,10 +285,11 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
 
   const user = useQuery(api.users.currentUser);
 
-  const project = useQuery(api.projects.queries.getByKey, {
+  const liveProject = useQuery(api.projects.queries.getByKey, {
     orgSlug: params.orgSlug,
     projectKey: params.projectKey,
   });
+  const project = liveProject === undefined ? initialProject : liveProject;
   const projectQueryArgs = {
     orgSlug: params.orgSlug,
     projectKey: params.projectKey,
@@ -298,26 +310,23 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
       : { orgSlug: params.orgSlug };
   }, [params.orgSlug, projectId]);
 
-  const { isAllowed: canEditProject } = usePermissionCheck(
-    params.orgSlug,
-    PERMISSIONS.PROJECT_EDIT,
+  const { permissions: projectPermissions } = useScopedPermissions(
     permissionScope,
+    [
+      PERMISSIONS.PROJECT_EDIT,
+      PERMISSIONS.PROJECT_DELETE,
+      PERMISSIONS.ISSUE_DELETE,
+      PERMISSIONS.ISSUE_ASSIGN,
+      PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
+    ],
   );
-  const { isAllowed: canDeleteProject } = usePermissionCheck(
-    params.orgSlug,
-    PERMISSIONS.PROJECT_DELETE,
-    permissionScope,
-  );
-  const { isAllowed: canDeleteIssue } = usePermissionCheck(
-    params.orgSlug,
-    PERMISSIONS.ISSUE_DELETE,
-    permissionScope,
-  );
-  const { isAllowed: canUpdateAssignmentStates } = usePermissionCheck(
-    params.orgSlug,
-    PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE,
-    permissionScope,
-  );
+  const canEditProject = projectPermissions[PERMISSIONS.PROJECT_EDIT] ?? false;
+  const canDeleteProject =
+    projectPermissions[PERMISSIONS.PROJECT_DELETE] ?? false;
+  const canDeleteIssue = projectPermissions[PERMISSIONS.ISSUE_DELETE] ?? false;
+  const canAssignIssues = projectPermissions[PERMISSIONS.ISSUE_ASSIGN] ?? false;
+  const canUpdateAssignmentStates =
+    projectPermissions[PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE] ?? false;
 
   const canEdit = !!(
     user &&
@@ -327,25 +336,19 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
       canEditProject)
   );
 
-  const statuses = useQuery(api.organizations.queries.listProjectStatuses, {
-    orgSlug: params.orgSlug,
-  });
-
-  const teams = useQuery(api.organizations.queries.listTeams, {
-    orgSlug: params.orgSlug,
-  });
-
-  // Issue data for project board
-  const issueStates = useQuery(api.organizations.queries.listIssueStates, {
-    orgSlug: params.orgSlug,
-  });
-  const issuePriorities = useQuery(
-    api.organizations.queries.listIssuePriorities,
-    {
-      orgSlug: params.orgSlug,
-    },
+  const liveWorkspaceOptions = useQuery(
+    api.organizations.queries.getWorkspaceOptions,
+    { orgSlug: params.orgSlug },
   );
-  const projectIssuesData = useQuery(
+  const workspaceOptions =
+    liveWorkspaceOptions === undefined
+      ? initialWorkspaceOptions
+      : liveWorkspaceOptions;
+  const statuses = workspaceOptions?.projectStatuses;
+  const teams = workspaceOptions?.teams;
+  const issueStates = workspaceOptions?.issueStates;
+  const issuePriorities = workspaceOptions?.issuePriorities;
+  const liveProjectIssuesData = useQuery(
     api.issues.queries.listIssues,
     project?._id
       ? {
@@ -357,6 +360,12 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
         }
       : 'skip',
   );
+  const projectIssuesData =
+    liveProjectIssuesData === undefined &&
+    !deferredIssueSearch &&
+    issuePage === 1
+      ? initialIssuesData
+      : liveProjectIssuesData;
   const projectIssues = projectIssuesData?.issues ?? [];
   const projectIssuesTotal = projectIssuesData?.total ?? 0;
   const projectIssuesQueryArgs = project?._id
@@ -1345,7 +1354,8 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                       priorities={issuePriorities ?? []}
                       teams={teams ?? []}
                       currentUserId={user?._id || ''}
-                      canChangeAll={canUpdateAssignmentStates}
+                      canManageAssignees={canAssignIssues}
+                      canUpdateAssignmentStates={canUpdateAssignmentStates}
                       onStateChange={(issueId, _assignmentId, stateId) => {
                         void changeWorkflowStateMutation({
                           issueId: issueId as Id<'issues'>,
@@ -1409,7 +1419,7 @@ export default function ProjectViewClient({ params }: ProjectViewClientProps) {
                         }}
                         currentUserId={user?._id || ''}
                         activeFilter='all'
-                        canChangeAll={canUpdateAssignmentStates}
+                        canManageAssignees={canAssignIssues}
                       />
                     </div>
                     {projectIssuesTotal > ISSUE_PAGE_SIZE && (
