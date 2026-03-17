@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { AlertTriangle, RefreshCw, Home, ArrowLeft, LogIn } from 'lucide-react';
-import { Button } from './button';
+import { Button, buttonVariants } from './button';
+import { cn } from '@/lib/utils';
 
 interface ErrorInfo {
   componentStack: string;
@@ -149,12 +150,13 @@ function UnauthenticatedErrorFallback() {
         </div>
 
         <div className='flex flex-col gap-2'>
-          <Button asChild size='sm' className='h-8 gap-2 text-xs'>
-            <a href={loginUrl}>
-              <LogIn className='size-3.5' />
-              Sign in
-            </a>
-          </Button>
+          <a
+            href={loginUrl}
+            className={cn(buttonVariants({ size: 'sm' }), 'h-8 gap-2 text-xs')}
+          >
+            <LogIn className='size-3.5' />
+            Sign in
+          </a>
 
           <Button
             variant='ghost'
