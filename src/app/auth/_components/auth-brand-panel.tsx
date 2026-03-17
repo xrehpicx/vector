@@ -19,12 +19,12 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       {/* Light mode background */}
       <div className='pointer-events-none absolute inset-0 overflow-hidden dark:hidden'>
         <Grainient
-          color1='#99f6e4'
-          color2='#f0fdfa'
-          color3='#ccfbf1'
+          color1='#c4b5fd'
+          color2='#e0e7ff'
+          color3='#a5f3fc'
           timeSpeed={0.15}
           grainAmount={0.1}
-          contrast={1.3}
+          contrast={1.4}
           saturation={1.0}
           warpAmplitude={60}
           warpSpeed={1.0}
@@ -33,12 +33,12 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       {/* Dark mode background */}
       <div className='pointer-events-none absolute inset-0 hidden overflow-hidden dark:block'>
         <Grainient
-          color1='#0f2a2e'
-          color2='#0a1a1c'
-          color3='#134e4a'
+          color1='#1e1b4b'
+          color2='#0f172a'
+          color3='#164e63'
           timeSpeed={0.15}
           grainAmount={0.12}
-          contrast={1.3}
+          contrast={1.4}
           saturation={0.8}
           warpAmplitude={60}
           warpSpeed={1.0}
