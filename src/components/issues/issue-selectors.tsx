@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, type SyntheticEvent } from 'react';
+import {
+  cloneElement,
+  isValidElement,
+  useState,
+  type ReactElement,
+  type SyntheticEvent,
+} from 'react';
 
 // UI primitives
 import { Button } from '@/components/ui/button';
@@ -116,6 +122,28 @@ function stopPropagation(event: SyntheticEvent) {
   event.stopPropagation();
 }
 
+function guardTriggerElement(trigger: ReactElement) {
+  const triggerProps = trigger.props as {
+    onClick?: (event: SyntheticEvent) => void;
+    onPointerDown?: (event: SyntheticEvent) => void;
+  };
+
+  return cloneElement(trigger, {
+    onClick: (event: SyntheticEvent) => {
+      triggerProps.onClick?.(event);
+      stopPropagation(event);
+    },
+    onPointerDown: (event: SyntheticEvent) => {
+      triggerProps.onPointerDown?.(event);
+      stopPropagation(event);
+    },
+  });
+}
+
+function renderGuardedTrigger(trigger: ReactElement) {
+  return isValidElement(trigger) ? guardTriggerElement(trigger) : trigger;
+}
+
 // ---------------------------------------------------------------------------
 // Selector components
 // ---------------------------------------------------------------------------
@@ -183,13 +211,7 @@ export function ProjectSelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div
-          className='contents'
-          onClick={stopPropagation}
-          onPointerDown={stopPropagation}
-        >
-          {trigger ?? DefaultBtn}
-        </div>
+        {renderGuardedTrigger(trigger ?? DefaultBtn)}
       </PopoverTrigger>
       <PopoverContent
         align={align}
@@ -358,13 +380,7 @@ export function StateSelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div
-          className='contents'
-          onClick={stopPropagation}
-          onPointerDown={stopPropagation}
-        >
-          {trigger ?? DefaultBtn}
-        </div>
+        {renderGuardedTrigger(trigger ?? DefaultBtn)}
       </PopoverTrigger>
       <PopoverContent
         align={align}
@@ -504,13 +520,7 @@ export function PrioritySelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div
-          className='contents'
-          onClick={stopPropagation}
-          onPointerDown={stopPropagation}
-        >
-          {trigger ?? DefaultBtn}
-        </div>
+        {renderGuardedTrigger(trigger ?? DefaultBtn)}
       </PopoverTrigger>
       <PopoverContent
         align={align}
@@ -1167,12 +1177,8 @@ export function MultiAssigneeSelector({
       }}
     >
       <PopoverTrigger asChild>
-        <div
-          className='contents'
-          onClick={stopPropagation}
-          onPointerDown={stopPropagation}
-        >
-          {trigger || (
+        {renderGuardedTrigger(
+          trigger || (
             <div
               className={cn(
                 'flex cursor-pointer items-center gap-1',
@@ -1181,8 +1187,8 @@ export function MultiAssigneeSelector({
             >
               {getDisplayContent()}
             </div>
-          )}
-        </div>
+          ),
+        )}
       </PopoverTrigger>
       <PopoverContent
         className='w-80 p-0'
