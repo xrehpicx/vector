@@ -218,6 +218,10 @@ export default function IssueViewClient({
   });
   const issue = liveIssue === undefined ? initialIssue : liveIssue;
   const issueQueryArgs = { orgSlug: params.orgSlug, issueKey: params.issueKey };
+  const publicIssueUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/${params.orgSlug}/issues/${params.issueKey}/public`
+      : '';
   const displayTitle = issue?.title ?? '';
   const displayDescription = issue?.description ?? '';
   const assignments = useQuery(
@@ -779,6 +783,7 @@ export default function IssueViewClient({
                   }
                   displayMode='iconWhenUnselected'
                   className='border-none bg-transparent shadow-none'
+                  publicLinkUrl={publicIssueUrl}
                 />
               </PermissionAwareSelector>
               <Popover open={actionsOpen} onOpenChange={setActionsOpen}>

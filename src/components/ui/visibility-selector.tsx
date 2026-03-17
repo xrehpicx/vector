@@ -178,9 +178,21 @@ export function VisibilitySelector({
                   <CommandItem
                     key={option.value}
                     value={option.label}
-                    onSelect={() => {
+                    onSelect={async () => {
                       if (!isDisabled) {
                         onValueChange(option.value);
+                        if (
+                          option.value === 'public' &&
+                          publicLinkUrl &&
+                          displayValue !== 'public'
+                        ) {
+                          try {
+                            await navigator.clipboard.writeText(publicLinkUrl);
+                            toast.success('Public link copied');
+                          } catch {
+                            toast.error('Failed to copy public link');
+                          }
+                        }
                         setOpen(false);
                       }
                     }}

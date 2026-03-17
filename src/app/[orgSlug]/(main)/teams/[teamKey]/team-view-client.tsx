@@ -338,6 +338,10 @@ export default function TeamViewClient({
 }: TeamViewClientProps) {
   const router = useRouter();
   const { orgSlug, teamKey } = params;
+  const publicTeamUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/${orgSlug}/teams/${teamKey}/public`
+      : '';
 
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
@@ -1115,6 +1119,7 @@ export default function TeamViewClient({
                   onValueChange={handleVisibilityChange}
                   displayMode='iconWhenUnselected'
                   className='border-none bg-transparent shadow-none'
+                  publicLinkUrl={publicTeamUrl}
                 />
               </PermissionAware>
               <div className='bg-muted-foreground/20 h-4 w-px' />

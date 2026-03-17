@@ -244,6 +244,10 @@ export default function ProjectViewClient({
   initialIssuesData,
 }: ProjectViewClientProps) {
   const router = useRouter();
+  const publicProjectUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/${params.orgSlug}/projects/${params.projectKey}/public`
+      : '';
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [titleValue, setTitleValue] = useState('');
@@ -811,6 +815,7 @@ export default function ProjectViewClient({
                 onValueChange={handleVisibilityChange}
                 displayMode='iconWhenUnselected'
                 className='border-none bg-transparent shadow-none'
+                publicLinkUrl={publicProjectUrl}
               />
             </PermissionAware>
             <div className='bg-muted-foreground/20 h-4 w-px' />
