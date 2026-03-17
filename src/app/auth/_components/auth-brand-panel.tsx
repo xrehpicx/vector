@@ -9,8 +9,8 @@ import { Grainient } from '@/components/ui/grainient';
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div className='relative flex min-h-dvh items-center justify-center px-4 py-12'>
-      {/* Animated grain gradient background */}
-      <div className='pointer-events-none absolute inset-0'>
+      {/* Light mode background */}
+      <div className='pointer-events-none absolute inset-0 dark:hidden'>
         <Grainient
           color1='#e0f2fe'
           color2='#f0f9ff'
@@ -21,8 +21,10 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           saturation={0.8}
           warpAmplitude={80}
           warpSpeed={0.8}
-          className='dark:hidden'
         />
+      </div>
+      {/* Dark mode background */}
+      <div className='pointer-events-none absolute inset-0 hidden dark:block'>
         <Grainient
           color1='#0c1222'
           color2='#0a0f1a'
@@ -33,7 +35,6 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           saturation={0.6}
           warpAmplitude={80}
           warpSpeed={0.8}
-          className='hidden dark:block'
         />
       </div>
 

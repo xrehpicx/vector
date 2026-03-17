@@ -27,12 +27,6 @@ import Link from 'next/link';
 import { extractAuthErrorMessage } from '@/lib/auth-error-handler';
 import { authClient } from '@/lib/auth-client';
 import { toast } from 'sonner';
-import { useBranding } from '@/hooks/use-branding';
-import {
-  DEFAULT_BRANDING,
-  getContrastingTextColor,
-  resolveBrandColor,
-} from '@/lib/branding';
 import { AuthLogo, AuthShell } from '../_components/auth-brand-panel';
 
 export const dynamic = 'force-dynamic';
@@ -59,13 +53,6 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/';
-  const branding = useBranding();
-  const accentColor = resolveBrandColor(
-    branding.accentColor,
-    DEFAULT_BRANDING.accentColor,
-  );
-  const accentTextColor = getContrastingTextColor(accentColor);
-
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<SignUpFormType>({
@@ -186,12 +173,8 @@ function SignupForm() {
 
               <Button
                 type='submit'
-                className='!mt-5 w-full transition-opacity hover:opacity-90'
+                className='!mt-5 w-full'
                 disabled={isLoading}
-                style={{
-                  backgroundColor: accentColor,
-                  color: accentTextColor,
-                }}
               >
                 {isLoading ? (
                   <span className='flex items-center gap-2'>
