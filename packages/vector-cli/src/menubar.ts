@@ -72,6 +72,23 @@ function isBridgeRunning(): { running: boolean; pid?: number } {
   }
 }
 
+function getSessionInfo(): {
+  orgSlug: string;
+  appUrl?: string;
+} {
+  try {
+    const session = JSON.parse(
+      readFileSync(join(CONFIG_DIR, 'cli-default.json'), 'utf-8'),
+    );
+    return {
+      orgSlug: session.activeOrgSlug ?? 'oss-lab',
+      appUrl: session.appUrl,
+    };
+  } catch {
+    return { orgSlug: 'oss-lab' };
+  }
+}
+
 function getOrgSlug(): string {
   try {
     const session = JSON.parse(
@@ -199,18 +216,43 @@ function buildMenu(): {
   items.push({ title: '---', enabled: false });
   idx++;
 
+  // Account info
+  if (config) {
+    const { orgSlug, appUrl } = getSessionInfo();
+    items.push({
+      title: `Account: ${config.userId.slice(0, 12)}...`,
+      enabled: false,
+    });
+    idx++;
+    if (orgSlug) {
+      items.push({ title: `Org: ${orgSlug}`, enabled: false });
+      idx++;
+    }
+    items.push({ title: '---', enabled: false });
+    idx++;
+  }
+
   items.push({ title: 'Open Vector' });
   actions.set(idx, () => {
+    const { appUrl } = getSessionInfo();
+    const url = appUrl ?? 'http://localhost:3000';
     try {
-      execSync('open http://localhost:3000', { stdio: 'ignore' });
+      execSync(`open "${url}"`, { stdio: 'ignore' });
     } catch {
       /* ignore */
     }
   });
   idx++;
 
-  items.push({ title: 'Quit' });
+  items.push({ title: 'Quit Vector' });
   actions.set(idx, () => {
+    // Stop the bridge before quitting
+    try {
+      const { pid: bridgePid } = isBridgeRunning();
+      if (bridgePid) process.kill(bridgePid, 'SIGTERM');
+    } catch {
+      /* ignore */
+    }
     process.exit(0);
   });
   idx++;

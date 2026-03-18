@@ -506,13 +506,15 @@ export async function launchMenuBar(): Promise<void> {
 export function getBridgeStatus(): {
   configured: boolean;
   running: boolean;
+  starting: boolean;
   pid?: number;
   config?: BridgeConfig;
 } {
   const config = loadBridgeConfig();
-  if (!config) return { configured: false, running: false };
+  if (!config) return { configured: false, running: false, starting: false };
 
   let running = false;
+  let starting = false;
   let pid: number | undefined;
   if (existsSync(PID_FILE)) {
     const pidStr = readFileSync(PID_FILE, 'utf-8').trim();
@@ -525,7 +527,22 @@ export function getBridgeStatus(): {
     }
   }
 
-  return { configured: true, running, pid, config };
+  // Check if LaunchAgent is loaded but PID file not yet written (starting up)
+  if (!running && platform() === 'darwin') {
+    try {
+      const result = execSync(
+        `launchctl list ${LAUNCHAGENT_LABEL} 2>/dev/null`,
+        { encoding: 'utf-8', timeout: 3000 },
+      );
+      if (result.includes(LAUNCHAGENT_LABEL)) {
+        starting = true;
+      }
+    } catch {
+      // Not loaded
+    }
+  }
+
+  return { configured: true, running, starting, pid, config };
 }
 
 export function stopBridge(): boolean {

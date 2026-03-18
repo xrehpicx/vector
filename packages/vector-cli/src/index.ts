@@ -2841,9 +2841,6 @@ serviceCommand
       loadLaunchAgent();
       await launchMenuBar();
       console.log('Bridge service started.');
-      console.log('');
-      console.log('Run `vcli service status` to check.');
-      console.log('Run `vcli service stop` to stop.');
     } else {
       // Linux / other: run in foreground
       console.log(
@@ -2905,9 +2902,12 @@ serviceCommand
       `  Device:  ${status.config!.displayName} (${status.config!.deviceId})`,
     );
     console.log(`  User:    ${status.config!.userId}`);
-    console.log(
-      `  Status:  ${status.running ? `Running (PID ${status.pid})` : 'Not running'}`,
-    );
+    const statusLabel = status.running
+      ? `Running (PID ${status.pid})`
+      : status.starting
+        ? 'Starting...'
+        : 'Not running';
+    console.log(`  Status:  ${statusLabel}`);
     console.log(`  Config:  ~/.vector/bridge.json`);
   });
 
@@ -2942,14 +2942,9 @@ serviceCommand
     const vcliPath = process.argv[1] ?? 'vcli';
     installLaunchAgent(vcliPath);
     loadLaunchAgent();
-    console.log('');
-    console.log('Bridge is now running and will start automatically on login.');
-    console.log('');
-    console.log('To start the service manually:');
-    console.log('  vcli service start');
-    console.log('');
-    console.log('To check status:');
-    console.log('  vcli service status');
+    console.log(
+      'Bridge installed and running. Will start automatically on login.',
+    );
   });
 
 serviceCommand
