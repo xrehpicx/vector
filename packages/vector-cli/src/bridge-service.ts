@@ -489,15 +489,83 @@ export function uninstallLaunchAgent(): void {
 
 // ── Menu Bar ────────────────────────────────────────────────────────────────
 
-export async function launchMenuBar(): Promise<void> {
-  // Import and start the TS-based tray
+const MENUBAR_BINARY = join(CONFIG_DIR, 'VectorMenuBar');
+const MENUBAR_SWIFT_URL =
+  'https://raw.githubusercontent.com/xrehpicx/vector/main/cli/macos/VectorMenuBar.swift';
+
+/** Ensure the native menu bar binary exists, compiling if needed. */
+async function ensureMenuBarBinary(): Promise<string | null> {
+  if (platform() !== 'darwin') return null;
+  if (existsSync(MENUBAR_BINARY)) return MENUBAR_BINARY;
+
+  // Check for Swift compiler
   try {
-    const { startMenuBar } = await import('./menubar');
-    // Run in background — don't await (it blocks forever)
-    void startMenuBar();
+    execSync('which swiftc', { stdio: 'pipe' });
+  } catch {
+    return null;
+  }
+
+  // Try local source first (dev), then download from GitHub
+  const localSource = join(
+    process.cwd(),
+    'cli',
+    'macos',
+    'VectorMenuBar.swift',
+  );
+  let swiftSource: string;
+
+  if (existsSync(localSource)) {
+    swiftSource = localSource;
+  } else {
+    // Download the Swift source
+    const downloadPath = join(CONFIG_DIR, 'VectorMenuBar.swift');
+    try {
+      execSync(`curl -fsSL "${MENUBAR_SWIFT_URL}" -o "${downloadPath}"`, {
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+      swiftSource = downloadPath;
+    } catch {
+      return null;
+    }
+  }
+
+  // Compile
+  try {
+    execSync(
+      `swiftc -o "${MENUBAR_BINARY}" "${swiftSource}" -framework AppKit`,
+      { stdio: 'pipe', timeout: 30000 },
+    );
+    // Copy icon assets if available
+    const assetsSource = join(swiftSource, '..', 'assets');
+    const assetsDest = join(CONFIG_DIR, 'assets');
+    if (existsSync(assetsSource)) {
+      mkdirSync(assetsDest, { recursive: true });
+      for (const f of ['vector-menubar.png', 'vector-menubar@2x.png']) {
+        const src = join(assetsSource, f);
+        if (existsSync(src))
+          writeFileSync(join(assetsDest, f), readFileSync(src));
+      }
+    }
+    return MENUBAR_BINARY;
+  } catch {
+    return null;
+  }
+}
+
+export async function launchMenuBar(): Promise<void> {
+  if (platform() !== 'darwin') return;
+
+  const binary = await ensureMenuBarBinary();
+  if (!binary) return;
+
+  try {
+    const { spawn: spawnChild } = await import('child_process');
+    const child = spawnChild(binary, [], { detached: true, stdio: 'ignore' });
+    child.unref();
     console.log('Menu bar started.');
   } catch {
-    // systray2 may not be available on all platforms — non-critical
+    // Non-critical
   }
 }
 
