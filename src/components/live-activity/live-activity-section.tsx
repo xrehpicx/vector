@@ -7,11 +7,13 @@ import type { Id } from '@/convex/_generated/dataModel';
 import type { FunctionReturnType } from 'convex/server';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
 import {
   Activity,
   ChevronDown,
   ChevronUp,
   Cpu,
+  FolderOpen,
   Monitor,
   Play,
   Plus,
@@ -347,49 +349,166 @@ export function DelegateRunPopover({
             </CommandList>
           </Command>
         ) : (
-          // Step 3: Pick workspace
-          <Command>
-            <div className='flex items-center gap-2 border-b px-3 py-2'>
-              <Button
-                variant='ghost'
-                size='xs'
-                className='h-5 px-1'
-                onClick={() => setSelectedProvider(null)}
-              >
-                &larr;
-              </Button>
-              <span className='text-sm font-medium'>
-                {selectedTarget?.device.displayName} &middot;{' '}
-                {selectedProvider === 'codex' ? 'Codex' : 'Claude'}
-              </span>
-            </div>
-            <CommandList>
-              <CommandGroup heading='Select workspace'>
-                {selectedTarget?.workspaces.map(ws => (
-                  <CommandItem
-                    key={ws._id}
-                    onSelect={() => handleDelegate(ws._id)}
-                    className='gap-2'
-                  >
-                    <div className='min-w-0 flex-1'>
-                      <div className='text-sm'>{ws.label}</div>
-                      <div className='text-muted-foreground truncate font-mono text-xs'>
-                        {ws.path}
-                      </div>
-                    </div>
-                  </CommandItem>
-                ))}
-                {selectedTarget?.workspaces.length === 0 && (
-                  <div className='text-muted-foreground p-3 text-center text-sm'>
-                    No workspaces configured for delegation
-                  </div>
-                )}
-              </CommandGroup>
-            </CommandList>
-          </Command>
+          // Step 3: Pick workspace (or add one)
+          <WorkspacePickerStep
+            device={selectedTarget?.device}
+            workspaces={selectedTarget?.workspaces ?? []}
+            providerLabel={selectedProvider === 'codex' ? 'Codex' : 'Claude'}
+            onBack={() => setSelectedProvider(null)}
+            onSelect={handleDelegate}
+          />
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ── Workspace Picker Step ────────────────────────────────────────────────────
+
+function WorkspacePickerStep({
+  device,
+  workspaces,
+  providerLabel,
+  onBack,
+  onSelect,
+}: {
+  device?: { _id: Id<'agentDevices'>; displayName: string };
+  workspaces: Array<{
+    _id: Id<'deviceWorkspaces'>;
+    label: string;
+    path: string;
+  }>;
+  providerLabel: string;
+  onBack: () => void;
+  onSelect: (workspaceId: Id<'deviceWorkspaces'>) => void;
+}) {
+  const [showAddForm, setShowAddForm] = useState(workspaces.length === 0);
+  const [newLabel, setNewLabel] = useState('');
+  const [newPath, setNewPath] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const addWorkspace = useMutation(api.agentBridge.mutations.upsertWorkspace);
+
+  const handleAdd = async () => {
+    if (!device || !newPath.trim()) return;
+    setAdding(true);
+    try {
+      const wsId = await addWorkspace({
+        deviceId: device._id,
+        label:
+          newLabel.trim() || newPath.trim().split('/').pop() || 'Workspace',
+        path: newPath.trim(),
+        isDefault: workspaces.length === 0,
+        launchPolicy: 'allow_delegated',
+      });
+      // Auto-select the newly created workspace
+      onSelect(wsId);
+    } catch {
+      toast.error('Failed to add workspace');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  if (showAddForm) {
+    return (
+      <div className='p-3'>
+        <div className='flex items-center gap-2 pb-3'>
+          <Button
+            variant='ghost'
+            size='xs'
+            className='h-5 px-1'
+            onClick={() =>
+              workspaces.length > 0 ? setShowAddForm(false) : onBack()
+            }
+          >
+            &larr;
+          </Button>
+          <span className='text-sm font-medium'>Add workspace</span>
+        </div>
+        <div className='space-y-2'>
+          <div>
+            <label className='text-muted-foreground mb-1 block text-xs'>
+              Path
+            </label>
+            <Input
+              value={newPath}
+              onChange={e => setNewPath(e.target.value)}
+              placeholder='/Users/you/projects/my-repo'
+              className='h-8 font-mono text-xs'
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleAdd();
+                }
+              }}
+            />
+          </div>
+          <div>
+            <label className='text-muted-foreground mb-1 block text-xs'>
+              Label (optional)
+            </label>
+            <Input
+              value={newLabel}
+              onChange={e => setNewLabel(e.target.value)}
+              placeholder={newPath.trim().split('/').pop() || 'My project'}
+              className='h-8 text-xs'
+            />
+          </div>
+          <Button
+            size='sm'
+            className='h-7 w-full text-xs'
+            disabled={adding || !newPath.trim()}
+            onClick={() => void handleAdd()}
+          >
+            {adding ? 'Adding...' : 'Add and run'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Command>
+      <div className='flex items-center gap-2 border-b px-3 py-2'>
+        <Button variant='ghost' size='xs' className='h-5 px-1' onClick={onBack}>
+          &larr;
+        </Button>
+        <span className='text-sm font-medium'>
+          {device?.displayName} &middot; {providerLabel}
+        </span>
+      </div>
+      <CommandList>
+        <CommandGroup heading='Select workspace'>
+          {workspaces.map(ws => (
+            <CommandItem
+              key={ws._id}
+              onSelect={() => onSelect(ws._id)}
+              className='gap-2'
+            >
+              <FolderOpen className='text-muted-foreground size-4 shrink-0' />
+              <div className='min-w-0 flex-1'>
+                <div className='text-sm'>{ws.label}</div>
+                <div className='text-muted-foreground truncate font-mono text-xs'>
+                  {ws.path}
+                </div>
+              </div>
+            </CommandItem>
+          ))}
+          <CommandItem
+            value='add-workspace'
+            onSelect={() => setShowAddForm(true)}
+            className='gap-2'
+          >
+            <Plus className='text-muted-foreground size-4 shrink-0' />
+            <span className='text-muted-foreground text-sm'>
+              Add workspace...
+            </span>
+          </CommandItem>
+        </CommandGroup>
+      </CommandList>
+    </Command>
   );
 }
 
