@@ -65,7 +65,7 @@ function SidebarSection({
 
   return (
     <div className='space-y-1'>
-      <div className='flex items-center justify-between px-2'>
+      <div className='flex items-center justify-between pr-1 pl-2'>
         <div className='flex items-center gap-1'>
           <Link
             href={href}
@@ -215,7 +215,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
                   href={teamHref}
                   onClick={onNavigate}
                   className={cn(
-                    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+                    'flex items-center gap-2 rounded-md py-1.5 pr-1 pl-2 text-sm font-medium transition-colors',
                     'hover:bg-foreground/5 text-foreground',
                     {
                       'bg-foreground/5': isActive,
@@ -233,7 +233,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
               );
             })
           ) : (
-            <div className='text-muted-foreground px-2 py-1.5 text-xs'>
+            <div className='text-muted-foreground py-1.5 pr-1 pl-2 text-xs'>
               No teams yet
             </div>
           )}
@@ -242,7 +242,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
             <Link
               href={`/${orgSlug}/teams`}
               onClick={onNavigate}
-              className='text-muted-foreground hover:text-foreground block px-2 py-1.5 text-xs transition-colors'
+              className='text-muted-foreground hover:text-foreground block py-1.5 pr-1 pl-2 text-xs transition-colors'
             >
               +{userTeams.length - 3} more teams
             </Link>
@@ -275,7 +275,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
                   href={projectHref}
                   onClick={onNavigate}
                   className={cn(
-                    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+                    'flex items-center gap-2 rounded-md py-1.5 pr-1 pl-2 text-sm font-medium transition-colors',
                     'hover:bg-foreground/5 text-foreground',
                     {
                       'bg-foreground/5': isActive,
@@ -293,17 +293,19 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
                   />
                   <span className='flex-1 truncate'>{project.name}</span>
                   {project.status?.icon && (
-                    <DynamicIcon
-                      name={project.status.icon}
-                      className='ml-auto size-3 flex-shrink-0'
-                      style={{ color: project.status.color || '#6b7280' }}
-                    />
+                    <div className='flex w-6 shrink-0 items-center justify-center'>
+                      <DynamicIcon
+                        name={project.status.icon}
+                        className='size-3'
+                        style={{ color: project.status.color || '#6b7280' }}
+                      />
+                    </div>
                   )}
                 </Link>
               );
             })
           ) : (
-            <div className='text-muted-foreground px-2 py-1.5 text-xs'>
+            <div className='text-muted-foreground py-1.5 pr-1 pl-2 text-xs'>
               No projects yet
             </div>
           )}
@@ -312,7 +314,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
             <Link
               href={`/${orgSlug}/projects`}
               onClick={onNavigate}
-              className='text-muted-foreground hover:text-foreground block px-2 py-1.5 text-xs transition-colors'
+              className='text-muted-foreground hover:text-foreground block py-1.5 pr-1 pl-2 text-xs transition-colors'
             >
               +{userProjects.length - 3} more projects
             </Link>
@@ -369,7 +371,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
                   href={viewHref}
                   onClick={onNavigate}
                   className={cn(
-                    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+                    'flex items-center gap-2 rounded-md py-1.5 pr-1 pl-2 text-sm font-medium transition-colors',
                     'hover:bg-foreground/5 text-foreground',
                     {
                       'bg-foreground/5': isActive,
@@ -378,18 +380,20 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
                 >
                   <ViewModeIcon className='text-muted-foreground size-3 flex-shrink-0' />
                   <span className='flex-1 truncate'>{view.name}</span>
-                  <VisibilityIcon
-                    className={cn('size-3 flex-shrink-0', {
-                      'text-emerald-500': view.visibility === 'public',
-                      'text-purple-500': view.visibility === 'private',
-                      'text-blue-500': view.visibility === 'organization',
-                    })}
-                  />
+                  <div className='flex w-6 shrink-0 items-center justify-center'>
+                    <VisibilityIcon
+                      className={cn('size-3', {
+                        'text-emerald-500': view.visibility === 'public',
+                        'text-purple-500': view.visibility === 'private',
+                        'text-blue-500': view.visibility === 'organization',
+                      })}
+                    />
+                  </div>
                 </Link>
               );
             })
           ) : (
-            <div className='text-muted-foreground px-2 py-1.5 text-xs'>
+            <div className='text-muted-foreground py-1.5 pr-1 pl-2 text-xs'>
               No views yet
             </div>
           )}
@@ -398,7 +402,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
             <Link
               href={`/${orgSlug}/views`}
               onClick={onNavigate}
-              className='text-muted-foreground hover:text-foreground block px-2 py-1.5 text-xs transition-colors'
+              className='text-muted-foreground hover:text-foreground block py-1.5 pr-1 pl-2 text-xs transition-colors'
             >
               +{visibleViews.length - 3} more views
             </Link>
@@ -429,7 +433,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
                   href={docHref}
                   onClick={onNavigate}
                   className={cn(
-                    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+                    'flex items-center gap-2 rounded-md py-1.5 pr-1 pl-2 text-sm font-medium transition-colors',
                     'hover:bg-foreground/5 text-foreground',
                     {
                       'bg-foreground/5': isActive,
@@ -454,7 +458,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
               );
             })
           ) : (
-            <div className='text-muted-foreground px-2 py-1.5 text-xs'>
+            <div className='text-muted-foreground py-1.5 pr-1 pl-2 text-xs'>
               No documents yet
             </div>
           )}
@@ -463,7 +467,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
             <Link
               href={`/${orgSlug}/documents`}
               onClick={onNavigate}
-              className='text-muted-foreground hover:text-foreground block px-2 py-1.5 text-xs transition-colors'
+              className='text-muted-foreground hover:text-foreground block py-1.5 pr-1 pl-2 text-xs transition-colors'
             >
               +{userDocuments.length - 3} more documents
             </Link>
