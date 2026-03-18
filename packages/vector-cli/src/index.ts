@@ -2816,9 +2816,13 @@ serviceCommand
       return;
     }
 
+    const { spinner } = await import('@clack/prompts');
+    const s = spinner();
+
     // Ensure device is registered
     let config = loadBridgeConfig();
     if (!config) {
+      s.start('Registering device...');
       const runtime = await getRuntime(command);
       const session = requireSession(runtime);
       const client = await createConvexClient(
@@ -2827,20 +2831,21 @@ serviceCommand
         runtime.convexUrl,
       );
       const user = await runQuery(client, api.users.currentUser);
-      if (!user) throw new Error('Not logged in. Run `vcli auth login` first.');
+      if (!user) {
+        s.stop('Failed');
+        throw new Error('Not logged in. Run `vcli auth login` first.');
+      }
       config = await setupBridgeDevice(runtime.convexUrl, user._id);
-      console.log(
-        `Device registered: ${config.displayName} (${config.deviceId})`,
-      );
+      s.stop(`Device registered: ${config.displayName}`);
     }
 
     if (osPlatform() === 'darwin') {
-      // Install LaunchAgent if not already present, then load it
+      s.start('Starting bridge service...');
       const vcliPath = process.argv[1] ?? 'vcli';
       installLaunchAgent(vcliPath);
       loadLaunchAgent();
       await launchMenuBar();
-      console.log('Bridge service started.');
+      s.stop('Bridge service started.');
     } else {
       // Linux / other: run in foreground
       console.log(
@@ -2921,9 +2926,13 @@ serviceCommand
       return;
     }
 
+    const { spinner } = await import('@clack/prompts');
+    const s = spinner();
+
     // Ensure device is registered before installing
     let config = loadBridgeConfig();
     if (!config) {
+      s.start('Registering device...');
       const runtime = await getRuntime(command);
       const session = requireSession(runtime);
       const client = await createConvexClient(
@@ -2932,17 +2941,28 @@ serviceCommand
         runtime.convexUrl,
       );
       const user = await runQuery(client, api.users.currentUser);
-      if (!user) throw new Error('Not logged in. Run `vcli auth login` first.');
+      if (!user) {
+        s.stop('Failed');
+        throw new Error('Not logged in. Run `vcli auth login` first.');
+      }
       config = await setupBridgeDevice(runtime.convexUrl, user._id);
-      console.log(
-        `Device registered: ${config.displayName} (${config.deviceId})`,
-      );
+      s.stop(`Device registered: ${config.displayName}`);
     }
 
+    s.start('Installing LaunchAgent...');
     const vcliPath = process.argv[1] ?? 'vcli';
     installLaunchAgent(vcliPath);
+    s.stop('LaunchAgent installed');
+
+    s.start('Starting bridge service...');
     loadLaunchAgent();
+    s.stop('Bridge service started');
+
+    s.start('Launching menu bar...');
     await launchMenuBar();
+    s.stop('Menu bar ready');
+
+    console.log('');
     console.log(
       'Bridge installed and running. Will start automatically on login.',
     );
