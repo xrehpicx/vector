@@ -7,7 +7,7 @@ import { format, isToday, isYesterday, isThisWeek, isThisYear } from 'date-fns';
 import { Circle, MoreHorizontal, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { getDynamicIcon } from '@/lib/dynamic-icons';
+import { getDynamicIcon, DynamicIcon } from '@/lib/dynamic-icons';
 import { formatDateHuman } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,7 +25,12 @@ import {
 } from '@/components/issues/issue-selectors';
 import { PermissionAware } from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
-import { getActivityIcon } from '@/lib/activity-icons';
+import { getActivityIcon, getActivityLabel } from '@/lib/activity-icons';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 import type {
   State,
@@ -85,6 +90,100 @@ function formatDayLabel(timestamp: number): string {
 
 function getDayKey(timestamp: number): string {
   return format(new Date(timestamp), 'yyyy-MM-dd');
+}
+
+function ActivityDot({ issue }: { issue: IssueRowData }) {
+  const [open, setOpen] = React.useState(false);
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout>>(null);
+
+  const handleEnter = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpen(true);
+  };
+
+  const handleLeave = () => {
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  };
+
+  const eventType = issue.lastActivityEventType;
+  const isStateChange =
+    eventType === 'issue_workflow_state_changed' ||
+    eventType === 'issue_assignment_state_changed' ||
+    !eventType;
+
+  const { Icon: DotIcon, color: dotColor } = isStateChange
+    ? { Icon: null, color: '' }
+    : getActivityIcon(eventType);
+
+  const label = isStateChange
+    ? getActivityLabel(eventType ?? 'issue_workflow_state_changed')
+    : getActivityLabel(eventType);
+
+  const { Icon: ActivityIcon, color: activityColor } = isStateChange
+    ? getActivityIcon('issue_workflow_state_changed')
+    : getActivityIcon(eventType);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild nativeButton={false}>
+        <div onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
+          {/* Dot visual */}
+          {isStateChange ? (
+            <div
+              className='bg-background relative z-10 flex size-[18px] shrink-0 cursor-default items-center justify-center rounded-full border transition-shadow hover:ring-2 hover:ring-current/20'
+              style={{ color: issue.workflowStateColor ?? '#94a3b8' }}
+            >
+              <DynamicIcon
+                name={issue.workflowStateIcon ?? 'circle'}
+                className='size-2.5'
+              />
+            </div>
+          ) : (
+            <div
+              className={cn(
+                'bg-background relative z-10 flex size-[18px] shrink-0 cursor-default items-center justify-center rounded-full border transition-shadow hover:ring-2 hover:ring-current/20',
+                dotColor,
+              )}
+            >
+              {DotIcon && <DotIcon className='size-2.5' />}
+            </div>
+          )}
+        </div>
+      </PopoverTrigger>
+      <PopoverContent
+        side='right'
+        sideOffset={8}
+        className='w-48 p-2.5'
+        onMouseEnter={handleEnter}
+        onMouseLeave={handleLeave}
+      >
+        <div className='flex flex-col gap-1.5'>
+          <div className='flex items-center gap-1.5'>
+            <ActivityIcon className={cn('size-3.5 shrink-0', activityColor)} />
+            <span className='text-xs leading-tight font-medium'>{label}</span>
+          </div>
+          {isStateChange && issue.workflowStateName && (
+            <div className='flex items-center gap-1'>
+              <DynamicIcon
+                name={issue.workflowStateIcon ?? 'circle'}
+                className='size-3 shrink-0'
+                style={{ color: issue.workflowStateColor ?? '#94a3b8' }}
+              />
+              <span
+                className='text-xs'
+                style={{ color: issue.workflowStateColor ?? '#94a3b8' }}
+              >
+                {issue.workflowStateName}
+              </span>
+            </div>
+          )}
+          <p className='text-muted-foreground text-xs'>
+            {formatDateHuman(new Date(issue.updatedAt))}
+          </p>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function IssuesTimeline({
@@ -231,41 +330,7 @@ export function IssuesTimeline({
             <div className='bg-border absolute bottom-0 left-1/2 h-1/2 w-px -translate-x-1/2' />
           )}
           {/* Dot — reflects the most recent activity, falls back to workflow state icon */}
-          {(() => {
-            const eventType = issue.lastActivityEventType;
-
-            // For state changes, show the actual workflow state icon + color
-            // so the dot visually represents what state the issue is in now
-            const isStateChange =
-              eventType === 'issue_workflow_state_changed' ||
-              eventType === 'issue_assignment_state_changed' ||
-              !eventType;
-            if (isStateChange) {
-              const StateIcon = issue.workflowStateIcon
-                ? getDynamicIcon(issue.workflowStateIcon) || Circle
-                : Circle;
-              return (
-                <div
-                  className='bg-background relative z-10 flex size-[18px] shrink-0 items-center justify-center rounded-full border'
-                  style={{ color: issue.workflowStateColor ?? '#94a3b8' }}
-                >
-                  <StateIcon className='size-2.5' />
-                </div>
-              );
-            }
-
-            const { Icon: DotIcon, color } = getActivityIcon(eventType);
-            return (
-              <div
-                className={cn(
-                  'bg-background relative z-10 flex size-[18px] shrink-0 items-center justify-center rounded-full border',
-                  color,
-                )}
-              >
-                <DotIcon className='size-2.5' />
-              </div>
-            );
-          })()}
+          <ActivityDot issue={issue} />
         </div>
 
         {/* Issue row — same interaction pattern as table */}
