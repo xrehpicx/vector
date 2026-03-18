@@ -5,7 +5,16 @@ on:
     branches:
       - main
     paths:
+      - '.github/workflows/publish-cli.yml'
       - 'packages/vector-cli/**'
+      - 'src/cli/**'
+      - 'convex/_generated/api.d.ts'
+      - 'convex/_shared/agentBridge.ts'
+      - 'convex/agentBridge/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
   release:
     types:
       - published
@@ -69,7 +78,7 @@ jobs:
             const runNumber = Number(process.env.GITHUB_RUN_NUMBER || '0');
             const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT || '1');
             version = `${baseVersion}-beta.${runNumber}.${runAttempt}`;
-            npmTag = 'latest';
+            npmTag = 'beta';
           }
 
           pkg.version = version;
