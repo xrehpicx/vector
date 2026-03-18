@@ -489,19 +489,72 @@ export function uninstallLaunchAgent(): void {
 
 // ── Menu Bar ────────────────────────────────────────────────────────────────
 
+export async function compileMenuBar(): Promise<string | null> {
+  if (platform() !== 'darwin') return null;
+
+  const binaryPath = join(CONFIG_DIR, 'VectorMenuBar');
+  if (existsSync(binaryPath)) return binaryPath;
+
+  // Look for the Swift source in common locations
+  const sourceCandidates = [
+    join(CONFIG_DIR, 'VectorMenuBar.swift'),
+    // In the repo checkout (dev mode)
+    join(process.cwd(), 'cli', 'macos', 'VectorMenuBar.swift'),
+  ];
+  const source = sourceCandidates.find(p => existsSync(p));
+  if (!source) return null;
+
+  // Check if swiftc is available
+  try {
+    execSync('which swiftc', { stdio: 'pipe' });
+  } catch {
+    return null;
+  }
+
+  try {
+    console.log('Compiling menu bar app...');
+    execSync(`swiftc -o "${binaryPath}" "${source}" -framework AppKit`, {
+      stdio: 'pipe',
+      timeout: 30000,
+    });
+
+    // Copy icon assets next to the binary
+    const sourceDir = join(source, '..', 'assets');
+    const destDir = join(CONFIG_DIR, 'assets');
+    if (existsSync(sourceDir)) {
+      mkdirSync(destDir, { recursive: true });
+      for (const f of ['vector-menubar.png', 'vector-menubar@2x.png']) {
+        const src = join(sourceDir, f);
+        if (existsSync(src)) {
+          writeFileSync(join(destDir, f), readFileSync(src));
+        }
+      }
+    }
+
+    console.log('Menu bar app compiled.');
+    return binaryPath;
+  } catch {
+    console.error(
+      'Failed to compile menu bar app (Xcode CLI tools may be needed).',
+    );
+    return null;
+  }
+}
+
 export async function launchMenuBar(): Promise<void> {
   if (platform() !== 'darwin') return;
 
+  // Try to find existing binary, or compile it
   const candidates = [
     join(CONFIG_DIR, 'VectorMenuBar'),
     '/usr/local/bin/VectorMenuBar',
     join(homedir(), '.local', 'bin', 'VectorMenuBar'),
   ];
-  const binary = candidates.find(p => existsSync(p));
+  let binary = candidates.find(p => existsSync(p));
   if (!binary) {
-    // Not installed — that's fine, skip silently
-    return;
+    binary = (await compileMenuBar()) ?? undefined;
   }
+  if (!binary) return;
 
   try {
     const { spawn: spawnProcess } = await import('child_process');
