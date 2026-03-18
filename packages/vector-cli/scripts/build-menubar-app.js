@@ -1,13 +1,35 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageDir = resolve(scriptDir, '..');
 const sourceFile = join(packageDir, 'macos', 'VectorMenuBar.swift');
+const repoRoot = resolve(packageDir, '..', '..');
+const menuBarIcon1x = join(
+  repoRoot,
+  'cli',
+  'macos',
+  'assets',
+  'vector-menubar.png',
+);
+const menuBarIcon2x = join(
+  repoRoot,
+  'cli',
+  'macos',
+  'assets',
+  'vector-menubar@2x.png',
+);
 const nativeDir = join(packageDir, 'native');
 const appDir = join(nativeDir, 'VectorMenuBar.app');
 const contentsDir = join(appDir, 'Contents');
@@ -22,6 +44,10 @@ if (process.platform !== 'darwin') {
 
 if (!existsSync(sourceFile)) {
   throw new Error(`Missing Swift source: ${sourceFile}`);
+}
+
+if (!existsSync(menuBarIcon1x) || !existsSync(menuBarIcon2x)) {
+  throw new Error('Missing Vector menu bar icon assets.');
 }
 
 rmSync(appDir, { recursive: true, force: true });
@@ -48,6 +74,8 @@ execFileSync(
 );
 execFileSync('chmod', ['+x', executablePath], { stdio: 'inherit' });
 rmSync(buildDir, { recursive: true, force: true });
+copyFileSync(menuBarIcon1x, join(resourcesDir, 'vector-menubar.png'));
+copyFileSync(menuBarIcon2x, join(resourcesDir, 'vector-menubar@2x.png'));
 
 writeFileSync(
   join(contentsDir, 'Info.plist'),

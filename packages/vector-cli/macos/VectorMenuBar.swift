@@ -61,6 +61,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
   private var transition: BridgeTransition?
   private var transitionDeadline = Date.distantPast
   private var blinkVisible = true
+  private lazy var brandIcon = loadBrandIcon()
 
   init(configDir: URL, cliCommand: String, cliArgs: [String]) {
     self.configDir = configDir
@@ -119,18 +120,9 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
       return
     }
 
-    let symbolName: String
-    if transition != nil {
-      symbolName = "bolt.circle"
-    } else if loadState().running {
-      symbolName = "bolt.circle.fill"
-    } else {
-      symbolName = "bolt.circle"
-    }
-
     button.title = ""
-    button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Vector Bridge")
-    button.image?.isTemplate = true
+    button.image = brandIcon ?? fallbackStatusIcon()
+    button.image?.isTemplate = false
   }
 
   private func buildMenu(state: BridgeState) -> NSMenu {
@@ -314,6 +306,39 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
       activities: activities,
       sessionInfo: sessionInfo
     )
+  }
+
+  private func loadBrandIcon() -> NSImage? {
+    let candidates = [
+      "vector-menubar@2x",
+      "vector-menubar",
+    ]
+
+    for name in candidates {
+      guard let url = Bundle.main.url(forResource: name, withExtension: "png") else {
+        continue
+      }
+      guard let image = NSImage(contentsOf: url) else {
+        continue
+      }
+      image.size = NSSize(width: 18, height: 18)
+      return image
+    }
+
+    return nil
+  }
+
+  private func fallbackStatusIcon() -> NSImage? {
+    let symbolName: String
+    if transition != nil {
+      symbolName = "bolt.circle"
+    } else if loadState().running {
+      symbolName = "bolt.circle.fill"
+    } else {
+      symbolName = "bolt.circle"
+    }
+
+    return NSImage(systemSymbolName: symbolName, accessibilityDescription: "Vector Bridge")
   }
 
   private func log(_ message: String) {
