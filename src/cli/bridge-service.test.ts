@@ -202,7 +202,8 @@ describe('Bridge CLI commands', () => {
       HOME: tempHome,
     });
     const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
-    expect(output).toMatch(/not running|No PID/i);
+    // On macOS it also tries to unload LaunchAgent, so accept that output too
+    expect(output).toMatch(/not running|No PID|unload/i);
   }, 30_000);
 
   it('includes service and bridge in root help output', () => {
