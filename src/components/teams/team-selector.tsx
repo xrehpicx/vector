@@ -170,13 +170,22 @@ export function TeamSelector({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div
-          className='contents'
-          onClick={stopPropagation}
-          onPointerDown={stopPropagation}
-        >
-          {trigger ?? DefaultBtn}
-        </div>
+        {React.cloneElement(trigger ?? DefaultBtn, {
+          onClick: (e: React.MouseEvent) => {
+            stopPropagation(e);
+            (
+              trigger?.props as { onClick?: (e: React.MouseEvent) => void }
+            )?.onClick?.(e);
+          },
+          onPointerDown: (e: React.PointerEvent) => {
+            stopPropagation(e);
+            (
+              trigger?.props as {
+                onPointerDown?: (e: React.PointerEvent) => void;
+              }
+            )?.onPointerDown?.(e);
+          },
+        })}
       </PopoverTrigger>
       <PopoverContent
         align={align}
