@@ -66,6 +66,12 @@ export const ACTIVITY_EVENT_TYPES = [
   'view_visibility_changed',
   'view_filters_changed',
   'view_deleted',
+  // Agent bridge live activity events
+  'issue_live_activity_started',
+  'issue_live_activity_status_changed',
+  'issue_live_activity_completed',
+  'issue_live_activity_commented',
+  'issue_live_activity_delegated',
 ] as const;
 
 export type ActivityEventType = (typeof ACTIVITY_EVENT_TYPES)[number];
@@ -85,6 +91,7 @@ export const ACTIVITY_FIELDS = [
   'project',
   'role',
   'content',
+  'live_activity',
 ] as const;
 
 export type ActivityField = (typeof ACTIVITY_FIELDS)[number];
@@ -129,6 +136,12 @@ export const activityDetailsValidator = v.object({
   addedUserNames: v.optional(v.array(v.string())),
   removedUserNames: v.optional(v.array(v.string())),
   viaAgent: v.optional(v.boolean()),
+  // Agent bridge live activity metadata
+  liveActivityId: v.optional(v.id('issueLiveActivities')),
+  agentProvider: v.optional(v.string()),
+  agentProviderLabel: v.optional(v.string()),
+  deviceName: v.optional(v.string()),
+  workspaceLabel: v.optional(v.string()),
 });
 
 export const activitySnapshotValidator = v.object({

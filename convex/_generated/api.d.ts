@@ -9,6 +9,7 @@
  */
 
 import type * as _shared_activity from "../_shared/activity.js";
+import type * as _shared_agentBridge from "../_shared/agentBridge.js";
 import type * as _shared_auth from "../_shared/auth.js";
 import type * as _shared_document_appearance from "../_shared/document_appearance.js";
 import type * as _shared_leads from "../_shared/leads.js";
@@ -19,6 +20,12 @@ import type * as _shared_validation from "../_shared/validation.js";
 import type * as access from "../access.js";
 import type * as activities_lib from "../activities/lib.js";
 import type * as activities_queries from "../activities/queries.js";
+import type * as agentBridge_bridgeAuth from "../agentBridge/bridgeAuth.js";
+import type * as agentBridge_bridgePublic from "../agentBridge/bridgePublic.js";
+import type * as agentBridge_httpEndpoints from "../agentBridge/httpEndpoints.js";
+import type * as agentBridge_internal from "../agentBridge/internal.js";
+import type * as agentBridge_mutations from "../agentBridge/mutations.js";
+import type * as agentBridge_queries from "../agentBridge/queries.js";
 import type * as ai_actions from "../ai/actions.js";
 import type * as ai_agent from "../ai/agent.js";
 import type * as ai_comment_agent from "../ai/comment_agent.js";
@@ -85,6 +92,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "_shared/activity": typeof _shared_activity;
+  "_shared/agentBridge": typeof _shared_agentBridge;
   "_shared/auth": typeof _shared_auth;
   "_shared/document_appearance": typeof _shared_document_appearance;
   "_shared/leads": typeof _shared_leads;
@@ -95,6 +103,12 @@ declare const fullApi: ApiFromModules<{
   access: typeof access;
   "activities/lib": typeof activities_lib;
   "activities/queries": typeof activities_queries;
+  "agentBridge/bridgeAuth": typeof agentBridge_bridgeAuth;
+  "agentBridge/bridgePublic": typeof agentBridge_bridgePublic;
+  "agentBridge/httpEndpoints": typeof agentBridge_httpEndpoints;
+  "agentBridge/internal": typeof agentBridge_internal;
+  "agentBridge/mutations": typeof agentBridge_mutations;
+  "agentBridge/queries": typeof agentBridge_queries;
   "ai/actions": typeof ai_actions;
   "ai/agent": typeof ai_agent;
   "ai/comment_agent": typeof ai_comment_agent;

@@ -6,6 +6,24 @@ import {
   activityEventTypeValidator,
   activitySnapshotValidator,
 } from './_shared/activity';
+import {
+  agentCommandKindValidator,
+  agentCommandStatusValidator,
+  agentDeviceServiceTypeValidator,
+  agentDeviceStatusValidator,
+  agentProcessModeValidator,
+  agentProcessStatusValidator,
+  agentProviderValidator,
+  commentAgentSourceValidator,
+  commentAuthorKindValidator,
+  commentGenerationStatusValidator,
+  delegatedRunLaunchStatusValidator,
+  liveActivityStatusValidator,
+  liveMessageDeliveryStatusValidator,
+  liveMessageDirectionValidator,
+  liveMessageRoleValidator,
+  workspaceLaunchPolicyValidator,
+} from './_shared/agentBridge';
 import { PERMISSION_VALUES, SYSTEM_ROLE_KEYS } from './_shared/permissions';
 import {
   notificationCategoryValidator,
@@ -547,6 +565,12 @@ export default defineSchema({
     agentStatus: v.optional(
       v.union(v.literal('thinking'), v.literal('done'), v.literal('error')),
     ),
+    // Extended agent source metadata for branded completion comments
+    authorKind: v.optional(commentAuthorKindValidator),
+    agentSource: v.optional(commentAgentSourceValidator),
+    agentLabel: v.optional(v.string()),
+    liveActivityId: v.optional(v.id('issueLiveActivities')),
+    generationStatus: v.optional(commentGenerationStatusValidator),
   })
     .index('by_issue', ['issueId'])
     .index('by_document', ['documentId'])
@@ -1034,4 +1058,156 @@ export default defineSchema({
     .index('by_user', ['userId'])
     .index('by_endpoint', ['endpoint'])
     .index('by_user_endpoint', ['userId', 'endpoint']),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Agent Device Bridge
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Registered user-owned local runtimes (machines running `vector start`)
+  agentDevices: defineTable({
+    userId: v.id('users'),
+    deviceKey: v.string(),
+    deviceSecret: v.optional(v.string()),
+    displayName: v.string(),
+    hostname: v.optional(v.string()),
+    platform: v.optional(v.string()),
+    serviceType: agentDeviceServiceTypeValidator,
+    cliVersion: v.optional(v.string()),
+    status: agentDeviceStatusValidator,
+    capabilities: v.optional(v.array(v.string())),
+    lastSeenAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_user_device_key', ['userId', 'deviceKey'])
+    .index('by_status', ['status'])
+    .index('by_user_status', ['userId', 'status']),
+
+  // Approved working directories for delegated runs on a specific device
+  deviceWorkspaces: defineTable({
+    deviceId: v.id('agentDevices'),
+    userId: v.id('users'),
+    label: v.string(),
+    path: v.string(),
+    repoName: v.optional(v.string()),
+    repoRemote: v.optional(v.string()),
+    defaultBranch: v.optional(v.string()),
+    projectId: v.optional(v.id('projects')),
+    teamId: v.optional(v.id('teams')),
+    isDefault: v.boolean(),
+    launchPolicy: workspaceLaunchPolicyValidator,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_device', ['deviceId'])
+    .index('by_user', ['userId'])
+    .index('by_device_default', ['deviceId', 'isDefault'])
+    .index('by_project', ['projectId'])
+    .index('by_team', ['teamId']),
+
+  // Reported local processes and managed provider sessions
+  agentProcesses: defineTable({
+    deviceId: v.id('agentDevices'),
+    userId: v.id('users'),
+    provider: agentProviderValidator,
+    providerLabel: v.optional(v.string()),
+    localProcessId: v.optional(v.string()),
+    sessionKey: v.optional(v.string()),
+    cwd: v.optional(v.string()),
+    repoRoot: v.optional(v.string()),
+    branch: v.optional(v.string()),
+    title: v.optional(v.string()),
+    model: v.optional(v.string()),
+    mode: agentProcessModeValidator,
+    status: agentProcessStatusValidator,
+    supportsInboundMessages: v.boolean(),
+    startedAt: v.number(),
+    lastHeartbeatAt: v.number(),
+    endedAt: v.optional(v.number()),
+  })
+    .index('by_device', ['deviceId'])
+    .index('by_user', ['userId'])
+    .index('by_user_status', ['userId', 'status'])
+    .index('by_device_status', ['deviceId', 'status'])
+    .index('by_session_key', ['sessionKey']),
+
+  // Explicit managed-launch record for issue delegation to a device/agent/workspace
+  delegatedRuns: defineTable({
+    organizationId: v.id('organizations'),
+    issueId: v.id('issues'),
+    liveActivityId: v.id('issueLiveActivities'),
+    deviceId: v.id('agentDevices'),
+    workspaceId: v.id('deviceWorkspaces'),
+    requestedByUserId: v.id('users'),
+    provider: agentProviderValidator,
+    launchMode: v.literal('delegated_launch'),
+    workspacePath: v.string(),
+    tmuxSessionName: v.optional(v.string()),
+    tmuxWindowName: v.optional(v.string()),
+    tmuxPaneId: v.optional(v.string()),
+    launchCommand: v.optional(v.string()),
+    launchStatus: delegatedRunLaunchStatusValidator,
+    launchedAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+  })
+    .index('by_organization', ['organizationId'])
+    .index('by_issue', ['issueId'])
+    .index('by_device', ['deviceId'])
+    .index('by_live_activity', ['liveActivityId'])
+    .index('by_launch_status', ['launchStatus']),
+
+  // Issue-bound projection of a process lifecycle
+  issueLiveActivities: defineTable({
+    organizationId: v.id('organizations'),
+    issueId: v.id('issues'),
+    deviceId: v.id('agentDevices'),
+    processId: v.optional(v.id('agentProcesses')),
+    ownerUserId: v.id('users'),
+    provider: agentProviderValidator,
+    title: v.optional(v.string()),
+    status: liveActivityStatusValidator,
+    latestSummary: v.optional(v.string()),
+    startedAt: v.number(),
+    lastEventAt: v.number(),
+    endedAt: v.optional(v.number()),
+    finalCommentId: v.optional(v.id('comments')),
+  })
+    .index('by_organization', ['organizationId'])
+    .index('by_issue', ['issueId'])
+    .index('by_issue_status', ['issueId', 'status'])
+    .index('by_device', ['deviceId'])
+    .index('by_owner', ['ownerUserId'])
+    .index('by_process', ['processId']),
+
+  // Transcript/status stream for a specific live activity
+  issueLiveMessages: defineTable({
+    liveActivityId: v.id('issueLiveActivities'),
+    direction: liveMessageDirectionValidator,
+    role: liveMessageRoleValidator,
+    body: v.string(),
+    structuredPayload: v.optional(v.any()),
+    deliveryStatus: liveMessageDeliveryStatusValidator,
+    createdAt: v.number(),
+  })
+    .index('by_live_activity', ['liveActivityId'])
+    .index('by_live_activity_created', ['liveActivityId', 'createdAt']),
+
+  // Outbound command queue from Vector to the local runtime
+  agentCommands: defineTable({
+    deviceId: v.id('agentDevices'),
+    processId: v.optional(v.id('agentProcesses')),
+    liveActivityId: v.optional(v.id('issueLiveActivities')),
+    senderUserId: v.id('users'),
+    kind: agentCommandKindValidator,
+    payload: v.optional(v.any()),
+    status: agentCommandStatusValidator,
+    createdAt: v.number(),
+    claimedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+  })
+    .index('by_device', ['deviceId'])
+    .index('by_device_status', ['deviceId', 'status'])
+    .index('by_live_activity', ['liveActivityId'])
+    .index('by_process', ['processId']),
 });

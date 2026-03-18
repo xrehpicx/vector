@@ -208,6 +208,18 @@ Entity detail pages (projects, teams, issues) use a constrained `max-w-5xl mx-au
 - Always add `dark:prose-invert` alongside `prose` to ensure typography colors adapt to dark mode.
 - Disabled/read-only `RichEditor` instances must use `bg-transparent dark:bg-transparent` to avoid a visible muted background strip. The description should blend seamlessly into the page background.
 
+### 8. Chat/transcript surfaces follow comment patterns
+
+When building any conversational or transcript UI (live activity, agent chat, message threads):
+
+- Wrap the entire conversation in a single `rounded-lg border` card — like a comment card
+- **Agent/system messages are the default context** — show just body text with a timestamp, no avatar or "Agent:" prefix. The card context implies who is speaking.
+- **User messages are the exception** — call them out with their `UserAvatar` + name + timestamp header, then body indented under it (like a reply within a comment)
+- **Status/activity messages** — render as compact inline rows with a small icon + italic text + timestamp (like activity feed items)
+- **Composer** — sits at the bottom of the card with a border-t separator, matching the comment input pattern (`textarea` + submit button, Cmd+Enter to send)
+
+Reference: `src/components/comments/comments-section.tsx` for the card and reply structure. Reference: `src/components/activity/activity-feed-list.tsx` for activity row density.
+
 ## Anti-Patterns
 
 - Do not wrap dense operational content in unnecessary Cards

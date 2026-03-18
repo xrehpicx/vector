@@ -17,4 +17,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  'mark stale agent devices',
+  { minutes: 1 },
+  internal.agentBridge.internal.markStaleDevices,
+  {},
+);
+
 export default crons;

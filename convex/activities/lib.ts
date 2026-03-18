@@ -59,6 +59,12 @@ export interface ActivityWrite {
     addedUserNames?: string[];
     removedUserNames?: string[];
     viaAgent?: boolean;
+    // Agent bridge live activity metadata
+    liveActivityId?: Id<'issueLiveActivities'>;
+    agentProvider?: string;
+    agentProviderLabel?: string;
+    deviceName?: string;
+    workspaceLabel?: string;
   };
   snapshot?: {
     entityKey?: string;

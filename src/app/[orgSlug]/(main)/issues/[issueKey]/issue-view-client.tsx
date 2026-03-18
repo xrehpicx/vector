@@ -49,6 +49,7 @@ import { IssueCommentsSection } from '@/components/comments/comments-section';
 import { LinkedDocuments } from '@/components/documents/linked-documents';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { IssueDevelopmentSection } from '@/components/issues/issue-development-section';
+import { IssueLiveActivitySection } from '@/components/live-activity';
 import { IssueViewVisibilityCallout } from '@/components/issues/issue-view-visibility-callout';
 import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
@@ -1207,6 +1208,21 @@ export default function IssueViewClient({
               orgSlug={params.orgSlug}
               mentionType='issue'
               entityId={issue._id}
+            />
+
+            {/* Live Activity */}
+            <IssueLiveActivitySection
+              issueId={issue._id}
+              currentUser={
+                user
+                  ? {
+                      _id: user._id,
+                      name: user.name ?? '',
+                      email: user.email ?? null,
+                      image: user.image ?? null,
+                    }
+                  : null
+              }
             />
 
             {/* Comments & Activity */}

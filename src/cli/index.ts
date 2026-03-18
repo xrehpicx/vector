@@ -2782,6 +2782,196 @@ folderCommand
     printOutput(result, runtime.json);
   });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Agent Bridge Service
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import {
+  BridgeService,
+  getBridgeStatus,
+  installLaunchAgent,
+  loadBridgeConfig,
+  loadLaunchAgent,
+  saveBridgeConfig,
+  setupBridgeDevice,
+  stopBridge,
+  uninstallLaunchAgent,
+} from './bridge-service';
+import { platform as osPlatform } from 'os';
+
+const serviceCommand = program
+  .command('service')
+  .description('Manage the local bridge service');
+
+serviceCommand
+  .command('start')
+  .description('Run the bridge service in the foreground')
+  .action(async (_options, command) => {
+    let config = loadBridgeConfig();
+
+    if (!config) {
+      // Need to set up first — get convex URL and user
+      const runtime = await getRuntime(command);
+      const session = requireSession(runtime);
+      const client = await createConvexClient(
+        session,
+        runtime.appUrl,
+        runtime.convexUrl,
+      );
+      const user = await runQuery(client, api.users.currentUser);
+      if (!user) throw new Error('Not logged in. Run `vcli auth login` first.');
+
+      config = await setupBridgeDevice(runtime.convexUrl, user._id);
+      console.log(`Device registered: ${config.deviceId}`);
+    }
+
+    const bridge = new BridgeService(config);
+    await bridge.run();
+  });
+
+serviceCommand
+  .command('stop')
+  .description('Stop the running bridge service')
+  .action(() => {
+    if (stopBridge()) {
+      console.log('Bridge stopped.');
+    } else {
+      console.log('Bridge is not running.');
+    }
+  });
+
+serviceCommand
+  .command('status')
+  .description('Show bridge service status')
+  .action((_options, command) => {
+    const status = getBridgeStatus();
+    if (!status.configured) {
+      console.log('Bridge not configured. Run: vcli service start');
+      return;
+    }
+    console.log('Vector Bridge');
+    console.log(
+      `  Device:  ${status.config!.displayName} (${status.config!.deviceId})`,
+    );
+    console.log(`  User:    ${status.config!.userId}`);
+    console.log(
+      `  Status:  ${status.running ? `Running (PID ${status.pid})` : 'Not running'}`,
+    );
+    console.log(`  Config:  ~/.vector/bridge.json`);
+  });
+
+serviceCommand
+  .command('install')
+  .description('Install the bridge as a system service (macOS LaunchAgent)')
+  .action(async (_options, command) => {
+    if (osPlatform() !== 'darwin') {
+      console.error('Service install is currently macOS only (LaunchAgent).');
+      console.error('On Linux, use systemd --user manually for now.');
+      return;
+    }
+    const vcliPath = process.argv[1] ?? 'vcli';
+    installLaunchAgent(vcliPath);
+    loadLaunchAgent();
+  });
+
+serviceCommand
+  .command('uninstall')
+  .description('Uninstall the bridge system service')
+  .action(() => {
+    uninstallLaunchAgent();
+  });
+
+serviceCommand
+  .command('logs')
+  .description('Show bridge service logs')
+  .action(() => {
+    const { existsSync: exists, readFileSync: read } = require('fs');
+    const logPath = require('path').join(
+      require('os').homedir(),
+      '.vector',
+      'bridge.log',
+    );
+    if (exists(logPath)) {
+      const content = read(logPath, 'utf-8');
+      const lines = content.split('\n');
+      console.log(lines.slice(-50).join('\n'));
+    } else {
+      console.log('No log file found at ~/.vector/bridge.log');
+    }
+  });
+
+// `vcli bridge` — top-level shortcut commands
+const bridgeCommand = program
+  .command('bridge')
+  .description('Start/stop the local agent bridge');
+
+bridgeCommand
+  .command('start')
+  .description('Register device, install service, and start the bridge')
+  .action(async (_options, command) => {
+    let config = loadBridgeConfig();
+
+    if (!config) {
+      const runtime = await getRuntime(command);
+      const session = requireSession(runtime);
+      const client = await createConvexClient(
+        session,
+        runtime.appUrl,
+        runtime.convexUrl,
+      );
+      const user = await runQuery(client, api.users.currentUser);
+      if (!user) throw new Error('Not logged in. Run `vcli auth login` first.');
+
+      config = await setupBridgeDevice(runtime.convexUrl, user._id);
+      console.log(
+        `Device registered: ${config.displayName} (${config.deviceId})`,
+      );
+    }
+
+    if (osPlatform() === 'darwin') {
+      const vcliPath = process.argv[1] ?? 'vcli';
+      installLaunchAgent(vcliPath);
+      loadLaunchAgent();
+      console.log('\nBridge installed and started as LaunchAgent.');
+      console.log('It will restart automatically on login.');
+      console.log('Run `vcli service status` to check.');
+    } else {
+      console.log('Starting bridge in foreground...');
+      const bridge = new BridgeService(config);
+      await bridge.run();
+    }
+  });
+
+bridgeCommand
+  .command('stop')
+  .description('Stop the bridge service')
+  .action(() => {
+    if (osPlatform() === 'darwin') {
+      uninstallLaunchAgent();
+    }
+    if (stopBridge()) {
+      console.log('Bridge stopped.');
+    } else {
+      console.log('Bridge is not running.');
+    }
+  });
+
+bridgeCommand
+  .command('status')
+  .description('Show bridge status')
+  .action(() => {
+    const s = getBridgeStatus();
+    if (!s.configured) {
+      console.log('Bridge not configured. Run: vcli bridge start');
+      return;
+    }
+    console.log('Vector Bridge');
+    console.log(`  Device:  ${s.config!.displayName} (${s.config!.deviceId})`);
+    console.log(
+      `  Status:  ${s.running ? `Running (PID ${s.pid})` : 'Not running'}`,
+    );
+  });
+
 async function main() {
   await program.parseAsync(process.argv);
 }
