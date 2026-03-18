@@ -20,6 +20,7 @@ import { detectMentionType } from '@/components/ui/editor/mention/mention-config
 import type { MentionTypeId } from '@/components/ui/editor/mention/mention-config';
 import { getAvatarDataUri } from '@/components/ui/editor/mention/avatar-svg';
 import { getLucideIconDataUri } from '@/components/ui/editor/mention/icon-svg';
+import { buildMentionContent } from '@/components/ui/editor/mention/mention-content';
 
 export type MentionRef = {
   type: MentionTypeId;
@@ -31,6 +32,14 @@ export type MentionRef = {
 export type AssistantInputHandle = {
   submit: () => Promise<void>;
   focus: () => void;
+  insertIssueMention: (issue: AssistantInputIssueMention) => void;
+};
+
+export type AssistantInputIssueMention = {
+  label: string;
+  href: string;
+  icon?: string | null;
+  color?: string | null;
 };
 
 export type AssistantInputProps = {
@@ -52,13 +61,26 @@ function extractPromptAndMentions(
   editor: NonNullable<ReturnType<typeof useEditor>>,
 ): {
   text: string;
+  bodyText: string;
   mentions: MentionRef[];
 } {
   const mentions: MentionRef[] = [];
   const seenMentionKeys = new Set<string>();
+  const bodyTextParts: string[] = [];
 
   editor.state.doc.descendants((node: ProseMirrorNode) => {
     if (!node.isText) return;
+
+    const mentionMarks = node.marks.filter(mark => {
+      if (mark.type.name !== 'link') return false;
+      const href = mark.attrs.href as string | undefined;
+      return Boolean(href && detectMentionType(href));
+    });
+
+    if (mentionMarks.length === 0 && node.text) {
+      bodyTextParts.push(node.text);
+    }
+
     for (const mark of node.marks) {
       if (mark.type.name !== 'link') continue;
       const href = mark.attrs.href as string | undefined;
@@ -83,7 +105,7 @@ function extractPromptAndMentions(
   });
 
   const text = editor.state.doc.textContent;
-  return { text, mentions };
+  return { text, bodyText: bodyTextParts.join(''), mentions };
 }
 
 /**
@@ -128,8 +150,8 @@ export const AssistantInput = forwardRef<
   const handleSubmit = useCallback(async () => {
     const editor = editorRef.current;
     if (!editor) return;
-    const { text, mentions } = extractPromptAndMentions(editor);
-    if (!text.trim()) return;
+    const { text, bodyText, mentions } = extractPromptAndMentions(editor);
+    if (!bodyText.trim()) return;
     const previousContent = editor.getJSON();
     editor.commands.clearContent();
     const shouldClear = await onSubmitRef.current(text, mentions);
@@ -145,6 +167,28 @@ export const AssistantInput = forwardRef<
       void handleSubmit();
     },
     [handleSubmit],
+  );
+
+  const insertIssueMention = useCallback(
+    (issue: AssistantInputIssueMention) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+
+      editor
+        .chain()
+        .focus('end')
+        .insertContent(
+          buildMentionContent({
+            type: 'issue',
+            label: issue.label,
+            href: issue.href,
+            icon: issue.icon,
+            color: issue.color,
+          }),
+        )
+        .run();
+    },
+    [],
   );
 
   const editor = useEditor({
@@ -247,8 +291,9 @@ export const AssistantInput = forwardRef<
     () => ({
       submit: handleSubmit,
       focus: () => editor?.commands.focus(),
+      insertIssueMention,
     }),
-    [handleSubmit, editor],
+    [handleSubmit, insertIssueMention, editor],
   );
 
   useEffect(() => {

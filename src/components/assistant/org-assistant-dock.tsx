@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -10,6 +11,7 @@ import {
 } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
+import { useDroppable } from '@dnd-kit/core';
 import { useConvexAuth } from 'convex/react';
 import { useQuery, useMutation, useAction } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
@@ -40,6 +42,7 @@ import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AssistantDockMessage } from './assistant-message-renderer';
+import { useAssistantIssueDnd } from './assistant-issue-dnd';
 
 type PendingAction = {
   id: string;
@@ -107,6 +110,30 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
   const [isClearing, setIsClearing] = useState(false);
   const [confirmAction, ConfirmActionDialog] = useConfirm();
   const inputRef = useRef<AssistantInputHandle>(null);
+  const assistantDropId = useId();
+  const { activeIssueDrag } = useAssistantIssueDnd();
+  const { setNodeRef: setAssistantDropRef, isOver: isIssueDropOver } =
+    useDroppable({
+      id: assistantDropId,
+      data: {
+        type: 'assistant-issue-drop',
+        onIssueDrop: (issue: {
+          key: string;
+          title: string;
+          href: string;
+          icon?: string | null;
+          color?: string | null;
+        }) => {
+          inputRef.current?.insertIssueMention({
+            label: `${issue.key} ${issue.title}`,
+            href: issue.href,
+            icon: issue.icon,
+            color: issue.color,
+          });
+          setIsExpanded(true);
+        },
+      },
+    });
 
   // Listen for command menu "Message Vector" event
   useEffect(() => {
@@ -626,8 +653,12 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
         {/* Input bar */}
         <div className='px-1.5 pb-1.5'>
           <div
+            ref={setAssistantDropRef}
             className={cn(
               'border-border/60 bg-background/60 overflow-hidden rounded-lg border',
+              activeIssueDrag && 'transition-colors',
+              isIssueDropOver &&
+                'border-primary/35 bg-primary/5 ring-primary/20 ring-1',
             )}
           >
             <div className='flex items-center gap-0.5'>

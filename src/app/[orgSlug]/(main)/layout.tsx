@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { OrgSidebar, OrgOptionsDropdown } from '@/components/organization';
 import { OrgAssistantDock } from '@/components/assistant/org-assistant-dock';
+import { AssistantIssueDndProvider } from '@/components/assistant/assistant-issue-dnd';
 import { UserMenu } from '@/components/user-menu';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -265,58 +266,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
   return (
     <MobileNavContext.Provider value={() => setMobileOpen(true)}>
       <BottomBarPortalContext.Provider value={portalTarget}>
-        <div className='bg-secondary flex h-screen'>
-          {/* Desktop sidebar */}
-          <aside
-            className='relative hidden lg:block'
-            style={{ width: sidebarWidth }}
-          >
-            <div className='flex h-full flex-col'>
-              <div className='p-2'>
-                <OrgOptionsDropdown
-                  currentOrgSlug={orgSlug}
-                  currentOrgName={organization?.name ?? 'Organization'}
-                  currentOrgLogo={organization?.logo}
-                  organizations={organizations}
-                />
-              </div>
-              <div className='min-h-0 flex-1 overflow-y-auto'>
-                <OrgSidebar orgSlug={orgSlug} />
-              </div>
-              {/* Assistant dock */}
-              <OrgAssistantDock orgSlug={orgSlug} />
-              {/* User footer */}
-              <div className='border-border flex items-center gap-1 border-t p-2'>
-                <div className='min-w-0 flex-1'>
-                  <UserMenu />
-                </div>
-                <NotificationBell />
-              </div>
-            </div>
-            {/* Resize handle */}
-            <div
-              onMouseDown={handleMouseDown}
-              className='group absolute top-0 -right-0.5 bottom-0 z-30 flex w-1.5 cursor-col-resize items-center justify-center'
+        <AssistantIssueDndProvider>
+          <div className='bg-secondary flex h-screen'>
+            {/* Desktop sidebar */}
+            <aside
+              className='relative hidden lg:block'
+              style={{ width: sidebarWidth }}
             >
-              <div
-                className={cn(
-                  'h-full w-px transition-colors',
-                  isDragging
-                    ? 'bg-foreground/30'
-                    : 'group-hover:bg-foreground/15 bg-transparent',
-                )}
-              />
-            </div>
-          </aside>
-
-          {/* Mobile sheet (opened from "More" in bottom bar) */}
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetContent
-              side='left'
-              showCloseButton={false}
-              className='bg-secondary !w-[85vw] !max-w-[85vw] p-0 sm:!max-w-80'
-            >
-              <SheetTitle className='sr-only'>Navigation</SheetTitle>
               <div className='flex h-full flex-col'>
                 <div className='p-2'>
                   <OrgOptionsDropdown
@@ -326,14 +282,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     organizations={organizations}
                   />
                 </div>
-                <div className='flex-1 overflow-y-auto'>
-                  <OrgSidebar
-                    orgSlug={orgSlug}
-                    onNavigate={() => setMobileOpen(false)}
-                  />
+                <div className='min-h-0 flex-1 overflow-y-auto'>
+                  <OrgSidebar orgSlug={orgSlug} />
                 </div>
-                {/* Assistant dock in mobile sheet */}
+                {/* Assistant dock */}
                 <OrgAssistantDock orgSlug={orgSlug} />
+                {/* User footer */}
                 <div className='border-border flex items-center gap-1 border-t p-2'>
                   <div className='min-w-0 flex-1'>
                     <UserMenu />
@@ -341,58 +295,106 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   <NotificationBell />
                 </div>
               </div>
-            </SheetContent>
-          </Sheet>
-
-          {/* Main content */}
-          <main className='bg-background mx-2 mt-2 mb-16 flex-1 overflow-y-auto rounded-md border lg:mb-2 lg:ml-0'>
-            {children}
-          </main>
-
-          {/* Command menu (⌘K) */}
-          <CommandMenu />
-          <CommandMenuActions />
-
-          {/* Mobile bottom bar */}
-          <div className='bg-background/80 fixed right-0 bottom-0 left-0 z-50 border-t backdrop-blur-lg lg:hidden'>
-            {/* Page actions slot */}
-            <div ref={setPortalTarget} />
-            {/* Nav */}
-            <nav className='flex h-12 items-stretch pb-[env(safe-area-inset-bottom)]'>
-              <BottomNavItem
-                href={`/${orgSlug}/issues`}
-                icon={CheckSquare}
-                label='Issues'
-                isActive={isActive(`/${orgSlug}/issues`)}
-              />
-              <BottomNavItem
-                href={`/${orgSlug}/projects`}
-                icon={FolderOpen}
-                label='Projects'
-                isActive={isActive(`/${orgSlug}/projects`)}
-              />
-              <BottomNavItem
-                href={`/${orgSlug}/teams`}
-                icon={Users}
-                label='Teams'
-                isActive={isActive(`/${orgSlug}/teams`)}
-              />
-              <BottomNavItem
-                href={`/${orgSlug}/dashboard`}
-                icon={LayoutDashboard}
-                label='Dashboard'
-                isActive={isActive(`/${orgSlug}/dashboard`)}
-              />
-              <button
-                onClick={() => setMobileOpen(true)}
-                className='text-muted-foreground flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors'
+              <div
+                onMouseDown={handleMouseDown}
+                className='group absolute top-0 -right-0.5 bottom-0 z-30 flex w-1.5 cursor-col-resize items-center justify-center'
               >
-                <Menu className='size-5' strokeWidth={1.8} />
-                <span>More</span>
-              </button>
-            </nav>
+                <div
+                  className={cn(
+                    'h-full w-px transition-colors',
+                    isDragging
+                      ? 'bg-foreground/30'
+                      : 'group-hover:bg-foreground/15 bg-transparent',
+                  )}
+                />
+              </div>
+            </aside>
+
+            {/* Mobile sheet (opened from "More" in bottom bar) */}
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetContent
+                side='left'
+                showCloseButton={false}
+                className='bg-secondary !w-[85vw] !max-w-[85vw] p-0 sm:!max-w-80'
+              >
+                <SheetTitle className='sr-only'>Navigation</SheetTitle>
+                <div className='flex h-full flex-col'>
+                  <div className='p-2'>
+                    <OrgOptionsDropdown
+                      currentOrgSlug={orgSlug}
+                      currentOrgName={organization?.name ?? 'Organization'}
+                      currentOrgLogo={organization?.logo}
+                      organizations={organizations}
+                    />
+                  </div>
+                  <div className='flex-1 overflow-y-auto'>
+                    <OrgSidebar
+                      orgSlug={orgSlug}
+                      onNavigate={() => setMobileOpen(false)}
+                    />
+                  </div>
+                  {/* Assistant dock in mobile sheet */}
+                  <OrgAssistantDock orgSlug={orgSlug} />
+                  <div className='border-border flex items-center gap-1 border-t p-2'>
+                    <div className='min-w-0 flex-1'>
+                      <UserMenu />
+                    </div>
+                    <NotificationBell />
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            {/* Main content */}
+            <main className='bg-background mx-2 mt-2 mb-16 flex-1 overflow-y-auto rounded-md border lg:mb-2 lg:ml-0'>
+              {children}
+            </main>
+
+            {/* Command menu (⌘K) */}
+            <CommandMenu />
+            <CommandMenuActions />
+
+            {/* Mobile bottom bar */}
+            <div className='bg-background/80 fixed right-0 bottom-0 left-0 z-50 border-t backdrop-blur-lg lg:hidden'>
+              {/* Page actions slot */}
+              <div ref={setPortalTarget} />
+              {/* Nav */}
+              <nav className='flex h-12 items-stretch pb-[env(safe-area-inset-bottom)]'>
+                <BottomNavItem
+                  href={`/${orgSlug}/issues`}
+                  icon={CheckSquare}
+                  label='Issues'
+                  isActive={isActive(`/${orgSlug}/issues`)}
+                />
+                <BottomNavItem
+                  href={`/${orgSlug}/projects`}
+                  icon={FolderOpen}
+                  label='Projects'
+                  isActive={isActive(`/${orgSlug}/projects`)}
+                />
+                <BottomNavItem
+                  href={`/${orgSlug}/teams`}
+                  icon={Users}
+                  label='Teams'
+                  isActive={isActive(`/${orgSlug}/teams`)}
+                />
+                <BottomNavItem
+                  href={`/${orgSlug}/dashboard`}
+                  icon={LayoutDashboard}
+                  label='Dashboard'
+                  isActive={isActive(`/${orgSlug}/dashboard`)}
+                />
+                <button
+                  onClick={() => setMobileOpen(true)}
+                  className='text-muted-foreground flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors'
+                >
+                  <Menu className='size-5' strokeWidth={1.8} />
+                  <span>More</span>
+                </button>
+              </nav>
+            </div>
           </div>
-        </div>
+        </AssistantIssueDndProvider>
       </BottomBarPortalContext.Provider>
     </MobileNavContext.Provider>
   );

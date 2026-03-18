@@ -16,15 +16,10 @@ import { DynamicIcon, getDynamicIcon } from '@/lib/dynamic-icons';
 import { UserAvatar } from '@/components/user-avatar';
 import { formatDateHuman } from '@/lib/date';
 import {
-  DndContext,
   DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
+  useDndMonitor,
   useDroppable,
   useDraggable,
-  type DragStartEvent,
-  type DragEndEvent,
 } from '@dnd-kit/core';
 
 import type {
@@ -51,6 +46,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import type { IssueDragData } from '@/components/assistant/assistant-issue-dnd';
 
 export interface IssuesKanbanProps {
   orgSlug: string;
@@ -173,12 +169,6 @@ export function IssuesKanban({
 
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
-    }),
-  );
-
   const groupedIssues = React.useMemo(() => {
     const map = new Map<string, GroupedIssue>();
 
@@ -265,11 +255,17 @@ export function IssuesKanban({
         const displayAssignee = viewerAssignment
           ? issue.assignees.find(a => a.id === currentUserId)
           : issue.assignees[0];
+        const displayAssignmentId =
+          viewerAssignment?.assignmentId ??
+          issue.assignments.find(
+            assignment => assignment.assignmentId !== 'unassigned',
+          )?.assignmentId ??
+          null;
 
         return {
           ...issue,
           cardId: issue.id,
-          assignmentId: issue.id,
+          assignmentId: displayAssignmentId,
           assigneeId: displayAssignee?.id ?? null,
           assigneeName: displayAssignee?.name ?? null,
           assigneeEmail: displayAssignee?.email ?? null,
@@ -376,7 +372,6 @@ export function IssuesKanban({
     },
     [effectiveGroupBy],
   );
-
   const columns = React.useMemo(() => {
     return columnDefs.map(col => ({
       def: col,
@@ -385,7 +380,7 @@ export function IssuesKanban({
   }, [columnDefs, issueCards, getColumnId]);
 
   // Determine if drag-and-drop is supported for the current groupBy
-  const canDrag =
+  const canDropInColumns =
     effectiveGroupBy === 'status'
       ? Boolean(onStateChange)
       : effectiveGroupBy === 'priority'
@@ -399,54 +394,65 @@ export function IssuesKanban({
   const activeIssue = activeId
     ? (issueCards.find(i => i.cardId === activeId) ?? null)
     : null;
+  const handleIssueColumnDrop = React.useCallback(
+    (targetColumnId: string) => (activeIssueDrag: IssueDragData) => {
+      const issue = issueCards.find(item => item.id === activeIssueDrag.id);
+      if (!issue || getColumnId(issue) === targetColumnId) return;
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(event.active.id as string);
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveId(null);
-    const { active, over } = event;
-    if (!over) return;
-
-    const issueId = active.id as string;
-    const targetColumnId = over.id as string;
-    const issue = issueCards.find(i => i.cardId === issueId);
-    if (!issue) return;
-
-    // Check target is different from current
-    if (getColumnId(issue) === targetColumnId) return;
-
-    switch (effectiveGroupBy) {
-      case 'status':
-        if (onStateChange) onStateChange(issue.id, issue.id, targetColumnId);
-        break;
-      case 'priority':
-        if (onPriorityChange) onPriorityChange(issue.id, targetColumnId);
-        break;
-      case 'team':
-        if (onTeamChange)
+      switch (effectiveGroupBy) {
+        case 'status':
+          if (!onStateChange || !issue.assignmentId) return;
+          onStateChange(issue.id, issue.assignmentId, targetColumnId);
+          return;
+        case 'priority':
+          if (!onPriorityChange) return;
+          onPriorityChange(issue.id, targetColumnId);
+          return;
+        case 'team':
+          if (!onTeamChange) return;
           onTeamChange(
             issue.id,
             targetColumnId === '__none__' ? '' : targetColumnId,
           );
-        break;
-      case 'project':
-        if (onProjectChange)
+          return;
+        case 'project':
+          if (!onProjectChange) return;
           onProjectChange(
             issue.id,
             targetColumnId === '__none__' ? '' : targetColumnId,
           );
-        break;
-    }
-  }
+          return;
+        default:
+          return;
+      }
+    },
+    [
+      effectiveGroupBy,
+      getColumnId,
+      issueCards,
+      onPriorityChange,
+      onProjectChange,
+      onStateChange,
+      onTeamChange,
+    ],
+  );
+
+  useDndMonitor({
+    onDragStart: event => {
+      const dragData = event.active.data.current as IssueDragData | undefined;
+      if (dragData?.type !== 'issue' || dragData.origin !== 'kanban') return;
+      setActiveId(event.active.id as string);
+    },
+    onDragEnd: () => {
+      setActiveId(null);
+    },
+    onDragCancel: () => {
+      setActiveId(null);
+    },
+  });
 
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
+    <>
       <ScrollArea className='h-full' viewportClassName='h-full'>
         <div className='flex min-h-dvh gap-3 p-3 pb-16'>
           {columns.map(({ def, issues: columnIssues }) => (
@@ -464,7 +470,10 @@ export function IssuesKanban({
               currentUserId={currentUserId}
               canManageAssignees={canManageAssignees}
               canUpdateAssignmentStates={canUpdateAssignmentStates}
-              canDrag={canDrag}
+              canDropInColumn={canDropInColumns}
+              onIssueDrop={
+                canDropInColumns ? handleIssueColumnDrop(def.id) : undefined
+              }
               onStateChange={onStateChange}
               onPriorityChange={onPriorityChange}
               onAssigneesChange={onAssigneesChange}
@@ -481,7 +490,6 @@ export function IssuesKanban({
           ))}
         </div>
       </ScrollArea>
-
       <DragOverlay
         dropAnimation={{
           duration: 200,
@@ -498,7 +506,7 @@ export function IssuesKanban({
           </div>
         ) : null}
       </DragOverlay>
-    </DndContext>
+    </>
   );
 }
 
@@ -515,7 +523,8 @@ function KanbanColumn({
   currentUserId,
   canManageAssignees,
   canUpdateAssignmentStates,
-  canDrag = true,
+  canDropInColumn = false,
+  onIssueDrop,
   onStateChange,
   onPriorityChange,
   onAssigneesChange,
@@ -537,7 +546,8 @@ function KanbanColumn({
   currentUserId: string;
   canManageAssignees?: boolean;
   canUpdateAssignmentStates?: boolean;
-  canDrag?: boolean;
+  canDropInColumn?: boolean;
+  onIssueDrop?: (issue: IssueDragData) => void;
   onStateChange?: (
     issueId: string,
     assignmentId: string,
@@ -551,7 +561,16 @@ function KanbanColumn({
   deletePending?: boolean;
   createDefaults?: Record<string, unknown>;
 }) {
-  const { isOver, setNodeRef } = useDroppable({ id: columnDef.id });
+  const { isOver, setNodeRef } = useDroppable({
+    id: `issue-column:${columnDef.id}`,
+    disabled: !canDropInColumn || !onIssueDrop,
+    data: onIssueDrop
+      ? {
+          type: 'issue-column-drop',
+          onIssueDrop,
+        }
+      : undefined,
+  });
   const count = issues.length;
 
   return (
@@ -610,7 +629,6 @@ function KanbanColumn({
                 currentUserId={currentUserId}
                 canManageAssignees={canManageAssignees}
                 canUpdateAssignmentStates={canUpdateAssignmentStates}
-                canDrag={canDrag}
                 onStateChange={onStateChange}
                 onPriorityChange={onPriorityChange}
                 onAssigneesChange={onAssigneesChange}
@@ -646,7 +664,6 @@ function KanbanCard({
   currentUserId,
   canManageAssignees = false,
   canUpdateAssignmentStates = false,
-  canDrag = true,
   onStateChange,
   onPriorityChange,
   onAssigneesChange,
@@ -665,7 +682,6 @@ function KanbanCard({
   currentUserId: string;
   canManageAssignees?: boolean;
   canUpdateAssignmentStates?: boolean;
-  canDrag?: boolean;
   onStateChange?: (
     issueId: string,
     assignmentId: string,
@@ -680,7 +696,18 @@ function KanbanCard({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: issue.cardId,
-    disabled: !canDrag,
+    data: {
+      type: 'issue',
+      origin: 'kanban',
+      id: issue.id,
+      key: issue.key,
+      title: issue.title,
+      href: `/${orgSlug}/issues/${issue.key}`,
+      icon: issue.stateIcon,
+      color: issue.stateColor,
+      assignmentId: issue.assignmentId,
+      stateId: issue.stateId,
+    },
   });
 
   return (
