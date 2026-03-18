@@ -66,13 +66,13 @@ function SidebarSection({
           onClick={() => setOpen(o => !o)}
           className='text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-normal tracking-wider uppercase transition-colors'
         >
+          {label}
           <ChevronRight
             className={cn(
               'size-3 transition-transform duration-150',
               open && 'rotate-90',
             )}
           />
-          {label}
         </button>
         <div className='flex items-center gap-1'>{action}</div>
       </div>
@@ -123,7 +123,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
           <CreateIssueDialog
             orgSlug={orgSlug}
             variant='default'
-            className='h-6 w-6 p-0'
+            className='h-6 w-6 border-0 p-0 shadow-none'
           />
         </ScopedPermissionGate>
       ),
@@ -181,7 +181,11 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
         <SidebarSection
           label='My Teams'
           action={
-            <CreateTeamButton orgSlug={orgSlug} size='sm' className='h-5 w-5' />
+            <CreateTeamButton
+              orgSlug={orgSlug}
+              size='sm'
+              className='h-6 w-6 border-0 p-0 shadow-none'
+            />
           }
         >
           {userTeams.length > 0 ? (
@@ -237,7 +241,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
             <CreateProjectButton
               orgSlug={orgSlug}
               size='sm'
-              className='h-5 w-5'
+              className='h-6 w-6 border-0 p-0 shadow-none'
             />
           }
         >
@@ -309,7 +313,7 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
               <CreateViewDialog
                 orgSlug={orgSlug}
                 trigger={
-                  <Button variant='ghost' size='sm' className='h-5 w-5 p-0'>
+                  <Button variant='ghost' size='sm' className='h-6 w-6 p-0'>
                     <Plus className='size-3.5' />
                   </Button>
                 }
@@ -382,7 +386,10 @@ export function OrgSidebar({ orgSlug, onNavigate }: OrgSidebarProps) {
         <SidebarSection
           label='My Docs'
           action={
-            <CreateDocumentDialog orgSlug={orgSlug} className='h-5 w-5' />
+            <CreateDocumentDialog
+              orgSlug={orgSlug}
+              className='h-6 w-6 border-0 p-0 shadow-none'
+            />
           }
         >
           {userDocuments.length > 0 ? (

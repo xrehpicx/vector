@@ -51,22 +51,6 @@ async function canEditView(
   );
 }
 
-async function canDeleteView(
-  ctx: QueryCtx,
-  view: Doc<'views'>,
-  userId: Id<'users'> | null,
-): Promise<boolean> {
-  if (!userId) return false;
-  if (view.createdBy === userId) return true;
-
-  return hasScopedPermission(
-    ctx,
-    { organizationId: view.organizationId },
-    userId,
-    PERMISSIONS.VIEW_DELETE,
-  );
-}
-
 type ViewListScope = 'mine' | 'all';
 
 function matchesViewScope(
@@ -76,9 +60,10 @@ function matchesViewScope(
   isOrgMember: boolean,
 ) {
   if (scope === 'mine') {
-    return view.visibility === 'private' && view.createdBy === userId;
+    return view.createdBy === userId;
   }
 
+  if (view.visibility === 'private') return view.createdBy === userId;
   if (view.visibility === 'public') return true;
   if (view.visibility === 'organization') return isOrgMember;
   return false;

@@ -6,7 +6,8 @@ import {
   useCachedPaginatedQuery,
   useMutation,
 } from '@/lib/convex';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useRouter } from 'nextjs-toploader/app';
 import { cn } from '@/lib/utils';
 import {
   Globe,
@@ -164,7 +165,7 @@ export function ViewsListPage() {
                 className='h-6 gap-2 rounded-xs px-3 text-xs font-normal'
                 onClick={() => setScope('all')}
               >
-                <span>Shared</span>
+                <span>All</span>
                 <span className='text-muted-foreground text-xs'>
                   {summary?.sharedCount ?? 0}
                 </span>
@@ -183,12 +184,12 @@ export function ViewsListPage() {
           <div className='text-muted-foreground flex flex-col items-center gap-3 py-20 text-center'>
             <LayoutGrid className='size-10 opacity-20' />
             <p className='text-sm font-medium'>
-              {scope === 'mine' ? 'No private views' : 'No shared views'}
+              {scope === 'mine' ? 'No views created by you' : 'No views found'}
             </p>
             <p className='max-w-xs text-xs'>
               {scope === 'mine'
-                ? 'Create a view to save a filtered issue list just for you.'
-                : 'Views shared with the org or made public will appear here.'}
+                ? 'Views you create show up here, regardless of whether they are private, org-wide, or public.'
+                : 'This tab shows every view you can access, including your own views and shared ones.'}
             </p>
             {scope === 'mine' && canCreateViews && (
               <CreateViewDialog
@@ -262,9 +263,9 @@ function ViewRow({
 
   return (
     <div
-      className='hover:bg-muted/40 group flex items-center gap-2 px-3 py-2 transition-colors'
+      className='hover:bg-muted/40 group flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors'
       onClick={onNavigate}
-      role='button'
+      role='link'
       tabIndex={0}
       onKeyDown={e => e.key === 'Enter' && onNavigate()}
     >

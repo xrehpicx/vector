@@ -11,18 +11,12 @@ import {
   ResponsiveDialogHeader,
   ResponsiveDialogTitle,
 } from '@/components/ui/responsive-dialog';
-import {
-  VisibilitySelector,
-  type VisibilityOption,
-} from '@/components/ui/visibility-selector';
-import {
-  TeamSelector,
-  ProjectSelector,
-  StateSelector,
-  PrioritySelector,
-} from '@/components/issues/issue-selectors';
+import { type VisibilityOption } from '@/components/ui/visibility-selector';
 import { toast } from 'sonner';
 import type { Id } from '@/convex/_generated/dataModel';
+import type { IssueGroupByField } from '@/lib/group-by';
+import type { ViewMode } from '@/hooks/use-persisted-view-mode';
+import { ViewDialogSettings } from './view-dialog-settings';
 
 interface EditViewDialogProps {
   orgSlug: string;
@@ -47,6 +41,8 @@ export function EditViewDialog({
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [groupBy, setGroupBy] = useState<IssueGroupByField>('none');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const teams = useCachedQuery(api.organizations.queries.listTeams, {
@@ -77,6 +73,8 @@ export function EditViewDialog({
       setSelectedProject((view.filters.projectId as string) ?? '');
       setSelectedPriorities((view.filters.priorityIds ?? []) as string[]);
       setSelectedStates((view.filters.workflowStateIds ?? []) as string[]);
+      setViewMode((view.layout?.viewMode as ViewMode) ?? 'table');
+      setGroupBy((view.layout?.groupBy as IssueGroupByField) ?? 'none');
     }
   }, [view, open]);
 
@@ -102,6 +100,10 @@ export function EditViewDialog({
             ? (selectedStates as Id<'issueStates'>[])
             : undefined,
         },
+        layout: {
+          viewMode,
+          groupBy,
+        },
         visibility,
       });
       toast.success('View updated');
@@ -124,59 +126,26 @@ export function EditViewDialog({
         </ResponsiveDialogHeader>
 
         <form onSubmit={handleSubmit} className='space-y-2'>
-          {/* Selectors row */}
-          <div className='text-muted-foreground flex items-center gap-2 text-sm'>
-            <div className='flex flex-wrap gap-2'>
-              <TeamSelector
-                teams={teams ?? []}
-                selectedTeam={selectedTeam}
-                onTeamSelect={v => setSelectedTeam(v === selectedTeam ? '' : v)}
-                displayMode='iconWhenUnselected'
-              />
-              <ProjectSelector
-                projects={projects ?? []}
-                selectedProject={selectedProject}
-                onProjectSelect={v =>
-                  setSelectedProject(v === selectedProject ? '' : v)
-                }
-                displayMode='iconWhenUnselected'
-              />
-              <PrioritySelector
-                priorities={priorities ?? []}
-                selectedPriority={selectedPriorities[0] ?? ''}
-                selectedPriorities={selectedPriorities}
-                onPrioritySelect={v =>
-                  setSelectedPriorities(prev =>
-                    prev.includes(v)
-                      ? prev.filter(id => id !== v)
-                      : [...prev, v],
-                  )
-                }
-                displayMode='iconWhenUnselected'
-              />
-              <StateSelector
-                states={states ?? []}
-                selectedState={selectedStates[0] ?? ''}
-                selectedStates={selectedStates}
-                onStateSelect={v =>
-                  setSelectedStates(prev =>
-                    prev.includes(v)
-                      ? prev.filter(id => id !== v)
-                      : [...prev, v],
-                  )
-                }
-                displayMode='iconWhenUnselected'
-              />
-            </div>
-
-            <div className='ml-auto'>
-              <VisibilitySelector
-                value={visibility}
-                onValueChange={setVisibility}
-                displayMode='iconOnly'
-              />
-            </div>
-          </div>
+          <ViewDialogSettings
+            teams={teams ?? []}
+            projects={projects ?? []}
+            priorities={priorities ?? []}
+            states={states ?? []}
+            selectedTeam={selectedTeam}
+            onSelectedTeamChange={setSelectedTeam}
+            selectedProject={selectedProject}
+            onSelectedProjectChange={setSelectedProject}
+            selectedPriorities={selectedPriorities}
+            onSelectedPrioritiesChange={setSelectedPriorities}
+            selectedStates={selectedStates}
+            onSelectedStatesChange={setSelectedStates}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
+            visibility={visibility}
+            onVisibilityChange={setVisibility}
+          />
 
           {/* Name */}
           <div className='relative'>
