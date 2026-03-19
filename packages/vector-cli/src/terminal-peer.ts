@@ -252,6 +252,14 @@ export class TerminalPeerManager {
 
         console.log(`[${ts()}] Client connected (${tmuxSessionName})`);
 
+        // Force tmux to redraw the pane so the client gets a clean initial render
+        // (otherwise buffered output from before the WS connected causes garbled display)
+        try {
+          execFileSync(TMUX, ['refresh-client', '-t', viewerSession]);
+        } catch {
+          // best effort
+        }
+
         const dataHandler = ptyProcess.onData(data => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(data);
@@ -269,6 +277,12 @@ export class TerminalPeerManager {
                   Math.max(parsed.cols, 10),
                   Math.max(parsed.rows, 4),
                 );
+                // Force tmux to redraw at the new size
+                try {
+                  execFileSync(TMUX, ['refresh-client', '-t', viewerSession]);
+                } catch {
+                  // best effort
+                }
                 return;
               }
             } catch {

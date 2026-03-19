@@ -262,9 +262,8 @@ export class BridgeService {
         },
       );
       writeLiveActivitiesCache(activities);
-      await this.syncWorkSessionTerminals(activities);
 
-      // Watch active sessions with tmux for WebRTC offers
+      // Watch active sessions for interactive terminal viewers
       if (this.terminalPeer) {
         for (const activity of activities) {
           if (activity.workSessionId && activity.tmuxSessionName) {
@@ -369,7 +368,7 @@ export class BridgeService {
       `Verified ${providerLabel(attachedSession.process.provider)} in ${activity.tmuxPaneId}`,
     );
     await this.updateLiveActivity(activity._id, {
-      status: 'waiting_for_input',
+      status: 'active',
       latestSummary: `Verified ${providerLabel(attachedSession.process.provider)} in ${activity.tmuxPaneId}`,
       processId: attachedSession.processId,
       title: activity.title,
@@ -726,7 +725,7 @@ export class BridgeService {
         `Started tmux session ${tmuxSession.sessionName}:${tmuxSession.windowName}. Waiting to verify ${providerLabel(provider)} in ${tmuxSession.paneId}.`,
       );
       await this.updateLiveActivity(cmd.liveActivityId, {
-        status: 'waiting_for_input',
+        status: 'active',
         latestSummary: `Running in ${tmuxSession.sessionName}:${tmuxSession.windowName}; waiting to verify ${providerLabel(provider)}`,
         delegatedRunId: payload?.delegatedRunId,
         launchStatus: 'running',
@@ -736,7 +735,7 @@ export class BridgeService {
     }
 
     await this.updateLiveActivity(cmd.liveActivityId, {
-      status: 'waiting_for_input',
+      status: 'active',
       latestSummary: `Running in ${tmuxSession.sessionName}:${tmuxSession.windowName}`,
       delegatedRunId: payload?.delegatedRunId,
       launchStatus: 'running',

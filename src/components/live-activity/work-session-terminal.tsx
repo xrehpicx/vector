@@ -110,7 +110,7 @@ export function WorkSessionTerminal({
       disableStdin: false,
       drawBoldTextInBrightColors: true,
       fontFamily:
-        '"SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        '"SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       fontSize: 13,
       lineHeight: 1.2,
       scrollback: 5000,
@@ -141,6 +141,7 @@ export function WorkSessionTerminal({
 
     const resizeObserver = new ResizeObserver(() => {
       fitAddon.fit();
+      if (!canInteract) return; // Viewers can't resize the pane
       const ws = wsRef.current;
       const dims = fitAddon.proposeDimensions();
       if (ws && ws.readyState === WebSocket.OPEN && dims) {
@@ -217,16 +218,19 @@ export function WorkSessionTerminal({
         terminal.clear();
         terminal.focus();
 
-        const dims = fitAddon?.proposeDimensions();
-        if (dims) {
-          ws.send(
-            CONTROL_PREFIX +
-              JSON.stringify({
-                type: 'resize',
-                cols: dims.cols,
-                rows: dims.rows,
-              }),
-          );
+        // Only controllers can resize the pane
+        if (canInteract) {
+          const dims = fitAddon?.proposeDimensions();
+          if (dims) {
+            ws.send(
+              CONTROL_PREFIX +
+                JSON.stringify({
+                  type: 'resize',
+                  cols: dims.cols,
+                  rows: dims.rows,
+                }),
+            );
+          }
         }
       };
 

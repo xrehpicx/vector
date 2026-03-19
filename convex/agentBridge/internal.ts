@@ -43,59 +43,56 @@ export const markStaleDevices = internalMutation({
         });
         offlineCount++;
 
-        // Cascade: disconnect running processes on this device
+        // Cascade: disconnect only ACTIVE processes (use status index)
         const processes = await ctx.db
           .query('agentProcesses')
-          .withIndex('by_device', q => q.eq('deviceId', device._id))
-          .collect();
+          .withIndex('by_device_status', q =>
+            q.eq('deviceId', device._id).eq('status', 'observed'),
+          )
+          .take(100);
 
         for (const proc of processes) {
-          if (!proc.endedAt) {
-            await ctx.db.patch('agentProcesses', proc._id, {
-              status: 'disconnected',
-              endedAt: now,
-            });
-          }
+          await ctx.db.patch('agentProcesses', proc._id, {
+            status: 'disconnected',
+            endedAt: now,
+          });
         }
 
-        // Cascade: disconnect active live activities on this device
+        // Cascade: disconnect active live activities (only non-ended ones)
         const activities = await ctx.db
           .query('issueLiveActivities')
           .withIndex('by_device', q => q.eq('deviceId', device._id))
-          .collect();
+          .take(50);
 
         for (const activity of activities) {
-          if (!activity.endedAt) {
-            await ctx.db.patch('issueLiveActivities', activity._id, {
-              status: 'disconnected',
-              lastEventAt: now,
-              endedAt: now,
-            });
+          if (activity.endedAt) continue;
 
-            // Also disconnect the linked work session
-            if (activity.workSessionId) {
-              const ws = await ctx.db.get(
-                'workSessions',
-                activity.workSessionId,
-              );
-              if (ws && !ws.endedAt) {
-                await ctx.db.patch('workSessions', activity.workSessionId, {
-                  status: 'disconnected',
-                  lastEventAt: now,
-                  endedAt: now,
-                });
-              }
+          await ctx.db.patch('issueLiveActivities', activity._id, {
+            status: 'disconnected',
+            lastEventAt: now,
+            endedAt: now,
+          });
+
+          // Also disconnect the linked work session
+          if (activity.workSessionId) {
+            const ws = await ctx.db.get('workSessions', activity.workSessionId);
+            if (ws && !ws.endedAt) {
+              await ctx.db.patch('workSessions', activity.workSessionId, {
+                status: 'disconnected',
+                lastEventAt: now,
+                endedAt: now,
+              });
             }
           }
         }
 
-        // Expire pending commands for offline device
+        // Expire pending commands (already uses status index)
         const commands = await ctx.db
           .query('agentCommands')
           .withIndex('by_device_status', q =>
             q.eq('deviceId', device._id).eq('status', 'pending'),
           )
-          .collect();
+          .take(100);
 
         for (const cmd of commands) {
           await ctx.db.patch('agentCommands', cmd._id, {

@@ -134,6 +134,10 @@ async function hydrateWorkSession(
 
   return {
     ...access.workSession,
+    // Only expose terminal credentials to users who can interact (controllers/owners)
+    terminalToken: access.canInteract
+      ? access.workSession.terminalToken
+      : undefined,
     issueKey: issue?.key,
     issueTitle: issue?.title,
     liveActivityStatus: liveActivity?.status,
@@ -571,6 +575,10 @@ export const getTerminalSignals = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new ConvexError('AUTH_REQUIRED');
+
+    // Require at least viewer access to the work session
+    const access = await getWorkSessionAccess(ctx, args.workSessionId);
+    if (!access.workSession) return [];
 
     // 'for' browser means get signals FROM bridge, and vice versa
     const from = args.for === 'browser' ? 'bridge' : 'browser';

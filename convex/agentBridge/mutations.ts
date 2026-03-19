@@ -1395,6 +1395,10 @@ export const clearTerminalSignals = mutation({
   args: { workSessionId: v.id('workSessions') },
   handler: async (ctx, args) => {
     await requireAuthUserId(ctx);
+    const workSession = await ctx.db.get('workSessions', args.workSessionId);
+    if (!workSession) throw new ConvexError('WORK_SESSION_NOT_FOUND');
+    await requireWorkSessionViewer(ctx, workSession);
+
     const signals = await ctx.db
       .query('terminalSignals')
       .withIndex('by_work_session', q =>
