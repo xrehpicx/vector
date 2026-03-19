@@ -13,25 +13,25 @@ import type { Id } from '../../../convex/_generated/dataModel';
 import { PeerConnection, type DataChannel } from 'node-datachannel';
 import * as pty from 'node-pty';
 import { execFileSync } from 'child_process';
+import { existsSync } from 'fs';
 
 function findTmuxPath(): string {
+  // Check common paths directly (fastest, no subprocess)
+  for (const p of [
+    '/opt/homebrew/bin/tmux',
+    '/usr/local/bin/tmux',
+    '/usr/bin/tmux',
+  ]) {
+    if (existsSync(p)) return p;
+  }
+
+  // Fallback: ask the shell
   try {
-    return execFileSync('which', ['tmux'], { encoding: 'utf-8' }).trim();
+    return execFileSync('/usr/bin/env', ['which', 'tmux'], {
+      encoding: 'utf-8',
+    }).trim();
   } catch {
-    // Common paths on macOS/Linux
-    for (const p of [
-      '/opt/homebrew/bin/tmux',
-      '/usr/local/bin/tmux',
-      '/usr/bin/tmux',
-    ]) {
-      try {
-        execFileSync(p, ['--version'], { encoding: 'utf-8' });
-        return p;
-      } catch {
-        continue;
-      }
-    }
-    return 'tmux'; // fallback
+    return 'tmux';
   }
 }
 
