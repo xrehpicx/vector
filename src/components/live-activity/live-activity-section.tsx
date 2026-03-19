@@ -73,10 +73,12 @@ export function DeviceSetupGuide({ compact }: { compact?: boolean } = {}) {
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
   const steps = [
     { label: 'Install the CLI', cmd: 'npm install -g @rehpic/vcli' },
-    { label: 'Log in', cmd: 'vcli auth login' },
-    { label: 'Start the bridge', cmd: 'vcli start' },
+    { label: 'Log in', cmd: `vcli auth login --app-url ${appUrl}` },
+    { label: 'Install the bridge', cmd: 'vcli service install' },
   ];
 
   return (
