@@ -156,6 +156,11 @@ export function WorkSessionTerminal({
       const dc = dcRef.current;
       if (dc && dc.readyState === 'open') {
         dc.send(data);
+      } else {
+        console.log(
+          '[WebRTC] keystroke dropped, dc state:',
+          dc?.readyState ?? 'null',
+        );
       }
     });
 
@@ -221,7 +226,19 @@ export function WorkSessionTerminal({
 
     dc.binaryType = 'arraybuffer';
 
+    // Connection state logging
+    pc.onconnectionstatechange = () => {
+      console.log('[WebRTC] connection:', pc.connectionState);
+    };
+    pc.oniceconnectionstatechange = () => {
+      console.log('[WebRTC] ICE:', pc.iceConnectionState);
+    };
+    pc.onicegatheringstatechange = () => {
+      console.log('[WebRTC] ICE gathering:', pc.iceGatheringState);
+    };
+
     dc.onopen = () => {
+      console.log('[WebRTC] DataChannel open');
       setRtcConnected(true);
       terminal.clear();
       terminal.focus();
@@ -249,8 +266,13 @@ export function WorkSessionTerminal({
     };
 
     dc.onclose = () => {
+      console.log('[WebRTC] DataChannel closed');
       setRtcConnected(false);
       dcRef.current = null;
+    };
+
+    dc.onerror = event => {
+      console.error('[WebRTC] DataChannel error:', event);
     };
 
     pc.onicecandidate = event => {

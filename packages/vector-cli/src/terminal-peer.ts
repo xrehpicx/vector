@@ -142,30 +142,65 @@ export class TerminalPeerManager {
     };
     this.sessions.set(workSessionId, session);
 
+    // Log connection state changes
+    peer.onStateChange(state => {
+      console.log(
+        `[${ts()}] PeerConnection state: ${state} (${tmuxSessionName})`,
+      );
+    });
+
+    peer.onGatheringStateChange(state => {
+      console.log(`[${ts()}] ICE gathering: ${state} (${tmuxSessionName})`);
+    });
+
     // Send ICE candidates to Convex
     peer.onLocalCandidate((candidate, sdpMid) => {
+      console.log(`[${ts()}] Local ICE candidate: ${sdpMid}`);
       void this.sendSignal(workSessionId, 'candidate', { candidate, sdpMid });
     });
 
     // Handle incoming data channel from browser
     peer.onDataChannel(dc => {
+      console.log(`[${ts()}] onDataChannel received: ${dc.getLabel()}`);
       session.channel = dc;
       this.setupDataChannel(session, tmuxSessionName, dc);
     });
 
     // Set remote description (the offer from browser)
+    console.log(
+      `[${ts()}] Setting remote description (offer type: ${offer.type})`,
+    );
     peer.setRemoteDescription(offer.sdp, offer.type);
 
-    // Wait briefly for ICE gathering
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Wait for ICE gathering to complete
+    await new Promise<void>(resolve => {
+      const checkGathering = () => {
+        const state = peer.gatheringState();
+        if (state === 'complete') {
+          resolve();
+        } else {
+          setTimeout(checkGathering, 100);
+        }
+      };
+      // Also resolve after 3 seconds max
+      setTimeout(resolve, 3000);
+      checkGathering();
+    });
 
     const localDesc = peer.localDescription();
     if (localDesc) {
+      console.log(
+        `[${ts()}] Sending answer (type: ${localDesc.type}, sdp length: ${localDesc.sdp.length})`,
+      );
       await this.sendSignal(workSessionId, 'answer', {
         sdp: localDesc.sdp,
         type: localDesc.type,
       });
       console.log(`[${ts()}] WebRTC answer sent for ${tmuxSessionName}`);
+    } else {
+      console.error(
+        `[${ts()}] No local description available after setting remote offer`,
+      );
     }
   }
 
