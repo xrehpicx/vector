@@ -556,7 +556,6 @@ export class BridgeService {
 export async function setupBridgeDevice(
   client: ConvexHttpClient,
   convexUrl: string,
-  userId: string,
 ): Promise<BridgeConfig> {
   const deviceKey = `${hostname()}-${randomUUID().slice(0, 8)}`;
   const displayName = `${process.env.USER ?? 'user'}'s ${platform() === 'darwin' ? 'Mac' : 'machine'}`;
@@ -578,7 +577,7 @@ export async function setupBridgeDevice(
     deviceId: result.deviceId,
     deviceKey,
     deviceSecret: result.deviceSecret,
-    userId,
+    userId: result.userId,
     displayName,
     convexUrl,
     registeredAt: new Date().toISOString(),

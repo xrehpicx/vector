@@ -461,6 +461,54 @@ async function getClient(command: Command) {
   return { client, runtime, session };
 }
 
+async function ensureBridgeConfig(
+  command: Command,
+): Promise<Awaited<ReturnType<typeof setupBridgeDevice>>> {
+  let config = loadBridgeConfig();
+
+  try {
+    const runtime = await getRuntime(command);
+    const session = requireSession(runtime);
+    const authUserId = decodeSessionClaims(session).userId;
+    const client = await createConvexClient(
+      session,
+      runtime.appUrl,
+      runtime.convexUrl,
+    );
+    const user = await runQuery(client, api.users.currentUser);
+    if (!user) {
+      throw new Error('Not logged in. Run `vcli auth login` first.');
+    }
+
+    const backendDevice = config
+      ? await runQuery(client, api.agentBridge.queries.getDevice, {
+          deviceId: config.deviceId as Id<'agentDevices'>,
+        })
+      : null;
+
+    const needsRegistration =
+      !config ||
+      (authUserId ? config.userId !== authUserId : false) ||
+      config.convexUrl !== runtime.convexUrl ||
+      !backendDevice;
+
+    if (needsRegistration) {
+      config = await setupBridgeDevice(client, runtime.convexUrl);
+    }
+
+    if (!config) {
+      throw new Error('Bridge device is not configured.');
+    }
+
+    return config;
+  } catch (error) {
+    if (config) {
+      return config;
+    }
+    throw error;
+  }
+}
+
 async function resolveMemberId(
   client: Awaited<ReturnType<typeof createConvexClient>>,
   orgSlug: string,
@@ -2900,25 +2948,9 @@ serviceCommand
     const { spinner } = await import('@clack/prompts');
     const s = spinner();
 
-    // Ensure device is registered
-    let config = loadBridgeConfig();
-    if (!config) {
-      s.start('Registering device...');
-      const runtime = await getRuntime(command);
-      const session = requireSession(runtime);
-      const client = await createConvexClient(
-        session,
-        runtime.appUrl,
-        runtime.convexUrl,
-      );
-      const user = await runQuery(client, api.users.currentUser);
-      if (!user) {
-        s.stop('Failed');
-        throw new Error('Not logged in. Run `vcli auth login` first.');
-      }
-      config = await setupBridgeDevice(client, runtime.convexUrl, user._id);
-      s.stop(`Device registered: ${config.displayName}`);
-    }
+    s.start('Ensuring device registration...');
+    const config = await ensureBridgeConfig(command);
+    s.stop(`Device ready: ${config.displayName}`);
 
     if (osPlatform() === 'darwin') {
       s.start('Starting bridge service...');
@@ -2940,20 +2972,7 @@ serviceCommand
   .command('run')
   .description('Run the bridge service in the foreground (used by LaunchAgent)')
   .action(async (_options, command) => {
-    let config = loadBridgeConfig();
-
-    if (!config) {
-      const runtime = await getRuntime(command);
-      const session = requireSession(runtime);
-      const client = await createConvexClient(
-        session,
-        runtime.appUrl,
-        runtime.convexUrl,
-      );
-      const user = await runQuery(client, api.users.currentUser);
-      if (!user) throw new Error('Not logged in. Run `vcli auth login` first.');
-      config = await setupBridgeDevice(client, runtime.convexUrl, user._id);
-    }
+    const config = await ensureBridgeConfig(command);
 
     if (osPlatform() === 'darwin') {
       await launchMenuBar();
@@ -3107,25 +3126,9 @@ serviceCommand
     const { spinner } = await import('@clack/prompts');
     const s = spinner();
 
-    // Ensure device is registered before installing
-    let config = loadBridgeConfig();
-    if (!config) {
-      s.start('Registering device...');
-      const runtime = await getRuntime(command);
-      const session = requireSession(runtime);
-      const client = await createConvexClient(
-        session,
-        runtime.appUrl,
-        runtime.convexUrl,
-      );
-      const user = await runQuery(client, api.users.currentUser);
-      if (!user) {
-        s.stop('Failed');
-        throw new Error('Not logged in. Run `vcli auth login` first.');
-      }
-      config = await setupBridgeDevice(client, runtime.convexUrl, user._id);
-      s.stop(`Device registered: ${config.displayName}`);
-    }
+    s.start('Ensuring device registration...');
+    const config = await ensureBridgeConfig(command);
+    s.stop(`Device ready: ${config.displayName}`);
 
     s.start('Installing LaunchAgent...');
     const vcliPath = process.argv[1] ?? 'vcli';
@@ -3200,20 +3203,13 @@ bridgeCommand
   .command('start')
   .description('Register device, install service, and start the bridge')
   .action(async (_options, command) => {
-    let config = loadBridgeConfig();
-
-    if (!config) {
-      const runtime = await getRuntime(command);
-      const session = requireSession(runtime);
-      const client = await createConvexClient(
-        session,
-        runtime.appUrl,
-        runtime.convexUrl,
-      );
-      const user = await runQuery(client, api.users.currentUser);
-      if (!user) throw new Error('Not logged in. Run `vcli auth login` first.');
-
-      config = await setupBridgeDevice(client, runtime.convexUrl, user._id);
+    const existingConfig = loadBridgeConfig();
+    const config = await ensureBridgeConfig(command);
+    if (
+      !existingConfig ||
+      existingConfig.deviceId !== config.deviceId ||
+      existingConfig.userId !== config.userId
+    ) {
       console.log(
         `Device registered: ${config.displayName} (${config.deviceId})`,
       );
