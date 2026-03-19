@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   CircleDot,
+  Copy,
   Cpu,
   FolderOpen,
   Monitor,
@@ -60,6 +61,71 @@ type DelegationTarget = {
   device: DelegationDevice;
   workspaces: DelegationWorkspace[];
 };
+
+// ── No Devices Setup Guide ──────────────────────────────────────────────────
+
+export function DeviceSetupGuide({ compact }: { compact?: boolean } = {}) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyCommand = (cmd: string) => {
+    void navigator.clipboard.writeText(cmd);
+    setCopied(cmd);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const steps = [
+    { label: 'Install the CLI', cmd: 'npm install -g @rehpic/vcli' },
+    { label: 'Log in', cmd: 'vcli auth login' },
+    { label: 'Start the bridge', cmd: 'vcli start' },
+  ];
+
+  return (
+    <div className={compact ? 'p-3' : 'p-4'}>
+      <div className='mb-3'>
+        <div className='text-sm font-medium'>Connect a device</div>
+        <p className='text-muted-foreground mt-1 text-xs leading-relaxed'>
+          Install the Vector CLI on the machine where you want to run work
+          sessions. The bridge connects your device to Vector so you can launch
+          agents and shells remotely.
+        </p>
+      </div>
+      <div className='space-y-2'>
+        {steps.map((step, i) => (
+          <div key={step.cmd}>
+            <div className='text-muted-foreground mb-1 text-[11px] font-medium'>
+              {i + 1}. {step.label}
+            </div>
+            <button
+              type='button'
+              onClick={() => copyCommand(step.cmd)}
+              className='bg-muted/50 hover:bg-muted group flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left font-mono text-xs transition-colors'
+            >
+              <span className='text-foreground flex-1'>{step.cmd}</span>
+              <Copy
+                className={cn(
+                  'size-3 shrink-0 transition-colors',
+                  copied === step.cmd
+                    ? 'text-green-500'
+                    : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+                )}
+              />
+            </button>
+          </div>
+        ))}
+      </div>
+      {!compact && (
+        <p className='text-muted-foreground mt-3 text-[11px]'>
+          Once the bridge is running, your device will appear here
+          automatically.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function NoDevicesGuide() {
+  return <DeviceSetupGuide compact />;
+}
 
 // ── Section Header ──────────────────────────────────────────────────────────
 
@@ -144,82 +210,87 @@ export function AttachProcessPopover({
         )}
       </PopoverTrigger>
       <PopoverContent className='w-80 p-0' align='end'>
-        <Command>
-          <CommandInput placeholder='Search processes...' />
-          <CommandList>
-            <CommandEmpty>
-              {devicesWithProcesses === undefined ? (
-                <div className='space-y-2 p-2'>
-                  <Skeleton className='h-8 w-full' />
-                  <Skeleton className='h-8 w-full' />
-                </div>
-              ) : (
-                <span className='text-muted-foreground text-sm'>
-                  No attachable sessions found
-                </span>
-              )}
-            </CommandEmpty>
-            {devicesWithProcesses?.map(({ device, processes }) => (
-              <CommandGroup
-                key={device._id}
-                heading={
-                  <div className='flex items-center gap-1.5'>
-                    <Monitor className='size-3' />
-                    <span>{device.displayName}</span>
-                    <span className='text-muted-foreground/60 text-[10px]'>
-                      {device.platform}
-                    </span>
+        {devicesWithProcesses !== undefined &&
+        devicesWithProcesses.length === 0 ? (
+          <NoDevicesGuide />
+        ) : (
+          <Command>
+            <CommandInput placeholder='Search processes...' />
+            <CommandList>
+              <CommandEmpty>
+                {devicesWithProcesses === undefined ? (
+                  <div className='space-y-2 p-2'>
+                    <Skeleton className='h-8 w-full' />
+                    <Skeleton className='h-8 w-full' />
                   </div>
-                }
-              >
-                {processes.map(process => (
-                  <CommandItem
-                    key={process._id}
-                    value={[
-                      process.providerLabel ?? '',
-                      process.title ?? '',
-                      process.cwd ?? '',
-                      process.repoRoot ?? '',
-                      process.branch ?? '',
-                      process.mode,
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    onSelect={() =>
-                      handleAttach(
-                        device._id,
-                        process._id,
-                        process.provider,
-                        process.title ?? process.cwd,
-                      )
-                    }
-                    className='gap-2'
-                  >
-                    <ProviderIcon provider={process.provider} />
-                    <div className='min-w-0 flex-1'>
-                      <div className='truncate text-sm font-medium'>
-                        {process.title?.trim() ||
-                          process.cwd?.split('/').pop() ||
-                          process.providerLabel}
-                      </div>
-                      <div className='text-muted-foreground truncate text-xs'>
-                        {process.providerLabel}
-                        {(process.cwd || process.branch) && ' · '}
-                        {process.cwd ?? process.repoRoot ?? 'Unknown'}
-                        {process.branch && (
-                          <span className='ml-1 font-mono'>
-                            ({process.branch})
-                          </span>
-                        )}
-                      </div>
+                ) : (
+                  <span className='text-muted-foreground text-sm'>
+                    No attachable sessions found
+                  </span>
+                )}
+              </CommandEmpty>
+              {devicesWithProcesses?.map(({ device, processes }) => (
+                <CommandGroup
+                  key={device._id}
+                  heading={
+                    <div className='flex items-center gap-1.5'>
+                      <Monitor className='size-3' />
+                      <span>{device.displayName}</span>
+                      <span className='text-muted-foreground/60 text-[10px]'>
+                        {device.platform}
+                      </span>
                     </div>
-                    <ModeBadge mode={process.mode} />
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </Command>
+                  }
+                >
+                  {processes.map(process => (
+                    <CommandItem
+                      key={process._id}
+                      value={[
+                        process.providerLabel ?? '',
+                        process.title ?? '',
+                        process.cwd ?? '',
+                        process.repoRoot ?? '',
+                        process.branch ?? '',
+                        process.mode,
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      onSelect={() =>
+                        handleAttach(
+                          device._id,
+                          process._id,
+                          process.provider,
+                          process.title ?? process.cwd,
+                        )
+                      }
+                      className='gap-2'
+                    >
+                      <ProviderIcon provider={process.provider} />
+                      <div className='min-w-0 flex-1'>
+                        <div className='truncate text-sm font-medium'>
+                          {process.title?.trim() ||
+                            process.cwd?.split('/').pop() ||
+                            process.providerLabel}
+                        </div>
+                        <div className='text-muted-foreground truncate text-xs'>
+                          {process.providerLabel}
+                          {(process.cwd || process.branch) && ' · '}
+                          {process.cwd ?? process.repoRoot ?? 'Unknown'}
+                          {process.branch && (
+                            <span className='ml-1 font-mono'>
+                              ({process.branch})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <ModeBadge mode={process.mode} />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ))}
+            </CommandList>
+          </Command>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -309,7 +380,9 @@ export function DelegateRunPopover({
           )}
         </PopoverTrigger>
         <PopoverContent className='w-80 p-0' align='end'>
-          {!selectedDeviceId ? (
+          {targets !== undefined && targets.length === 0 ? (
+            <NoDevicesGuide />
+          ) : !selectedDeviceId ? (
             // Step 1: Pick device
             <Command>
               <CommandInput placeholder='Select device...' />

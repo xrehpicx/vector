@@ -3,4 +3,5 @@ export { LiveActivityCard } from './live-activity-card';
 export {
   AttachProcessPopover,
   DelegateRunPopover,
+  DeviceSetupGuide,
 } from './live-activity-section';

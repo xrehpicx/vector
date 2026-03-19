@@ -24,7 +24,16 @@ import {
   Pencil,
   Check,
   X,
+  HelpCircle,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { DeviceSetupGuide } from '@/components/live-activity';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -484,11 +493,33 @@ export default function DevicesPage() {
       <div className='mx-auto max-w-3xl space-y-6 p-4 sm:p-6'>
         {/* Bridge Devices */}
         <section>
-          <h2 className='mb-1 text-sm font-medium'>Bridge Devices</h2>
-          <p className='text-muted-foreground mb-3 text-xs'>
-            Machines running the Vector bridge service. Each device can discover
-            local agent processes and receive delegated work.
-          </p>
+          <div className='mb-3 flex items-center justify-between'>
+            <div>
+              <h2 className='mb-1 text-sm font-medium'>Bridge Devices</h2>
+              <p className='text-muted-foreground text-xs'>
+                Machines running the Vector bridge service. Each device can
+                discover local agent processes and receive delegated work.
+              </p>
+            </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='text-muted-foreground h-7 gap-1 px-2 text-xs'
+                >
+                  <HelpCircle className='size-3.5' />
+                  Setup
+                </Button>
+              </DialogTrigger>
+              <DialogContent className='sm:max-w-md'>
+                <DialogHeader>
+                  <DialogTitle>Device Setup</DialogTitle>
+                </DialogHeader>
+                <DeviceSetupGuide />
+              </DialogContent>
+            </Dialog>
+          </div>
 
           {devices === undefined ? (
             <div className='space-y-2'>
@@ -496,12 +527,8 @@ export default function DevicesPage() {
               <Skeleton className='h-16 w-full rounded-lg' />
             </div>
           ) : devices.length === 0 ? (
-            <div className='text-muted-foreground rounded-lg border px-4 py-6 text-center text-sm'>
-              No devices registered.{' '}
-              <code className='bg-muted rounded px-1 text-xs'>
-                vcli service start
-              </code>{' '}
-              to connect this machine.
+            <div className='rounded-lg border'>
+              <DeviceSetupGuide />
             </div>
           ) : (
             <div className='divide-y rounded-lg border'>
