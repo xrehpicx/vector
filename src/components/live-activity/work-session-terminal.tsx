@@ -66,6 +66,7 @@ export function WorkSessionTerminal({
   terminalLocalPort,
   workSessionId,
   isTerminal,
+  canInteract: canInteractProp,
   fullscreen,
 }: {
   snapshot: string;
@@ -74,6 +75,7 @@ export function WorkSessionTerminal({
   terminalLocalPort?: number;
   workSessionId?: Id<'workSessions'>;
   isTerminal?: boolean;
+  canInteract?: boolean;
   fullscreen?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -89,7 +91,10 @@ export function WorkSessionTerminal({
     [resolvedTheme],
   );
 
-  const canInteract = Boolean(workSessionId && !isTerminal);
+  // Only allow interaction if the session is active AND the user has controller access
+  const canInteract = Boolean(
+    workSessionId && !isTerminal && (canInteractProp ?? true),
+  );
   const setViewer = useMutation(api.agentBridge.mutations.setTerminalViewer);
 
   // Initialize xterm.js (once)
@@ -118,14 +123,16 @@ export function WorkSessionTerminal({
     fitAddon.fit();
     terminal.focus();
 
-    // Forward keystrokes to WebSocket
+    // Forward keystrokes to WebSocket (only if user has controller access)
     terminal.onData(data => {
+      if (!canInteract) return;
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(data);
       }
     });
     terminal.onBinary(data => {
+      if (!canInteract) return;
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(data);

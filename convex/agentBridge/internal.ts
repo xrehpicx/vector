@@ -71,6 +71,21 @@ export const markStaleDevices = internalMutation({
               lastEventAt: now,
               endedAt: now,
             });
+
+            // Also disconnect the linked work session
+            if (activity.workSessionId) {
+              const ws = await ctx.db.get(
+                'workSessions',
+                activity.workSessionId,
+              );
+              if (ws && !ws.endedAt) {
+                await ctx.db.patch('workSessions', activity.workSessionId, {
+                  status: 'disconnected',
+                  lastEventAt: now,
+                  endedAt: now,
+                });
+              }
+            }
           }
         }
 

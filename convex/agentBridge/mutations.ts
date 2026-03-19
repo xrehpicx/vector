@@ -1444,6 +1444,9 @@ export const setTerminalViewer = mutation({
     const workSession = await ctx.db.get('workSessions', args.workSessionId);
     if (!workSession) throw new ConvexError('WORK_SESSION_NOT_FOUND');
 
+    // Require at least viewer access to activate the terminal
+    await requireWorkSessionViewer(ctx, workSession);
+
     await ctx.db.patch('workSessions', args.workSessionId, {
       terminalViewerActive: args.active,
       ...(args.cols !== undefined && { terminalCols: args.cols }),

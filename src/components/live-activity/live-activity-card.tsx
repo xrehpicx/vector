@@ -155,6 +155,7 @@ export function LiveActivityCard({
   );
 
   const isOwner = currentUser?._id === activity.ownerUserId;
+  const canInteractSession = activity.canInteract ?? isOwner;
   const canManageSession = activity.canManageSession ?? isOwner;
   const workSession = activity.workSession;
   const workspaceLabel =
@@ -325,6 +326,7 @@ export function LiveActivityCard({
             terminalLocalPort={workSession?.terminalLocalPort}
             workSessionId={workSession?._id}
             isTerminal={isTerminal}
+            canInteract={canInteractSession}
             fullscreen={fullscreen}
           />
         </div>
