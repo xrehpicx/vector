@@ -406,15 +406,10 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
 
   private func updateStatusButton() {
     guard let button = statusItem.button else { return }
-    if transition != nil && !blinkVisible {
-      button.image = nil
-      button.title = " "
-      return
-    }
-
     button.title = ""
     button.image = brandIcon ?? fallbackStatusIcon()
     button.image?.isTemplate = false
+    button.alphaValue = transition != nil && !blinkVisible ? 0.35 : 1.0
   }
 
   private func performIssueSearch(processId: String, query: String) {
