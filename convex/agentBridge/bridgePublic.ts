@@ -671,7 +671,7 @@ export const sendTerminalSignal = mutation({
 });
 
 /** Get signaling messages from the browser for the bridge. */
-/** Update the tunnel URL and auth token for a work session's interactive terminal. */
+/** Update the tunnel URL, local port, and auth token for interactive terminal. */
 export const updateWorkSessionTerminalUrl = mutation({
   args: {
     deviceId: v.id('agentDevices'),
@@ -679,6 +679,7 @@ export const updateWorkSessionTerminalUrl = mutation({
     workSessionId: v.id('workSessions'),
     terminalUrl: v.union(v.string(), v.null()),
     terminalToken: v.optional(v.string()),
+    terminalLocalPort: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await validateDeviceSecret(ctx, args.deviceId, args.deviceSecret);
@@ -691,6 +692,7 @@ export const updateWorkSessionTerminalUrl = mutation({
     await ctx.db.patch('workSessions', args.workSessionId, {
       terminalUrl: args.terminalUrl ?? undefined,
       terminalToken: args.terminalToken ?? undefined,
+      terminalLocalPort: args.terminalLocalPort,
     });
   },
 });

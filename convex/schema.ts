@@ -1185,6 +1185,7 @@ export default defineSchema({
     terminalViewerActive: v.optional(v.boolean()),
     terminalUrl: v.optional(v.string()),
     terminalToken: v.optional(v.string()),
+    terminalLocalPort: v.optional(v.number()),
     agentProvider: v.optional(agentProviderValidator),
     agentProcessId: v.optional(v.id('agentProcesses')),
     agentSessionKey: v.optional(v.string()),

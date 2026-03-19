@@ -62,6 +62,7 @@ export interface BridgeConfig {
   displayName: string;
   convexUrl: string;
   registeredAt: string;
+  tunnelHost?: string;
 }
 
 // ── Config persistence ──────────────────────────────────────────────────────
@@ -270,6 +271,7 @@ export class BridgeService {
             this.terminalPeer.watchSession(
               activity.workSessionId,
               activity.tmuxSessionName,
+              activity.tmuxPaneId,
             );
           }
         }
@@ -430,8 +432,11 @@ export class BridgeService {
         deviceId: this.config.deviceId,
         deviceSecret: this.config.deviceSecret,
         convexUrl: this.config.convexUrl,
+        tunnelHost: this.config.tunnelHost,
       });
-      console.log(`  WebRTC:  ready`);
+      console.log(
+        `  Terminal: ready${this.config.tunnelHost ? ` (tunnel: ${this.config.tunnelHost})` : ''}`,
+      );
     } catch (e) {
       console.error(
         `  WebRTC:  failed (${e instanceof Error ? e.message : 'unknown'})`,

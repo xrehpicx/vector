@@ -322,6 +322,7 @@ export function LiveActivityCard({
             snapshot={terminalSnapshot}
             terminalUrl={workSession?.terminalUrl}
             terminalToken={workSession?.terminalToken}
+            terminalLocalPort={workSession?.terminalLocalPort}
             workSessionId={workSession?._id}
             isTerminal={isTerminal}
             fullscreen={fullscreen}

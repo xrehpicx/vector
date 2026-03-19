@@ -314,21 +314,34 @@ async function resolveAppUrl(raw: string): Promise<string> {
   }
 }
 
-async function fetchConvexUrl(appUrl: string): Promise<string> {
+async function fetchAppConfig(
+  appUrl: string,
+): Promise<{ convexUrl: string; tunnelHost?: string }> {
   try {
     const url = new URL('/api/config', appUrl).toString();
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    const data = (await response.json()) as { convexUrl?: string };
+    const data = (await response.json()) as {
+      convexUrl?: string;
+      tunnelHost?: string;
+    };
     if (data.convexUrl) {
-      return data.convexUrl;
+      return {
+        convexUrl: data.convexUrl,
+        tunnelHost: data.tunnelHost || undefined,
+      };
     }
   } catch {
     // Fall through to default
   }
-  return 'http://127.0.0.1:3210';
+  return { convexUrl: 'http://127.0.0.1:3210' };
+}
+
+async function fetchConvexUrl(appUrl: string): Promise<string> {
+  const config = await fetchAppConfig(appUrl);
+  return config.convexUrl;
 }
 
 async function getRuntime(command: Command) {
@@ -530,6 +543,12 @@ async function ensureBridgeConfig(
 
     if (!config) {
       throw new Error('Bridge device is not configured.');
+    }
+
+    // Fetch tunnel host from app config
+    const appConfig = await fetchAppConfig(runtime.appUrl);
+    if (appConfig.tunnelHost) {
+      config.tunnelHost = appConfig.tunnelHost;
     }
 
     saveBridgeConfig(config);

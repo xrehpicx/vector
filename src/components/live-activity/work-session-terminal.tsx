@@ -63,6 +63,7 @@ export function WorkSessionTerminal({
   snapshot,
   terminalUrl,
   terminalToken,
+  terminalLocalPort,
   workSessionId,
   isTerminal,
   fullscreen,
@@ -70,6 +71,7 @@ export function WorkSessionTerminal({
   snapshot: string;
   terminalUrl?: string;
   terminalToken?: string;
+  terminalLocalPort?: number;
   workSessionId?: Id<'workSessions'>;
   isTerminal?: boolean;
   fullscreen?: boolean;
@@ -186,60 +188,122 @@ export function WorkSessionTerminal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canInteract, workSessionId]);
 
-  // Connect to tunnel WebSocket when URL + token become available
+  // Connect to WebSocket — try localhost first for low latency, fall back to tunnel
   useEffect(() => {
-    if (!terminalUrl || !terminalToken || !terminalRef.current) return;
+    if (!terminalToken || !terminalRef.current) return;
+    if (!terminalUrl && !terminalLocalPort) return;
 
     const terminal = terminalRef.current;
     const fitAddon = fitAddonRef.current;
+    let currentWs: WebSocket | null = null;
 
-    const urlWithToken = `${terminalUrl}?token=${encodeURIComponent(terminalToken)}`;
-    console.log('[Terminal] Connecting to', terminalUrl);
-    const ws = new WebSocket(urlWithToken);
-    wsRef.current = ws;
+    function attachWs(ws: WebSocket): void {
+      currentWs = ws;
+      wsRef.current = ws;
 
-    ws.onopen = () => {
-      console.log('[Terminal] Connected');
-      connectedRef.current = true;
-      terminal.clear();
-      terminal.focus();
-
-      // Send initial resize
-      const dims = fitAddon?.proposeDimensions();
-      if (dims) {
-        ws.send(
-          CONTROL_PREFIX +
-            JSON.stringify({
-              type: 'resize',
-              cols: dims.cols,
-              rows: dims.rows,
-            }),
+      ws.onopen = () => {
+        console.log(
+          '[Terminal] Connected via',
+          ws.url.includes('localhost') ? 'localhost' : 'tunnel',
         );
-      }
-    };
+        connectedRef.current = true;
+        terminal.clear();
+        terminal.focus();
 
-    ws.onmessage = event => {
-      if (typeof event.data === 'string') {
-        terminal.write(event.data);
-      }
-    };
+        const dims = fitAddon?.proposeDimensions();
+        if (dims) {
+          ws.send(
+            CONTROL_PREFIX +
+              JSON.stringify({
+                type: 'resize',
+                cols: dims.cols,
+                rows: dims.rows,
+              }),
+          );
+        }
+      };
 
-    ws.onclose = () => {
-      console.log('[Terminal] Disconnected');
-      connectedRef.current = false;
-      wsRef.current = null;
-    };
+      ws.onmessage = event => {
+        if (typeof event.data === 'string') {
+          terminal.write(event.data);
+        }
+      };
 
-    ws.onerror = () => {
-      console.log('[Terminal] WebSocket error');
-    };
+      ws.onclose = () => {
+        if (wsRef.current === ws) {
+          connectedRef.current = false;
+          wsRef.current = null;
+        }
+      };
+
+      ws.onerror = () => {};
+    }
+
+    // Try localhost first (near-zero latency)
+    if (terminalLocalPort) {
+      const localUrl = `ws://localhost:${terminalLocalPort}`;
+      console.log('[Terminal] Trying localhost:', localUrl);
+      const localWs = new WebSocket(
+        `${localUrl}?token=${encodeURIComponent(terminalToken)}`,
+      );
+
+      const fallbackTimer = setTimeout(() => {
+        // If localhost didn't connect in 1s, try tunnel
+        if (localWs.readyState !== WebSocket.OPEN && terminalUrl) {
+          console.log('[Terminal] Localhost timeout, falling back to tunnel');
+          localWs.close();
+          const tunnelWs = new WebSocket(
+            `${terminalUrl}?token=${encodeURIComponent(terminalToken)}`,
+          );
+          attachWs(tunnelWs);
+        }
+      }, 1000);
+
+      localWs.onopen = () => {
+        clearTimeout(fallbackTimer);
+        attachWs(localWs);
+        // Re-trigger onopen since we just attached
+        connectedRef.current = true;
+        terminal.clear();
+        terminal.focus();
+        const dims = fitAddon?.proposeDimensions();
+        if (dims) {
+          localWs.send(
+            CONTROL_PREFIX +
+              JSON.stringify({
+                type: 'resize',
+                cols: dims.cols,
+                rows: dims.rows,
+              }),
+          );
+        }
+        console.log('[Terminal] Connected via localhost');
+      };
+
+      localWs.onerror = () => {
+        clearTimeout(fallbackTimer);
+        if (terminalUrl) {
+          console.log('[Terminal] Localhost failed, using tunnel');
+          const tunnelWs = new WebSocket(
+            `${terminalUrl}?token=${encodeURIComponent(terminalToken)}`,
+          );
+          attachWs(tunnelWs);
+        }
+      };
+    } else if (terminalUrl) {
+      // No local port available, use tunnel directly
+      const tunnelWs = new WebSocket(
+        `${terminalUrl}?token=${encodeURIComponent(terminalToken)}`,
+      );
+      attachWs(tunnelWs);
+    }
 
     return () => {
-      ws.close();
+      currentWs?.close();
       wsRef.current = null;
       connectedRef.current = false;
     };
-  }, [terminalUrl, terminalToken]);
+  }, [terminalUrl, terminalToken, terminalLocalPort]);
 
   // Render snapshot fallback when not connected via WebSocket
   useEffect(() => {
