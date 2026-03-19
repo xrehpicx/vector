@@ -4,22 +4,22 @@ import { Loader2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { Suspense, useEffect } from 'react';
+import { useQuery } from '@/lib/convex';
+import { api } from '@/convex/_generated/api';
 
 function SigningInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const userQuery = useQuery(api.users.currentUser);
 
   useEffect(() => {
-    const redirectTo = searchParams.get('redirectTo');
+    // Wait until the Convex session is established and the user record exists.
+    // Without this, the root page may see user === null and bounce to /auth/login.
+    if (userQuery.isPending || userQuery.data === null) return;
 
-    if (redirectTo) {
-      router.push(redirectTo);
-      return;
-    }
-
-    // Default: redirect to root (which resolves to org)
-    router.push('/');
-  }, [router, searchParams]);
+    const redirectTo = searchParams.get('redirectTo') || '/';
+    router.push(redirectTo);
+  }, [router, searchParams, userQuery.isPending, userQuery.data]);
 
   return (
     <div className='flex min-h-dvh flex-col items-center justify-center gap-2 text-center'>
