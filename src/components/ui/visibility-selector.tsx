@@ -148,7 +148,12 @@ export function VisibilitySelector({
     <Button
       variant='outline'
       size='sm'
-      className={cn('bg-muted/30 hover:bg-muted/50 h-8 gap-2', className)}
+      className={cn(
+        'h-8 gap-2',
+        !className?.includes('bg-transparent') &&
+          'bg-muted/30 hover:bg-muted/50',
+        className,
+      )}
       disabled={isDisabled}
     >
       {showIcon && CurrentIcon && (

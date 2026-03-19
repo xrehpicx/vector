@@ -180,7 +180,12 @@ export function ProjectSelector({
     <Button
       variant='outline'
       size='sm'
-      className={cn('bg-muted/30 hover:bg-muted/50 h-8 gap-2', className)}
+      className={cn(
+        'h-8 gap-2',
+        !className?.includes('bg-transparent') &&
+          'bg-muted/30 hover:bg-muted/50',
+        className,
+      )}
     >
       {showIcon &&
         (displayProject ? (
@@ -353,7 +358,12 @@ export function StateSelector({
     <Button
       variant='outline'
       size='sm'
-      className={cn('bg-muted/30 hover:bg-muted/50 h-8 gap-2', className)}
+      className={cn(
+        'h-8 gap-2',
+        !className?.includes('bg-transparent') &&
+          'bg-muted/30 hover:bg-muted/50',
+        className,
+      )}
     >
       {showIcon && (
         <DynamicIcon
@@ -493,7 +503,12 @@ export function PrioritySelector({
     <Button
       variant='outline'
       size='sm'
-      className={cn('bg-muted/30 hover:bg-muted/50 h-8 gap-2', className)}
+      className={cn(
+        'h-8 gap-2',
+        !className?.includes('bg-transparent') &&
+          'bg-muted/30 hover:bg-muted/50',
+        className,
+      )}
     >
       {showIcon && (
         <DynamicIcon
@@ -649,7 +664,12 @@ export function AssigneeSelector({
     <Button
       variant='outline'
       size='sm'
-      className={cn('bg-muted/30 hover:bg-muted/50 h-8 gap-2', className)}
+      className={cn(
+        'h-8 gap-2',
+        !className?.includes('bg-transparent') &&
+          'bg-muted/30 hover:bg-muted/50',
+        className,
+      )}
     >
       {showIcon && <User className='h-3 w-3' />}
       {showLabel && getDisplayText()}
@@ -774,7 +794,12 @@ export function DateSelector({
     <Button
       variant='outline'
       size='sm'
-      className={cn('bg-muted/30 hover:bg-muted/50 h-8 gap-2', className)}
+      className={cn(
+        'h-8 gap-2',
+        !className?.includes('bg-transparent') &&
+          'bg-muted/30 hover:bg-muted/50',
+        className,
+      )}
     >
       {showIcon && <Icon className='h-3 w-3' />}
       {showLabel && (selectedDate ? formatDate(selectedDate) : placeholder)}
@@ -916,7 +941,12 @@ export function TimeEstimatesSelector({
     <Button
       variant='outline'
       size='sm'
-      className={cn('bg-muted/30 hover:bg-muted/50 h-8 gap-2', className)}
+      className={cn(
+        'h-8 gap-2',
+        !className?.includes('bg-transparent') &&
+          'bg-muted/30 hover:bg-muted/50',
+        className,
+      )}
     >
       {showIcon && !hasEstimates && <Clock className='h-3 w-3' />}
       {showLabel && getDisplayContent()}
@@ -1771,7 +1801,12 @@ export function IssueSelector({
     <Button
       variant='outline'
       size='sm'
-      className={cn('bg-muted/30 hover:bg-muted/50 h-8 gap-2', className)}
+      className={cn(
+        'h-8 gap-2',
+        !className?.includes('bg-transparent') &&
+          'bg-muted/30 hover:bg-muted/50',
+        className,
+      )}
     >
       {showIcon && <ArrowUp className='h-3 w-3' />}
       {showLabel && currentName}
