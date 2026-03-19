@@ -2,11 +2,12 @@ import { execSync, spawn } from 'child_process';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { homedir, userInfo } from 'os';
 import { basename, join } from 'path';
+import type { AgentProvider } from '../../../convex/_shared/agentBridge';
 
 export type BridgeProvider = 'codex' | 'claude_code';
 
 export interface SessionProcessRecord {
-  provider: BridgeProvider;
+  provider: AgentProvider;
   providerLabel: string;
   localProcessId?: string;
   sessionKey: string;
@@ -15,6 +16,9 @@ export interface SessionProcessRecord {
   branch?: string;
   title?: string;
   model?: string;
+  tmuxSessionName?: string;
+  tmuxWindowName?: string;
+  tmuxPaneId?: string;
   mode: 'observed' | 'managed';
   status: 'observed' | 'waiting';
   supportsInboundMessages: true;
@@ -30,6 +34,7 @@ const VECTOR_BRIDGE_CLIENT_VERSION = '0.1.0';
 
 export function discoverAttachableSessions(): SessionProcessRecord[] {
   return dedupeSessions([
+    ...discoverTmuxSessions(),
     ...discoverCodexSessions(),
     ...discoverClaudeSessions(),
   ]);
@@ -446,6 +451,76 @@ function discoverClaudeSessions(): SessionProcessRecord[] {
     .sort(compareObservedSessions);
 }
 
+function discoverTmuxSessions(): SessionProcessRecord[] {
+  try {
+    const output = execSync(
+      "tmux list-panes -a -F '#{pane_id}\t#{pane_pid}\t#{session_name}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_title}'",
+      {
+        encoding: 'utf-8',
+        timeout: 3000,
+      },
+    );
+
+    return output
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .flatMap(line => {
+        const [
+          paneId,
+          panePid,
+          sessionName,
+          windowName,
+          cwd,
+          currentCommand,
+          paneTitle,
+        ] = line.split('\t');
+
+        if (!paneId || !panePid || !sessionName || !windowName || !cwd) {
+          return [];
+        }
+
+        const normalizedCommand = (currentCommand ?? '').trim().toLowerCase();
+        if (normalizedCommand === 'codex' || normalizedCommand === 'claude') {
+          return [];
+        }
+
+        const gitInfo = getGitInfo(cwd);
+        const title = summarizeTitle(
+          buildTmuxPaneTitle({
+            paneTitle,
+            sessionName,
+            windowName,
+            cwd,
+            currentCommand,
+          }),
+          cwd,
+        );
+
+        return [
+          {
+            provider: 'vector_cli' as const,
+            providerLabel: 'Tmux',
+            localProcessId: panePid,
+            sessionKey: `tmux:${paneId}`,
+            cwd,
+            ...gitInfo,
+            title,
+            tmuxSessionName: sessionName,
+            tmuxWindowName: windowName,
+            tmuxPaneId: paneId,
+            mode: 'observed' as const,
+            status: 'observed' as const,
+            supportsInboundMessages: true as const,
+          },
+        ];
+      })
+      .sort(compareObservedSessions);
+  } catch {
+    return [];
+  }
+}
+
 function getCodexSessionsDir(): string {
   return join(getRealHomeDir(), '.codex', 'sessions');
 }
@@ -838,6 +913,26 @@ function summarizeTitle(message: string | undefined, cwd?: string): string {
   }
 
   return 'Local session';
+}
+
+function buildTmuxPaneTitle(args: {
+  paneTitle?: string;
+  sessionName: string;
+  windowName: string;
+  cwd: string;
+  currentCommand?: string;
+}): string {
+  const paneTitle = cleanSessionTitleCandidate(args.paneTitle ?? '');
+  if (paneTitle) {
+    return paneTitle;
+  }
+
+  const command = asString(args.currentCommand);
+  if (command && !['zsh', 'bash', 'fish', 'sh', 'nu'].includes(command)) {
+    return `${command} in ${basename(args.cwd)}`;
+  }
+
+  return `${basename(args.cwd)} (${args.sessionName}:${args.windowName})`;
 }
 
 function truncate(value: string, maxLength: number): string {

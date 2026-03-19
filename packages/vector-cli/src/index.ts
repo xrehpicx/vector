@@ -26,7 +26,10 @@ import { printOutput } from './output';
 import {
   clearSession,
   createEmptySession,
+  listProfiles,
+  readDefaultProfile,
   readSession,
+  writeDefaultProfile,
   writeSession,
   type CliSession,
 } from './session';
@@ -96,6 +99,12 @@ type Runtime = {
   org?: string;
   profile: string;
   session: CliSession | null;
+};
+
+type ProfileSummary = {
+  name: string;
+  isDefault: boolean;
+  hasSession: boolean;
 };
 
 const ISSUE_STATE_TYPES = [
@@ -324,7 +333,7 @@ async function fetchConvexUrl(appUrl: string): Promise<string> {
 
 async function getRuntime(command: Command) {
   const options = command.optsWithGlobals<GlobalOptions>();
-  const profile = options.profile ?? 'default';
+  const profile = options.profile ?? (await readDefaultProfile());
   const session = await readSession(profile);
   const appUrlSource =
     options.appUrl ?? session?.appUrl ?? process.env.NEXT_PUBLIC_APP_URL;
@@ -822,7 +831,7 @@ program
   )
   .option('--convex-url <url>', 'Convex deployment URL')
   .option('--org <slug>', 'Organization slug override')
-  .option('--profile <name>', 'CLI profile name', 'default')
+  .option('--profile <name>', 'CLI profile name')
   .option('--json', 'Output JSON');
 
 const authCommand = program.command('auth').description('Authentication');
@@ -979,6 +988,42 @@ authCommand.command('whoami').action(async (_options, command) => {
     runtime.json,
   );
 });
+
+authCommand.command('profiles').action(async (_options, command) => {
+  const options = command.optsWithGlobals() as GlobalOptions;
+  const explicitProfile = options.profile?.trim();
+  const defaultProfile = await readDefaultProfile();
+  const profiles = await listProfiles();
+  const activeProfile = explicitProfile || defaultProfile;
+  printOutput(
+    {
+      activeProfile,
+      defaultProfile,
+      profiles,
+    },
+    Boolean(options.json),
+  );
+});
+
+authCommand
+  .command('use-profile <name>')
+  .action(async (name, _options, command) => {
+    const options = command.optsWithGlobals() as GlobalOptions;
+    const profile = name.trim();
+    if (!profile) {
+      throw new Error('Profile name is required.');
+    }
+    await writeDefaultProfile(profile);
+    const session = await readSession(profile);
+    printOutput(
+      {
+        ok: true,
+        defaultProfile: profile,
+        hasSession: session !== null,
+      },
+      Boolean(options.json),
+    );
+  });
 
 const orgCommand = program.command('org').description('Organizations');
 
@@ -3052,8 +3097,11 @@ serviceCommand
   .action(async (_options, command) => {
     const status = getBridgeStatus();
     const globalOptions = command.optsWithGlobals() as GlobalOptions;
-    const profile = globalOptions.profile ?? 'default';
+    const profile = globalOptions.profile ?? (await readDefaultProfile());
     const session = await readSession(profile);
+    const profiles: ProfileSummary[] = await listProfiles();
+    const defaultProfile = await readDefaultProfile();
+    let workspaces: unknown[] = [];
     let workSessions: unknown[] = [];
     let detectedSessions: unknown[] = [];
 
@@ -3064,6 +3112,13 @@ serviceCommand
           runtime.session,
           runtime.appUrl,
           runtime.convexUrl,
+        );
+        workspaces = await runQuery(
+          client,
+          api.agentBridge.queries.listDeviceWorkspaces,
+          {
+            deviceId: status.config.deviceId as Id<'agentDevices'>,
+          },
         );
         workSessions = await runQuery(
           client,
@@ -3084,6 +3139,7 @@ serviceCommand
         detectedSessions = currentDevice?.processes ?? [];
       }
     } catch {
+      workspaces = [];
       workSessions = [];
       detectedSessions = [];
     }
@@ -3096,11 +3152,31 @@ serviceCommand
         pid: status.pid,
         config: status.config,
         sessionInfo: buildMenuSessionInfo(session),
+        activeProfile: profile,
+        defaultProfile,
+        profiles,
+        workspaces,
         workSessions,
         detectedSessions,
       },
       Boolean(globalOptions.json),
     );
+  });
+
+serviceCommand
+  .command('set-default-workspace')
+  .description('Set the default workspace for this device')
+  .requiredOption('--workspace-id <id>')
+  .action(async (options, command) => {
+    const { client, runtime } = await getClient(command);
+    const workspaceId = await runMutation(
+      client,
+      api.agentBridge.mutations.setDefaultWorkspace,
+      {
+        workspaceId: options.workspaceId as Id<'deviceWorkspaces'>,
+      },
+    );
+    printOutput({ ok: true, workspaceId }, runtime.json);
   });
 
 serviceCommand
