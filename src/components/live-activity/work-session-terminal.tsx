@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import { useTheme } from 'next-themes';
@@ -56,7 +56,6 @@ const TERMINAL_THEME_LIGHT = {
   brightWhite: '#feffff',
 } as const;
 
-// Prefix for control messages over DataChannel (resize, etc.)
 const CONTROL_PREFIX = '\x00';
 
 export function WorkSessionTerminal({
@@ -73,7 +72,6 @@ export function WorkSessionTerminal({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const [rtcConnected, setRtcConnected] = useState(false);
@@ -88,10 +86,8 @@ export function WorkSessionTerminal({
 
   const canUseRtc = Boolean(tmuxSessionName && workSessionId && !isTerminal);
 
-  // Signaling: send offer/candidate to Convex
   const sendSignal = useMutation(api.agentBridge.mutations.sendTerminalSignal);
 
-  // Signaling: get answer/candidate from bridge
   const signals = useCachedQuery(
     api.agentBridge.queries.getTerminalSignals,
     canUseRtc && workSessionId
@@ -99,7 +95,7 @@ export function WorkSessionTerminal({
       : 'skip',
   );
 
-  // Process incoming signals from bridge (answer + ICE candidates)
+  // Process incoming signals from bridge
   useEffect(() => {
     if (!signals || !pcRef.current) return;
 
@@ -109,111 +105,31 @@ export function WorkSessionTerminal({
 
       if (signal.type === 'answer') {
         const answer = JSON.parse(signal.data);
-        pcRef.current
+        void pcRef.current
           .setRemoteDescription(new RTCSessionDescription(answer))
-          .catch(() => {
-            // ignore
-          });
+          .catch(() => {});
       } else if (signal.type === 'candidate') {
         const candidate = JSON.parse(signal.data);
-        pcRef.current
+        void pcRef.current
           .addIceCandidate(
             new RTCIceCandidate({
               candidate: candidate.candidate,
               sdpMid: candidate.sdpMid ?? '0',
             }),
           )
-          .catch(() => {
-            // ignore
-          });
+          .catch(() => {});
       }
     }
   }, [signals]);
 
-  // Set up WebRTC connection
-  const startRtc = useCallback(
-    async (terminal: Terminal, fitAddon: FitAddon) => {
-      if (!canUseRtc || !workSessionId) return;
-
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      });
-      pcRef.current = pc;
-
-      // Create DataChannel
-      const dc = pc.createDataChannel('terminal', {
-        ordered: true,
-      });
-      dcRef.current = dc;
-
-      dc.onopen = () => {
-        setRtcConnected(true);
-        terminal.write('\u001b[2J\u001b[H'); // Clear snapshot content
-
-        // Send initial resize
-        const dims = fitAddon.proposeDimensions();
-        if (dims) {
-          dc.send(
-            CONTROL_PREFIX +
-              JSON.stringify({
-                type: 'resize',
-                cols: dims.cols,
-                rows: dims.rows,
-              }),
-          );
-        }
-      };
-
-      dc.onmessage = event => {
-        if (typeof event.data === 'string') {
-          terminal.write(event.data);
-        }
-      };
-
-      dc.onclose = () => {
-        setRtcConnected(false);
-      };
-
-      // Send ICE candidates to Convex
-      pc.onicecandidate = event => {
-        if (event.candidate) {
-          void sendSignal({
-            workSessionId,
-            from: 'browser',
-            type: 'candidate',
-            data: JSON.stringify({
-              candidate: event.candidate.candidate,
-              sdpMid: event.candidate.sdpMid,
-            }),
-          });
-        }
-      };
-
-      // Create and send offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      await sendSignal({
-        workSessionId,
-        from: 'browser',
-        type: 'offer',
-        data: JSON.stringify({
-          sdp: offer.sdp,
-          type: offer.type,
-        }),
-      });
-    },
-    [canUseRtc, workSessionId, sendSignal],
-  );
-
-  // Initialize xterm.js
+  // Initialize xterm.js (only once, stable deps)
   useEffect(() => {
     const container = containerRef.current;
     if (!container || terminalRef.current) return;
 
     const terminal = new Terminal({
       allowTransparency: false,
-      convertEol: !canUseRtc,
+      convertEol: false,
       cursorBlink: true,
       cursorStyle: 'block',
       disableStdin: false,
@@ -230,9 +146,18 @@ export function WorkSessionTerminal({
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     fitAddon.fit();
+    terminal.focus();
 
-    // Forward keystrokes to DataChannel
+    // Forward ALL keystrokes to DataChannel
     terminal.onData(data => {
+      const dc = dcRef.current;
+      if (dc && dc.readyState === 'open') {
+        dc.send(data);
+      }
+    });
+
+    // Also forward binary data (special keys)
+    terminal.onBinary(data => {
       const dc = dcRef.current;
       if (dc && dc.readyState === 'open') {
         dc.send(data);
@@ -258,33 +183,112 @@ export function WorkSessionTerminal({
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-    resizeObserverRef.current = resizeObserver;
-
-    // Start WebRTC
-    void startRtc(terminal, fitAddon);
 
     return () => {
-      // Close WebRTC
-      dcRef.current?.close();
-      pcRef.current?.close();
-      dcRef.current = null;
-      pcRef.current = null;
-      setRtcConnected(false);
-
       resizeObserver.disconnect();
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
-      resizeObserverRef.current = null;
     };
-  }, [terminalTheme, canUseRtc, startRtc]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Update theme
+  // Update theme without recreating terminal
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
     terminal.options.theme = terminalTheme;
   }, [terminalTheme]);
+
+  // WebRTC connection — separate from terminal lifecycle
+  useEffect(() => {
+    if (!canUseRtc || !workSessionId || !tmuxSessionName) return;
+
+    const terminal = terminalRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!terminal || !fitAddon) return;
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+    pcRef.current = pc;
+
+    const dc = pc.createDataChannel('terminal', { ordered: true });
+    dcRef.current = dc;
+
+    dc.binaryType = 'arraybuffer';
+
+    dc.onopen = () => {
+      setRtcConnected(true);
+      terminal.clear();
+      terminal.focus();
+
+      // Send initial resize so PTY matches browser dimensions
+      const dims = fitAddon.proposeDimensions();
+      if (dims) {
+        dc.send(
+          CONTROL_PREFIX +
+            JSON.stringify({
+              type: 'resize',
+              cols: dims.cols,
+              rows: dims.rows,
+            }),
+        );
+      }
+    };
+
+    dc.onmessage = event => {
+      terminal.write(
+        typeof event.data === 'string'
+          ? event.data
+          : new Uint8Array(event.data),
+      );
+    };
+
+    dc.onclose = () => {
+      setRtcConnected(false);
+      dcRef.current = null;
+    };
+
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        void sendSignal({
+          workSessionId,
+          from: 'browser',
+          type: 'candidate',
+          data: JSON.stringify({
+            candidate: event.candidate.candidate,
+            sdpMid: event.candidate.sdpMid,
+          }),
+        });
+      }
+    };
+
+    // Create and send offer
+    void (async () => {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      await sendSignal({
+        workSessionId,
+        from: 'browser',
+        type: 'offer',
+        data: JSON.stringify({
+          sdp: offer.sdp,
+          type: offer.type,
+        }),
+      });
+    })();
+
+    return () => {
+      dc.close();
+      pc.close();
+      dcRef.current = null;
+      pcRef.current = null;
+      setRtcConnected(false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseRtc, workSessionId, tmuxSessionName]);
 
   // Render snapshots only when NOT connected via WebRTC
   useEffect(() => {
@@ -294,19 +298,21 @@ export function WorkSessionTerminal({
 
     terminal.write('\u001b[2J\u001b[H');
     if (snapshot.trim()) {
+      // For snapshot mode, manually convert line endings
       terminal.write(snapshot.replace(/\r?\n/g, '\r\n'));
     }
     fitAddonRef.current?.fit();
   }, [snapshot, rtcConnected]);
 
   return (
-    <div className='overflow-hidden rounded-md'>
+    <div
+      className='overflow-hidden rounded-md'
+      onClick={() => terminalRef.current?.focus()}
+    >
       <div
         ref={containerRef}
         className='vector-terminal h-[350px] w-full'
-        style={{
-          backgroundColor: terminalTheme.background,
-        }}
+        style={{ backgroundColor: terminalTheme.background }}
       />
     </div>
   );
