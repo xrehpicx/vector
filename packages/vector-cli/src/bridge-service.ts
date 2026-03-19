@@ -674,9 +674,6 @@ export class BridgeService {
     const prompt = buildLaunchPrompt(issueKey, issueTitle, workspacePath);
     const launchLabel = provider ? providerLabel(provider) : 'shell session';
     const workSessionTitle = `${issueKey}: ${issueTitle}`;
-    const sessionsBeforeLaunch = provider
-      ? listObservedSessionsForWorkspace(provider, workspacePath)
-      : [];
 
     await this.updateLiveActivity(cmd.liveActivityId, {
       status: 'active',
@@ -685,12 +682,9 @@ export class BridgeService {
       launchStatus: 'launching',
       title: workSessionTitle,
     });
-    await this.postAgentMessage(
-      cmd.liveActivityId,
-      'status',
-      `Launching ${launchLabel} in ${workspacePath}`,
-    );
 
+    // All session types (shell, codex, claude) are the same:
+    // create a tmux session, type the command in, done.
     const tmuxSession = createTmuxWorkSession({
       workspacePath,
       issueKey,
@@ -698,14 +692,6 @@ export class BridgeService {
       provider,
       prompt,
     });
-    const attachedSession = provider
-      ? await this.attachObservedAgentSession(
-          provider,
-          workspacePath,
-          sessionsBeforeLaunch,
-          tmuxSession.paneProcessId,
-        )
-      : null;
 
     await this.refreshWorkSessionTerminal(cmd.workSession?._id, {
       tmuxSessionName: tmuxSession.sessionName,
@@ -715,31 +701,13 @@ export class BridgeService {
       repoRoot: workspacePath,
       branch: currentGitBranch(workspacePath),
       agentProvider: provider,
-      agentSessionKey: attachedSession?.process.sessionKey,
     });
-
-    if (provider && !attachedSession) {
-      await this.postAgentMessage(
-        cmd.liveActivityId,
-        'status',
-        `Started tmux session ${tmuxSession.sessionName}:${tmuxSession.windowName}. Waiting to verify ${providerLabel(provider)} in ${tmuxSession.paneId}.`,
-      );
-      await this.updateLiveActivity(cmd.liveActivityId, {
-        status: 'active',
-        latestSummary: `Running in ${tmuxSession.sessionName}:${tmuxSession.windowName}; waiting to verify ${providerLabel(provider)}`,
-        delegatedRunId: payload?.delegatedRunId,
-        launchStatus: 'running',
-        title: `${providerLabel(provider)} on ${this.config.displayName}`,
-      });
-      return;
-    }
 
     await this.updateLiveActivity(cmd.liveActivityId, {
       status: 'active',
-      latestSummary: `Running in ${tmuxSession.sessionName}:${tmuxSession.windowName}`,
+      latestSummary: `Running ${launchLabel} in ${tmuxSession.sessionName}`,
       delegatedRunId: payload?.delegatedRunId,
       launchStatus: 'running',
-      processId: attachedSession?.processId,
       title: workSessionTitle,
     });
   }

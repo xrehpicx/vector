@@ -110,7 +110,7 @@ export function WorkSessionTerminal({
       disableStdin: false,
       drawBoldTextInBrightColors: true,
       fontFamily:
-        '"SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        '"SF Mono", SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", "Symbols Nerd Font Mono", monospace',
       fontSize: 13,
       lineHeight: 1.2,
       scrollback: 5000,
