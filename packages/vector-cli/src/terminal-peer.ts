@@ -12,6 +12,28 @@ import { api } from '../../../convex/_generated/api';
 import type { Id } from '../../../convex/_generated/dataModel';
 import { PeerConnection, type DataChannel } from 'node-datachannel';
 import * as pty from 'node-pty';
+import { execFileSync } from 'child_process';
+
+function findTmuxPath(): string {
+  try {
+    return execFileSync('which', ['tmux'], { encoding: 'utf-8' }).trim();
+  } catch {
+    // Common paths on macOS/Linux
+    for (const p of [
+      '/opt/homebrew/bin/tmux',
+      '/usr/local/bin/tmux',
+      '/usr/bin/tmux',
+    ]) {
+      try {
+        execFileSync(p, ['--version'], { encoding: 'utf-8' });
+        return p;
+      } catch {
+        continue;
+      }
+    }
+    return 'tmux'; // fallback
+  }
+}
 
 interface TerminalPeerConfig {
   deviceId: string;
@@ -177,8 +199,9 @@ export class TerminalPeerManager {
       console.log(`[${ts()}] DataChannel open for ${tmuxSessionName}`);
 
       try {
+        const tmuxBin = findTmuxPath();
         const ptyProcess = pty.spawn(
-          'tmux',
+          tmuxBin,
           ['attach-session', '-t', tmuxSessionName],
           {
             name: 'xterm-256color',
@@ -188,6 +211,9 @@ export class TerminalPeerManager {
             env: {
               ...process.env,
               TERM: 'xterm-256color',
+              PATH: ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH]
+                .filter(Boolean)
+                .join(':'),
             },
           },
         );
