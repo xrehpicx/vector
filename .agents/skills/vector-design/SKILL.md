@@ -220,6 +220,16 @@ When building any conversational or transcript UI (live activity, agent chat, me
 
 Reference: `src/components/comments/comments-section.tsx` for the card and reply structure. Reference: `src/components/activity/activity-feed-list.tsx` for activity row density.
 
+### 9. Every mutation-triggering button must show a loading state
+
+Any button or control that calls a mutation (Convex or otherwise) must:
+
+- Track an `isPending` / loading boolean (e.g. `useState(false)`, set `true` before `await`, `false` in `finally`)
+- Pass `disabled={isPending}` to the button **and** any related inputs
+- Swap the button icon/label to `<BarsSpinner />` while pending
+
+This applies to inline confirm buttons, form submits, destructive action buttons — anything that awaits a mutation. The user must always see that something is happening. Never fire-and-forget a mutation from a button with no visual feedback.
+
 ## Anti-Patterns
 
 - Do not wrap dense operational content in unnecessary Cards
@@ -233,6 +243,7 @@ Reference: `src/components/comments/comments-section.tsx` for the card and reply
 - Do not use `GradientWaveText` as a decorative replacement for ordinary labels or body copy
 - Do not create a brand-new row layout if an issues/member/project row already solves it
 - Do not use `DropdownMenu` for action menus — use `Popover + Command` (combobox) instead so menus stay searchable and consistent
+- Do not leave mutation-calling buttons without a loading/disabled state — every `await mutation()` needs visual feedback
 
 ## Ship Checklist
 
@@ -245,3 +256,4 @@ Before considering a Vector UI change done, check:
 - Does the trigger and menu use the same icon, label, and checkmark semantics as existing selectors?
 - If this mutates one field, does it use the optimistic selector pattern?
 - If this is a row or list, does it animate add/remove/reorder with the same brief motion language?
+- Do all mutation-triggering buttons show a loading state and disable while pending?

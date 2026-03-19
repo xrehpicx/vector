@@ -192,6 +192,10 @@ export const generateCommentResponse = internalAction({
         internal.ai.internal.getCurrentUserContextSummary,
         { orgSlug: args.orgSlug, userId: args.userId },
       );
+      const currentUserDeviceContextSummary = await ctx.runQuery(
+        internal.ai.internal.getCurrentUserDeviceContextSummary,
+        { orgSlug: args.orgSlug, userId: args.userId },
+      );
 
       const pageContext = {
         kind: 'issue_detail' as const,
@@ -214,7 +218,11 @@ export const generateCommentResponse = internalAction({
         { threadId, userId: args.userId },
         {
           promptMessageId: saved.messageId,
-          system: [currentUserContextSummary, systemPrompt].join('\n'),
+          system: [
+            currentUserContextSummary,
+            currentUserDeviceContextSummary,
+            systemPrompt,
+          ].join('\n'),
         },
       );
 

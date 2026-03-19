@@ -8,6 +8,7 @@ import {
   addProjectMember,
   addTeamMember,
   assignIssue,
+  attachIssueToObservedDeviceSession,
   changeProjectLead,
   changeTeamLead,
   createDocument,
@@ -25,6 +26,7 @@ import {
   listDocuments,
   listFolders,
   listIssues,
+  listMyDeviceSessionOptions,
   listOrgInvites,
   listOrgMembers,
   listProjects,
@@ -46,6 +48,7 @@ import {
   showIssues,
   showProjects,
   showTeams,
+  startIssueDeviceWorkSession,
   unassignIssue,
   updateDocument,
   updateFolder,
@@ -107,6 +110,14 @@ Client actions:
 - Show toast notifications
 - Use performClientAction after creating/updating entities to guide users to the result
 
+Device work sessions:
+- You can create or attach tmux-backed issue work sessions on the authenticated user's own bridge devices only.
+- A new work session can launch Codex, Claude, or a manual shell session on the user's device.
+- When the user says things like "take care of this issue on my computer", prefer starting a new Codex work session on their single online device and default delegated workspace when that choice is clear.
+- When the user says to reuse, continue, or attach existing work, inspect their device session options and attach the matching observed tmux, Codex, or Claude session.
+- Only ask a follow-up question if there is no online device, no eligible workspace, or multiple plausible device/session choices.
+- Never target another member's device. These tools are only for the current authenticated user's own devices.
+
 Operating rules:
 - Default to the current page context when the user omits identifiers.
 - Use listWorkspaceReferenceData to look up valid team keys, project keys, member names, priority names, and state names before creating or updating — never invent identifiers.
@@ -167,6 +178,9 @@ export const assistantAgent: Agent<any, any> = new Agent(components.agent, {
     // Issue delegation
     assignIssue,
     unassignIssue,
+    listMyDeviceSessionOptions,
+    startIssueDeviceWorkSession,
+    attachIssueToObservedDeviceSession,
     linkGitHubArtifactToIssue,
     // Document folder management
     createFolder,

@@ -79,6 +79,52 @@ struct SessionInfo: Decodable {
   let userId: String?
 }
 
+struct ProfileSummary: Decodable, Identifiable {
+  let name: String
+  let isDefault: Bool
+  let hasSession: Bool
+
+  var id: String { name }
+}
+
+struct DeviceWorkspaceSummary: Decodable, Identifiable {
+  let _id: String
+  let label: String
+  let path: String
+  let repoName: String?
+  let defaultBranch: String?
+  let isDefault: Bool
+  let launchPolicy: String
+
+  var id: String { _id }
+
+  var displayLabel: String {
+    let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !trimmed.isEmpty {
+      return trimmed
+    }
+    return workspaceName
+  }
+
+  var workspaceName: String {
+    if let repoName, !repoName.isEmpty {
+      return repoName
+    }
+    return URL(fileURLWithPath: path).lastPathComponent
+  }
+
+  var policyLabel: String {
+    switch launchPolicy {
+    case "allow_delegated":
+      return "Delegated"
+    case "manual_only":
+      return "Manual"
+    default:
+      return launchPolicy.replacingOccurrences(of: "_", with: " ")
+    }
+  }
+}
+
 struct AttachableProcess: Decodable, Identifiable {
   let _id: String
   let provider: String
@@ -147,6 +193,10 @@ struct MenuStateSnapshot: Decodable {
   let pid: Int32?
   let config: BridgeConfig?
   let sessionInfo: SessionInfo
+  let activeProfile: String
+  let defaultProfile: String
+  let profiles: [ProfileSummary]
+  let workspaces: [DeviceWorkspaceSummary]
   let workSessions: [WorkSessionSummary]
   let detectedSessions: [AttachableProcess]
 
@@ -163,6 +213,10 @@ struct MenuStateSnapshot: Decodable {
       email: nil,
       userId: nil
     ),
+    activeProfile: "default",
+    defaultProfile: "default",
+    profiles: [],
+    workspaces: [],
     workSessions: [],
     detectedSessions: []
   )
@@ -206,6 +260,8 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
   @Published private(set) var issueResults: [String: [IssueSearchResult]] = [:]
   @Published private(set) var searchingProcessIds: Set<String> = []
   @Published private(set) var attachingProcessIds: Set<String> = []
+  @Published private(set) var selectingWorkspaceId: String?
+  @Published private(set) var selectingProfileName: String?
 
   init(configDir: URL, cliCommand: String, cliArgs: [String]) {
     self.configDir = configDir
@@ -239,19 +295,23 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
   }
 
   func statusTitle() -> String {
+    "Vector"
+  }
+
+  func statusBadgeLabel() -> String {
     if let transition {
-      return "Vector Bridge — \(transition.label)"
+      return transition.label.replacingOccurrences(of: "...", with: "")
     }
-    if snapshot.running, let pid = snapshot.pid {
-      return "Vector Bridge — Running (PID \(pid))"
+    if snapshot.running {
+      return "Running"
     }
     if snapshot.starting {
-      return "Vector Bridge — Starting..."
+      return "Starting"
     }
     if snapshot.configured {
-      return "Vector Bridge — Offline"
+      return "Offline"
     }
-    return "Vector Bridge — Not Configured"
+    return "Not configured"
   }
 
   func metadataLine() -> String {
@@ -261,6 +321,10 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
     return buildMetadataLine(
       config: config,
       sessionInfo: snapshot.sessionInfo,
+      activeProfile: snapshot.activeProfile,
+      defaultProfile: snapshot.defaultProfile,
+      profiles: snapshot.profiles,
+      workspaces: snapshot.workspaces,
       workSessions: snapshot.workSessions
     )
   }
@@ -278,6 +342,14 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
 
   func isAttaching(processId: String) -> Bool {
     attachingProcessIds.contains(processId)
+  }
+
+  func isSelecting(workspaceId: String) -> Bool {
+    selectingWorkspaceId == workspaceId
+  }
+
+  func isSelecting(profileName: String) -> Bool {
+    selectingProfileName == profileName
   }
 
   func results(for processId: String) -> [IssueSearchResult] {
@@ -303,6 +375,45 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
       return
     }
     NSWorkspace.shared.open(url)
+  }
+
+  func selectWorkspace(_ workspace: DeviceWorkspaceSummary) {
+    selectingWorkspaceId = workspace.id
+    runCLI(
+      arguments: [
+        "--json",
+        "service",
+        "set-default-workspace",
+        "--workspace-id",
+        workspace._id,
+      ]
+    ) { [weak self] success, _ in
+      guard let self else { return }
+      if !success {
+        self.log("failed to set default workspace: \(workspace._id)")
+      }
+      self.selectingWorkspaceId = nil
+      self.refreshState()
+    }
+  }
+
+  func selectProfile(_ profile: ProfileSummary) {
+    selectingProfileName = profile.name
+    runCLI(
+      arguments: [
+        "--json",
+        "auth",
+        "use-profile",
+        profile.name,
+      ]
+    ) { [weak self] success, _ in
+      guard let self else { return }
+      if !success {
+        self.log("failed to switch default profile: \(profile.name)")
+      }
+      self.selectingProfileName = nil
+      self.refreshState()
+    }
   }
 
   func startBridge() {
@@ -597,19 +708,119 @@ struct TrayPopoverView: View {
   @State private var expandedProcessIds: Set<String> = []
   @State private var workSessionFilter: WorkSessionFilter = .all
 
+  private var sortedProfiles: [ProfileSummary] {
+    controller.snapshot.profiles.sorted { lhs, rhs in
+      if lhs.isDefault != rhs.isDefault {
+        return lhs.isDefault && !rhs.isDefault
+      }
+      if lhs.hasSession != rhs.hasSession {
+        return lhs.hasSession && !rhs.hasSession
+      }
+      return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+  }
+
+  private var sortedWorkspaces: [DeviceWorkspaceSummary] {
+    controller.snapshot.workspaces.sorted { lhs, rhs in
+      if lhs.isDefault != rhs.isDefault {
+        return lhs.isDefault && !rhs.isDefault
+      }
+      return lhs.displayLabel.localizedCaseInsensitiveCompare(rhs.displayLabel) == .orderedAscending
+    }
+  }
+
   private var filteredWorkSessions: [WorkSessionSummary] {
     controller.snapshot.workSessions.filter { workSessionFilter.matches($0) }
   }
 
+  private var currentProfile: ProfileSummary? {
+    sortedProfiles.first(where: \.isDefault) ??
+      sortedProfiles.first(where: { $0.name == controller.snapshot.activeProfile }) ??
+      sortedProfiles.first
+  }
+
+  private var currentWorkspace: DeviceWorkspaceSummary? {
+    sortedWorkspaces.first(where: \.isDefault) ?? sortedWorkspaces.first
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(controller.statusTitle())
-          .font(.system(size: 15, weight: .semibold))
-        Text(controller.metadataLine())
-          .font(.system(size: 11, weight: .medium))
-          .foregroundStyle(.secondary)
-          .lineLimit(2)
+      VStack(alignment: .leading, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+          Text(controller.statusTitle())
+            .font(.system(size: 13, weight: .semibold))
+          Text(controller.metadataLine())
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+          Spacer(minLength: 0)
+          StatusChip(text: controller.statusBadgeLabel())
+        }
+
+        HStack(spacing: 8) {
+          Menu {
+            if sortedProfiles.isEmpty {
+              Text("No CLI profiles found")
+            } else {
+              ForEach(sortedProfiles) { profile in
+                Button {
+                  controller.selectProfile(profile)
+                } label: {
+                  Label {
+                    Text(profile.name)
+                  } icon: {
+                    Image(
+                      systemName:
+                        profile.isDefault ? "checkmark.circle.fill" : "circle"
+                    )
+                  }
+                }
+                .disabled(profile.isDefault || controller.isSelecting(profileName: profile.name))
+              }
+            }
+          } label: {
+            CompactSelectorChip(
+              title: "Profile",
+              value: currentProfile?.name ?? "None",
+              detail: currentProfile?.hasSession == true ? "Signed in" : "No session"
+            )
+          }
+          .menuStyle(.borderlessButton)
+
+          Menu {
+            if sortedWorkspaces.isEmpty {
+              Text("No workspaces configured")
+            } else {
+              ForEach(sortedWorkspaces) { workspace in
+                Button {
+                  controller.selectWorkspace(workspace)
+                } label: {
+                  Label {
+                    VStack(alignment: .leading, spacing: 1) {
+                      Text(workspace.displayLabel)
+                      Text(workspace.path)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    }
+                  } icon: {
+                    Image(
+                      systemName:
+                        workspace.isDefault ? "checkmark.circle.fill" : "circle"
+                    )
+                  }
+                }
+                .disabled(workspace.isDefault || controller.isSelecting(workspaceId: workspace.id))
+              }
+            }
+          } label: {
+            CompactSelectorChip(
+              title: "Workspace",
+              value: currentWorkspace?.displayLabel ?? "None",
+              detail: currentWorkspace?.policyLabel ?? "Configure"
+            )
+          }
+          .menuStyle(.borderlessButton)
+        }
       }
 
       Divider()
@@ -811,6 +1022,41 @@ struct TrayPopoverView: View {
   }
 }
 
+struct CompactSelectorChip: View {
+  let title: String
+  let value: String
+  let detail: String
+
+  var body: some View {
+    HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: 1) {
+        Text(title)
+          .font(.system(size: 9, weight: .semibold))
+          .foregroundStyle(.tertiary)
+        Text(value)
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundStyle(.primary)
+          .lineLimit(1)
+        Text(detail)
+          .font(.system(size: 10, weight: .medium))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+      Spacer(minLength: 0)
+      Image(systemName: "chevron.down")
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(.tertiary)
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 7)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 11, style: .continuous)
+        .fill(Color.white.opacity(0.05))
+    )
+  }
+}
+
 struct SectionLabel: View {
   let title: String
   let count: Int
@@ -854,6 +1100,166 @@ struct StatusChip: View {
       .padding(.horizontal, 10)
       .padding(.vertical, 6)
       .background(Capsule().fill(Color(NSColor.selectedControlColor).opacity(0.12)))
+  }
+}
+
+struct WorkspaceRow: View {
+  let workspace: DeviceWorkspaceSummary
+  let isSelecting: Bool
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      ZStack {
+        Circle()
+          .fill(workspace.isDefault ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.1))
+          .frame(width: 18, height: 18)
+        if workspace.isDefault {
+          Image(systemName: "checkmark")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Color.accentColor)
+        } else {
+          Circle()
+            .fill(Color.secondary.opacity(0.8))
+            .frame(width: 6, height: 6)
+        }
+      }
+      .padding(.top, 2)
+
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: 8) {
+          Text(workspace.displayLabel)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+          Spacer(minLength: 0)
+          HStack(spacing: 6) {
+            Text(workspace.policyLabel)
+              .font(.system(size: 10, weight: .semibold))
+              .foregroundStyle(.secondary)
+              .padding(.horizontal, 7)
+              .padding(.vertical, 4)
+              .background(
+                Capsule(style: .continuous)
+                  .fill(Color.white.opacity(0.055))
+              )
+            if workspace.isDefault {
+              Text("Default")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                  Capsule(style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+                )
+            } else if isSelecting {
+              Text("Selecting…")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+            }
+          }
+        }
+
+        Text(workspace.defaultBranch.map { "\(workspace.workspaceName) · \($0)" } ?? workspace.workspaceName)
+          .font(.system(size: 11))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+
+        Text(workspace.path)
+          .font(.system(size: 10, weight: .medium, design: .monospaced))
+          .foregroundStyle(.tertiary)
+          .lineLimit(1)
+      }
+
+      if !workspace.isDefault {
+        Image(systemName: "chevron.right")
+          .font(.system(size: 10, weight: .semibold))
+          .foregroundStyle(.tertiary)
+          .padding(.top, 4)
+      }
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(SessionCardBackground(isExpanded: workspace.isDefault || isSelecting))
+  }
+}
+
+struct ProfileRow: View {
+  let profile: ProfileSummary
+  let isActive: Bool
+  let isSelecting: Bool
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      ZStack {
+        Circle()
+          .fill(profile.isDefault ? Color.accentColor.opacity(0.22) : Color.white.opacity(0.1))
+          .frame(width: 18, height: 18)
+        if profile.isDefault {
+          Image(systemName: "checkmark")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Color.accentColor)
+        } else {
+          Circle()
+            .fill(Color.secondary.opacity(0.8))
+            .frame(width: 6, height: 6)
+        }
+      }
+      .padding(.top, 2)
+
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: 8) {
+          Text(profile.name)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+          Spacer(minLength: 0)
+          HStack(spacing: 6) {
+            if isActive {
+              Text("Active")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                  Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                )
+            }
+            if profile.isDefault {
+              Text("Default")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                  Capsule(style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+                )
+            } else if isSelecting {
+              Text("Switching…")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+            }
+          }
+        }
+
+        Text(profile.hasSession ? "Signed in profile" : "No saved session yet")
+          .font(.system(size: 11))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+
+      if !profile.isDefault {
+        Image(systemName: "chevron.right")
+          .font(.system(size: 10, weight: .semibold))
+          .foregroundStyle(.tertiary)
+          .padding(.top, 4)
+      }
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(SessionCardBackground(isExpanded: profile.isDefault || isSelecting))
   }
 }
 
@@ -1098,12 +1504,25 @@ func workSessionMeta(_ workSession: WorkSessionSummary) -> String {
 func buildMetadataLine(
   config: BridgeConfig,
   sessionInfo: SessionInfo,
+  activeProfile: String,
+  defaultProfile: String,
+  profiles: [ProfileSummary],
+  workspaces: [DeviceWorkspaceSummary],
   workSessions: [WorkSessionSummary]
 ) -> String {
   let userLabel = sessionInfo.email?.split(separator: "@").first.map(String.init)
-  let workspaceLabel = summarizeWorkspace(workSessions)
+  let profileLabel: String? = {
+    guard profiles.count > 1 || activeProfile != "default" || defaultProfile != "default" else {
+      return nil
+    }
+    if activeProfile == defaultProfile {
+      return activeProfile
+    }
+    return "\(activeProfile) → \(defaultProfile)"
+  }()
+  let workspaceLabel = summarizeWorkspace(workspaces: workspaces, workSessions: workSessions)
   let orgLabel = sessionInfo.appDomain.map { "\(sessionInfo.orgSlug) @ \($0)" } ?? sessionInfo.orgSlug
-  return [userLabel, config.displayName, workspaceLabel, orgLabel]
+  return [userLabel, profileLabel, config.displayName, workspaceLabel, orgLabel]
     .compactMap { value in
       guard let value, !value.isEmpty else { return nil }
       return value
@@ -1111,7 +1530,14 @@ func buildMetadataLine(
     .joined(separator: " | ")
 }
 
-func summarizeWorkspace(_ workSessions: [WorkSessionSummary]) -> String? {
+func summarizeWorkspace(
+  workspaces: [DeviceWorkspaceSummary],
+  workSessions: [WorkSessionSummary]
+) -> String? {
+  if let current = workspaces.first(where: \.isDefault) {
+    return current.displayLabel
+  }
+
   let workspaces = Array(Set<String>(workSessions.compactMap { workSession in
     let path = workSession.repoRoot ?? workSession.cwd ?? workSession.workspacePath
     guard let path else { return nil }

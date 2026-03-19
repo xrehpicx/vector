@@ -43,3 +43,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# vector-cli local dev data (keep the directory, ignore contents)
+.vector-dev/*
+!.vector-dev/.gitkeep

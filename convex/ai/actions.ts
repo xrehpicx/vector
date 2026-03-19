@@ -10,9 +10,11 @@ import { assertAssistantModelConfigured } from './provider';
 function buildSystemPrompt(
   pageContextSummary: string,
   currentUserContextSummary: string,
+  currentUserDeviceContextSummary: string,
 ) {
   return [
     currentUserContextSummary,
+    currentUserDeviceContextSummary,
     `The user is currently viewing: ${pageContextSummary}.`,
     'Use this as the default target whenever the user does not provide explicit identifiers.',
   ].join('\n');
@@ -126,6 +128,13 @@ export const generateResponse = internalAction({
           userId: args.userId,
         },
       );
+      const currentUserDeviceContextSummary = await ctx.runQuery(
+        internal.ai.internal.getCurrentUserDeviceContextSummary,
+        {
+          orgSlug: args.orgSlug,
+          userId: args.userId,
+        },
+      );
 
       const assistantCtx = Object.assign({}, ctx, {
         organizationId: organization._id as Id<'organizations'>,
@@ -145,6 +154,7 @@ export const generateResponse = internalAction({
           system: buildSystemPrompt(
             pageContextSummary,
             currentUserContextSummary,
+            currentUserDeviceContextSummary,
           ),
           onError(error: unknown) {
             console.error('[ai.generateResponse] stream error', error);

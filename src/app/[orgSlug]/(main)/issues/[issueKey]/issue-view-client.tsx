@@ -1178,126 +1178,141 @@ export default function IssueViewClient({
               )}
             </div>
 
-            {/* Sub-Issues */}
-            <div className='mb-6'>
-              <div className='mb-2 flex items-center justify-between'>
-                <h2 className='text-sm font-semibold'>Sub-Issues</h2>
-                <CreateIssueDialog
-                  orgSlug={params.orgSlug}
-                  defaultStates={{
-                    parentIssueId: issue._id,
-                    teamId: issue.teamId || undefined,
-                    projectId: issue.projectId || undefined,
-                  }}
-                  className='h-6 text-xs'
-                />
-              </div>
-              {issue.children && issue.children.length > 0 ? (
-                <div className='space-y-1'>
-                  {issue.children.map(child => {
-                    const childPriorityIcon = child.priority?.icon
-                      ? getDynamicIcon(child.priority.icon)
-                      : Circle;
-                    const childPriorityColor =
-                      child.priority?.color || '#94a3b8';
+            {/*
+             * ── Issue detail sections ──────────────────────────────
+             * All sections below (Sub-Issues, Development, Linked Docs,
+             * Work Sessions, Activity) must follow the same layout rhythm:
+             *
+             *   Wrapper:  `space-y-6` on this container handles inter-section gaps.
+             *   Header:   `mb-3 flex items-center justify-between`
+             *             Title: `<h2 className='text-sm font-semibold'>`.
+             *
+             * When adding a new section, copy this structure so spacing
+             * and header weight stay visually even.
+             * ───────────────────────────────────────────────────────
+             */}
+            <div className='space-y-6'>
+              {/* Sub-Issues */}
+              <div>
+                <div className='mb-3 flex items-center justify-between'>
+                  <h2 className='text-sm font-semibold'>Sub-Issues</h2>
+                  <CreateIssueDialog
+                    orgSlug={params.orgSlug}
+                    defaultStates={{
+                      parentIssueId: issue._id,
+                      teamId: issue.teamId || undefined,
+                      projectId: issue.projectId || undefined,
+                    }}
+                    className='h-6 text-xs'
+                  />
+                </div>
+                {issue.children && issue.children.length > 0 ? (
+                  <div className='space-y-1'>
+                    {issue.children.map(child => {
+                      const childPriorityIcon = child.priority?.icon
+                        ? getDynamicIcon(child.priority.icon)
+                        : Circle;
+                      const childPriorityColor =
+                        child.priority?.color || '#94a3b8';
 
-                    return (
-                      <Link
-                        key={child._id}
-                        href={`/${params.orgSlug}/issues/${child.key}`}
-                        className='hover:bg-muted/50 group flex items-center gap-3 rounded-md border p-2 transition-colors'
-                      >
-                        {/* Priority indicator */}
-                        <div className='flex-shrink-0'>
-                          {childPriorityIcon ? (
-                            React.createElement(childPriorityIcon, {
-                              className: 'h-3 w-3',
-                              style: { color: childPriorityColor },
-                            })
-                          ) : (
-                            <Circle
-                              className='h-3 w-3'
-                              style={{ color: childPriorityColor }}
-                            />
-                          )}
-                        </div>
-
-                        {/* Issue key */}
-                        <span className='text-muted-foreground flex-shrink-0 font-mono text-xs'>
-                          {child.key}
-                        </span>
-
-                        {/* Title */}
-                        <span className='group-hover:text-foreground truncate text-sm'>
-                          {child.title}
-                        </span>
-
-                        {/* Status indicator if available */}
-                        {child.state && (
-                          <div className='ml-auto flex-shrink-0'>
-                            <div
-                              className='h-2 w-2 rounded-full'
-                              style={{ backgroundColor: child.state.color }}
-                              title={child.state.name}
-                            />
+                      return (
+                        <Link
+                          key={child._id}
+                          href={`/${params.orgSlug}/issues/${child.key}`}
+                          className='hover:bg-muted/50 group flex items-center gap-3 rounded-md border p-2 transition-colors'
+                        >
+                          {/* Priority indicator */}
+                          <div className='flex-shrink-0'>
+                            {childPriorityIcon ? (
+                              React.createElement(childPriorityIcon, {
+                                className: 'h-3 w-3',
+                                style: { color: childPriorityColor },
+                              })
+                            ) : (
+                              <Circle
+                                className='h-3 w-3'
+                                style={{ color: childPriorityColor }}
+                              />
+                            )}
                           </div>
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className='text-muted-foreground py-2 text-sm'>
-                  No sub-issues yet. Create one to break down this issue into
-                  smaller tasks.
-                </div>
-              )}
+
+                          {/* Issue key */}
+                          <span className='text-muted-foreground flex-shrink-0 font-mono text-xs'>
+                            {child.key}
+                          </span>
+
+                          {/* Title */}
+                          <span className='group-hover:text-foreground truncate text-sm'>
+                            {child.title}
+                          </span>
+
+                          {/* Status indicator if available */}
+                          {child.state && (
+                            <div className='ml-auto flex-shrink-0'>
+                              <div
+                                className='h-2 w-2 rounded-full'
+                                style={{ backgroundColor: child.state.color }}
+                                title={child.state.name}
+                              />
+                            </div>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className='text-muted-foreground py-2 text-sm'>
+                    No sub-issues yet. Create one to break down this issue into
+                    smaller tasks.
+                  </div>
+                )}
+              </div>
+
+              {/* Linked Documents */}
+              <IssueDevelopmentSection
+                orgSlug={params.orgSlug}
+                issueId={issue._id}
+                issueKey={issue.key}
+              />
+
+              <LinkedDocuments
+                orgSlug={params.orgSlug}
+                mentionType='issue'
+                entityId={issue._id}
+              />
+
+              {/* Live Activity */}
+              <IssueLiveActivitySection
+                orgSlug={params.orgSlug}
+                issueId={issue._id}
+                currentUser={
+                  user
+                    ? {
+                        _id: user._id,
+                        name: user.name ?? '',
+                        email: user.email ?? null,
+                        image: user.image ?? null,
+                      }
+                    : null
+                }
+              />
+
+              {/* Comments & Activity */}
+              <IssueCommentsSection
+                orgSlug={params.orgSlug}
+                issueId={issue._id}
+                currentUser={
+                  user
+                    ? {
+                        _id: user._id,
+                        name: user.name ?? '',
+                        email: user.email ?? null,
+                        image: user.image ?? null,
+                      }
+                    : null
+                }
+              />
             </div>
-
-            {/* Linked Documents */}
-            <IssueDevelopmentSection
-              orgSlug={params.orgSlug}
-              issueId={issue._id}
-              issueKey={issue.key}
-            />
-
-            <LinkedDocuments
-              orgSlug={params.orgSlug}
-              mentionType='issue'
-              entityId={issue._id}
-            />
-
-            {/* Live Activity */}
-            <IssueLiveActivitySection
-              orgSlug={params.orgSlug}
-              issueId={issue._id}
-              currentUser={
-                user
-                  ? {
-                      _id: user._id,
-                      name: user.name ?? '',
-                      email: user.email ?? null,
-                      image: user.image ?? null,
-                    }
-                  : null
-              }
-            />
-
-            {/* Comments & Activity */}
-            <IssueCommentsSection
-              orgSlug={params.orgSlug}
-              issueId={issue._id}
-              currentUser={
-                user
-                  ? {
-                      _id: user._id,
-                      name: user.name ?? '',
-                      email: user.email ?? null,
-                      image: user.image ?? null,
-                    }
-                  : null
-              }
-            />
           </div>
         </div>
 

@@ -20,7 +20,6 @@ If you just want the shortest possible path, do this:
 2. Copy these values from GitHub:
    - `App ID` -> use as `GITHUB_APP_ID`
    - generated `.pem` private key -> use as `GITHUB_APP_PRIVATE_KEY`
-   - webhook secret you typed during app creation -> use as `GITHUB_WEBHOOK_SECRET`
 3. Generate an encryption key locally:
 
    ```bash
@@ -29,7 +28,7 @@ If you just want the shortest possible path, do this:
 
    Use that as `GITHUB_TOKEN_ENCRYPTION_KEY`.
 
-4. Set all 4 values in your Convex environment.
+4. Set those 3 values in your Convex environment.
 5. Install the GitHub App on the repo owner you want to test.
 6. Copy the installation details:
    - installation ID from the GitHub installation URL
@@ -41,10 +40,11 @@ If you just want the shortest possible path, do this:
    - paste account login
    - paste account type
    - click `Save`
-9. Click `Sync repos`.
-10. Select at least one repo.
-11. Open an issue and paste a GitHub PR, issue, or commit URL into `Development`.
-12. If that works, move on to webhook and auto-link testing.
+9. Click `Generate webhook secret` and copy the generated value into the GitHub App webhook settings.
+10. Click `Sync repos`.
+11. Select at least one repo.
+12. Open an issue and paste a GitHub PR, issue, or commit URL into `Development`.
+13. If that works, move on to webhook and auto-link testing.
 
 ## Prerequisites
 
@@ -59,7 +59,6 @@ Set these environment variables before testing GitHub automation:
 
 - `GITHUB_APP_ID`
 - `GITHUB_APP_PRIVATE_KEY`
-- `GITHUB_WEBHOOK_SECRET`
 - `GITHUB_TOKEN_ENCRYPTION_KEY`
 
 These values are used by the Convex backend, so set them in your Convex environment for the local deployment you are testing.
@@ -67,6 +66,7 @@ These values are used by the Convex backend, so set them in your Convex environm
 Notes:
 
 - `GITHUB_TOKEN_ENCRYPTION_KEY` is required to store admin-pasted token fallbacks securely.
+- GitHub webhook secrets are generated per workspace in Vector settings and stored in Convex data, not in a Convex env var.
 - If you do not want to wire the GitHub App yet, you can still test most flows with the token fallback from the org settings UI.
 - The webhook endpoint is `POST /webhooks/github`.
 
@@ -204,7 +204,7 @@ If you put just the site URL without `/webhooks/github`, GitHub will happily sen
 
 What to enter:
 
-- any long random string that you generate and save
+- if GitHub requires a value during app creation, use any temporary random string
 
 Example:
 
@@ -212,10 +212,7 @@ Example:
 openssl rand -base64 32
 ```
 
-Use the exact same value for:
-
-- the GitHub App webhook secret field
-- `GITHUB_WEBHOOK_SECRET` in Convex
+Before testing webhook deliveries, copy the generated secret from Vector's org settings into the GitHub App webhook secret field. Vector verifies signatures against the per-workspace secret stored with the integration, not an env var.
 
 ### 1C. Permissions
 
@@ -291,14 +288,6 @@ Important:
 - include the `-----BEGIN ...-----` and `-----END ...-----` lines
 - when storing it in Convex env, use escaped `\n` line breaks
 
-#### `GITHUB_WEBHOOK_SECRET`
-
-Where to get it:
-
-- this is the exact secret you entered in the GitHub App webhook settings during app creation
-
-Use the same value in GitHub and Convex. If they differ, webhook signature verification fails immediately, because apparently security is rude like that.
-
 #### `GITHUB_TOKEN_ENCRYPTION_KEY`
 
 Where to get it:
@@ -324,7 +313,6 @@ The easiest approach is the Convex dashboard for your local deployment, but the 
 3. Add:
    - `GITHUB_APP_ID`
    - `GITHUB_APP_PRIVATE_KEY`
-   - `GITHUB_WEBHOOK_SECRET`
    - `GITHUB_TOKEN_ENCRYPTION_KEY`
 
 For `GITHUB_APP_PRIVATE_KEY`:
@@ -339,7 +327,6 @@ Example commands:
 
 ```bash
 pnpm convex env set GITHUB_APP_ID 123456
-pnpm convex env set GITHUB_WEBHOOK_SECRET your-webhook-secret
 pnpm convex env set GITHUB_TOKEN_ENCRYPTION_KEY "$(openssl rand -base64 32)"
 pnpm convex env set GITHUB_APP_PRIVATE_KEY "$(perl -0pe 's/\n/\\n/g' ~/Downloads/your-github-app.private-key.pem)"
 ```
@@ -620,7 +607,7 @@ Recommended local test loop:
 
 If webhook delivery is failing:
 
-- verify `GITHUB_WEBHOOK_SECRET`
+- verify the webhook secret in the GitHub App matches the secret currently generated in Vector
 - verify the webhook points to the correct environment
 - verify the repo is selected in Vector
 - verify the GitHub App or token has access to that repo

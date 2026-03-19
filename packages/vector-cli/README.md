@@ -42,9 +42,12 @@ The app URL is required. `vcli` resolves it from:
 - the saved profile session
 - `NEXT_PUBLIC_APP_URL`
 
-The Convex URL still defaults from:
+The Convex URL resolves from:
 
-- `NEXT_PUBLIC_CONVEX_URL` or `CONVEX_URL`
+- `--convex-url <url>`
+- the saved profile session
+- the app's `/api/config` endpoint
+- `NEXT_PUBLIC_CONVEX_URL` or `CONVEX_URL` as local fallbacks when the app reports the default local URL
 
 You can override either with flags:
 
@@ -188,7 +191,8 @@ Auth errors against the wrong app
 
 Convex connection errors
 
-- Set `--convex-url`, `NEXT_PUBLIC_CONVEX_URL`, or `CONVEX_URL`.
+- Make sure `--app-url` points at the right Vector app first, since `vcli` fetches the Convex URL from that app when possible.
+- Otherwise set `--convex-url`, `NEXT_PUBLIC_CONVEX_URL`, or `CONVEX_URL`.
 
 Validation errors when creating teams or projects
 

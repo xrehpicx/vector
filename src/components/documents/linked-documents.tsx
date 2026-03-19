@@ -46,11 +46,10 @@ export function LinkedDocuments({
 
   return (
     <div>
-      <div className='text-muted-foreground mb-2 flex items-center gap-2 text-xs font-medium'>
-        <FileText className='size-3.5' />
-        <span>
-          Linked documents{' '}
-          <span className='text-muted-foreground/70'>{docs.length}</span>
+      <div className='mb-3 flex items-center gap-2'>
+        <h2 className='text-sm font-semibold'>Linked Documents</h2>
+        <span className='bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium'>
+          {docs.length}
         </span>
       </div>
       <div className='divide-y rounded-lg border'>

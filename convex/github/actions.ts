@@ -384,23 +384,33 @@ export const refreshIssuePullRequestSummary = internalAction({
               : 'Current issue description: (empty)',
             '',
             'Linked pull requests:',
-            ...context.pullRequests.map(pullRequest =>
-              [
-                `- ${pullRequest.repoFullName}#${pullRequest.number} ${pullRequest.title}`,
-                `  State: ${pullRequest.state}`,
-                pullRequest.headRefName
-                  ? `  Branch: ${pullRequest.headRefName}`
-                  : null,
-                pullRequest.baseRefName
-                  ? `  Base: ${pullRequest.baseRefName}`
-                  : null,
-                `  URL: ${pullRequest.url}`,
-                pullRequest.body
-                  ? `  Description: ${pullRequest.body.slice(0, 1200)}`
-                  : '  Description: (empty)',
-              ]
-                .filter(Boolean)
-                .join('\n'),
+            ...context.pullRequests.map(
+              (pullRequest: {
+                repoFullName: string;
+                number: number;
+                title: string;
+                state: string;
+                headRefName?: string | null;
+                baseRefName?: string | null;
+                url: string;
+                body?: string | null;
+              }) =>
+                [
+                  `- ${pullRequest.repoFullName}#${pullRequest.number} ${pullRequest.title}`,
+                  `  State: ${pullRequest.state}`,
+                  pullRequest.headRefName
+                    ? `  Branch: ${pullRequest.headRefName}`
+                    : null,
+                  pullRequest.baseRefName
+                    ? `  Base: ${pullRequest.baseRefName}`
+                    : null,
+                  `  URL: ${pullRequest.url}`,
+                  pullRequest.body
+                    ? `  Description: ${pullRequest.body.slice(0, 1200)}`
+                    : '  Description: (empty)',
+                ]
+                  .filter(Boolean)
+                  .join('\n'),
             ),
           ]
             .filter(Boolean)
@@ -433,14 +443,20 @@ export const refreshIssuePullRequestSummary = internalAction({
       internal.github.mutations.applyPullRequestSummaryToIssue,
       {
         issueId: args.issueId,
-        legacyImportedDescriptions: context.pullRequests.map(pullRequest =>
-          [
-            `Imported from GitHub PR ${pullRequest.repoFullName}#${pullRequest.number}`,
-            pullRequest.url,
-            pullRequest.body?.trim() || null,
-          ]
-            .filter(Boolean)
-            .join('\n\n'),
+        legacyImportedDescriptions: context.pullRequests.map(
+          (pullRequest: {
+            repoFullName: string;
+            number: number;
+            url: string;
+            body?: string | null;
+          }) =>
+            [
+              `Imported from GitHub PR ${pullRequest.repoFullName}#${pullRequest.number}`,
+              pullRequest.url,
+              pullRequest.body?.trim() || null,
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
         ),
         summaryMarkdown,
       },

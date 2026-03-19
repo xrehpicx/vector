@@ -2,6 +2,7 @@ import { internal } from '../_generated/api';
 import {
   internalMutation,
   internalQuery,
+  type MutationCtx,
   type QueryCtx,
 } from '../_generated/server';
 import { ConvexError, v } from 'convex/values';
@@ -55,6 +56,7 @@ import {
   resolveTeamFromContext,
 } from './lib';
 import { PERMISSIONS } from '../permissions/utils';
+import { AGENT_PROVIDER_LABELS } from '../_shared/agentBridge';
 
 function parseGitHubArtifactUrl(
   value: string,
@@ -189,6 +191,164 @@ export const getCurrentUserContextSummary = internalQuery({
   },
 });
 
+function processSelectionLabel(process: Doc<'agentProcesses'>): string {
+  return (
+    process.title?.trim() ||
+    process.repoRoot?.split('/').filter(Boolean).at(-1) ||
+    process.cwd?.split('/').filter(Boolean).at(-1) ||
+    process.localProcessId ||
+    AGENT_PROVIDER_LABELS[process.provider] ||
+    process.provider
+  );
+}
+
+function isAttachableObservedProcess(process: Doc<'agentProcesses'>): boolean {
+  return (
+    process.mode === 'observed' &&
+    process.supportsInboundMessages &&
+    !process.endedAt &&
+    process.status !== 'failed' &&
+    process.status !== 'disconnected'
+  );
+}
+
+function assistantProcessDedupKey(process: Doc<'agentProcesses'>): string {
+  return [
+    process.provider,
+    process.localProcessId ??
+      process.sessionKey ??
+      process.tmuxPaneId ??
+      process.cwd ??
+      process.title,
+  ]
+    .filter(Boolean)
+    .join('::');
+}
+
+function assistantProcessRank(process: Doc<'agentProcesses'>): number {
+  if (process.tmuxPaneId) {
+    return 3;
+  }
+  if (process.localProcessId) {
+    return 2;
+  }
+  if (process.sessionKey) {
+    return 1;
+  }
+  return 0;
+}
+
+function collapseAssistantProcesses(
+  processes: Doc<'agentProcesses'>[],
+): Doc<'agentProcesses'>[] {
+  const byKey = new Map<string, Doc<'agentProcesses'>>();
+  const sorted = [...processes].sort((a, b) => {
+    const rankDelta = assistantProcessRank(b) - assistantProcessRank(a);
+    if (rankDelta !== 0) {
+      return rankDelta;
+    }
+    return b.lastHeartbeatAt - a.lastHeartbeatAt;
+  });
+
+  for (const process of sorted) {
+    const key = assistantProcessDedupKey(process);
+    if (!key || byKey.has(key)) {
+      continue;
+    }
+    byKey.set(key, process);
+  }
+
+  return [...byKey.values()].sort(
+    (a, b) => b.lastHeartbeatAt - a.lastHeartbeatAt,
+  );
+}
+
+async function getOwnedOnlineDevices(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<'users'>,
+): Promise<Doc<'agentDevices'>[]> {
+  return await ctx.db
+    .query('agentDevices')
+    .withIndex('by_user_status', q =>
+      q.eq('userId', userId).eq('status', 'online'),
+    )
+    .collect();
+}
+
+async function getOwnedDelegatedWorkspaces(
+  ctx: QueryCtx | MutationCtx,
+  deviceId: Id<'agentDevices'>,
+): Promise<Doc<'deviceWorkspaces'>[]> {
+  return await ctx.db
+    .query('deviceWorkspaces')
+    .withIndex('by_device', q => q.eq('deviceId', deviceId))
+    .collect();
+}
+
+function pickDefaultWorkspace(
+  workspaces: Doc<'deviceWorkspaces'>[],
+): Doc<'deviceWorkspaces'> | null {
+  const delegated = workspaces.filter(
+    workspace => workspace.launchPolicy === 'allow_delegated',
+  );
+  if (delegated.length === 0) {
+    return null;
+  }
+
+  const markedDefault = delegated.find(workspace => workspace.isDefault);
+  if (markedDefault) {
+    return markedDefault;
+  }
+
+  return delegated.length === 1 ? delegated[0]! : null;
+}
+
+export const getCurrentUserDeviceContextSummary = internalQuery({
+  args: {
+    orgSlug: v.string(),
+    userId: v.id('users'),
+  },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    await requireOrgForAssistant(ctx, args.orgSlug, args.userId);
+
+    const devices = await getOwnedOnlineDevices(ctx, args.userId);
+    if (devices.length === 0) {
+      return [
+        'You can only create or attach work sessions on bridge devices owned by the authenticated user you are speaking to.',
+        'They currently have no online bridge devices.',
+        'If they ask you to work on their computer, tell them to start the Vector bridge first.',
+      ].join('\n');
+    }
+
+    const sortedDevices = [...devices].sort(
+      (a, b) => b.lastSeenAt - a.lastSeenAt,
+    );
+    const preferredDevice = sortedDevices[0]!;
+    const preferredWorkspaces = await getOwnedDelegatedWorkspaces(
+      ctx,
+      preferredDevice._id,
+    );
+    const defaultWorkspace = pickDefaultWorkspace(preferredWorkspaces);
+
+    const deviceSummary =
+      devices.length === 1
+        ? `They currently have 1 online bridge device: "${preferredDevice.displayName}".`
+        : `They currently have ${devices.length} online bridge devices. The most recently seen one is "${preferredDevice.displayName}".`;
+
+    return [
+      "You can only create or attach work sessions on bridge devices owned by the authenticated user you are speaking to. Never target another member's device.",
+      deviceSummary,
+      defaultWorkspace
+        ? `The preferred delegated workspace on that device is "${defaultWorkspace.label}" at ${defaultWorkspace.path}.`
+        : 'There is no single default delegated workspace on that device right now.',
+      'When the user says "my computer", "my device", or asks you to just take care of an issue on their machine, prefer a new Codex work session on their single online device and its default delegated workspace when that choice is unambiguous.',
+      'Only ask a follow-up question when there are multiple plausible online devices, multiple plausible delegated workspaces, or no eligible workspace is configured.',
+      'If the user explicitly says to reuse, attach, or continue existing work, inspect their observed sessions and attach the matching tmux, Codex, or Claude session instead of starting a new one.',
+    ].join('\n');
+  },
+});
+
 export const getAssistantThreadForAuthUser = internalQuery({
   args: {
     orgSlug: v.string(),
@@ -317,6 +477,542 @@ export const listWorkspaceReferenceData = internalQuery({
           'Unknown user',
         email: users[index]?.email ?? undefined,
       })),
+    };
+  },
+});
+
+async function resolveAssistantIssueForDeviceWork(
+  ctx: QueryCtx | MutationCtx,
+  args: {
+    orgSlug: string;
+    userId: Id<'users'>;
+    pageContext?: AssistantPageContext;
+    issueKey?: string;
+  },
+) {
+  const organization = await requireOrgForAssistant(
+    ctx,
+    args.orgSlug,
+    args.userId,
+  );
+  const issue = await resolveIssueFromContext(
+    ctx,
+    organization._id,
+    args.pageContext,
+    args.issueKey ?? null,
+  );
+
+  if (!(await canViewEntity(ctx, args.userId, issue, 'issue'))) {
+    throw new ConvexError('FORBIDDEN');
+  }
+
+  return { organization, issue };
+}
+
+function mapAssistantWorkspaceOption(workspace: Doc<'deviceWorkspaces'>) {
+  return {
+    id: String(workspace._id),
+    label: workspace.label,
+    path: workspace.path,
+    launchPolicy: workspace.launchPolicy,
+    isDefault: workspace.isDefault,
+  };
+}
+
+function mapAssistantProcessOption(process: Doc<'agentProcesses'>) {
+  return {
+    id: String(process._id),
+    provider: process.provider,
+    providerLabel:
+      process.providerLabel ??
+      AGENT_PROVIDER_LABELS[process.provider] ??
+      process.provider,
+    title: processSelectionLabel(process),
+    cwd: process.cwd,
+    repoRoot: process.repoRoot,
+    branch: process.branch,
+    sessionKind: process.provider === 'vector_cli' ? 'tmux' : 'agent',
+    tmuxSessionName: process.tmuxSessionName,
+    tmuxWindowName: process.tmuxWindowName,
+    tmuxPaneId: process.tmuxPaneId,
+  };
+}
+
+async function buildAssistantDeviceOptions(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: Id<'organizations'>,
+  userId: Id<'users'>,
+) {
+  const devices = await getOwnedOnlineDevices(ctx, userId);
+  const sortedDevices = [...devices].sort(
+    (a, b) => b.lastSeenAt - a.lastSeenAt,
+  );
+
+  return await Promise.all(
+    sortedDevices.map(async device => {
+      const [workspaces, allProcesses, liveWorkSessions] = await Promise.all([
+        getOwnedDelegatedWorkspaces(ctx, device._id),
+        ctx.db
+          .query('agentProcesses')
+          .withIndex('by_device', q => q.eq('deviceId', device._id))
+          .collect(),
+        ctx.db
+          .query('workSessions')
+          .withIndex('by_device', q => q.eq('deviceId', device._id))
+          .collect(),
+      ]);
+
+      const processes = collapseAssistantProcesses(
+        allProcesses.filter(isAttachableObservedProcess),
+      );
+      const defaultWorkspace = pickDefaultWorkspace(workspaces);
+      const activeWorkSessions = await Promise.all(
+        liveWorkSessions
+          .filter(
+            workSession =>
+              !workSession.endedAt &&
+              workSession.organizationId === organizationId,
+          )
+          .map(async workSession => {
+            const issue = await ctx.db.get('issues', workSession.issueId);
+            return {
+              id: String(workSession._id),
+              title: workSession.title ?? issue?.title ?? 'Work session',
+              issueKey: issue?.key,
+              status: workSession.status,
+              agentProvider: workSession.agentProvider,
+              workspacePath: workSession.workspacePath,
+            };
+          }),
+      );
+
+      return {
+        device: {
+          id: String(device._id),
+          displayName: device.displayName,
+          hostname: device.hostname,
+          platform: device.platform,
+          status: device.status,
+          lastSeenAt: device.lastSeenAt,
+        },
+        workspaces: workspaces.map(mapAssistantWorkspaceOption),
+        attachableSessions: processes.map(mapAssistantProcessOption),
+        activeWorkSessions,
+        defaultWorkspaceId: defaultWorkspace
+          ? String(defaultWorkspace._id)
+          : undefined,
+      };
+    }),
+  );
+}
+
+export const listMyDeviceSessionOptions = internalQuery({
+  args: {
+    orgSlug: v.string(),
+    userId: v.id('users'),
+  },
+  handler: async (ctx, args) => {
+    const organization = await requireOrgForAssistant(
+      ctx,
+      args.orgSlug,
+      args.userId,
+    );
+
+    const devices = await buildAssistantDeviceOptions(
+      ctx,
+      organization._id,
+      args.userId,
+    );
+    const defaultDevice = devices.length === 1 ? devices[0] : null;
+
+    return {
+      defaults: {
+        provider: 'codex',
+        deviceId: defaultDevice?.device.id,
+        workspaceId:
+          defaultDevice?.workspaces.find(workspace => workspace.isDefault)
+            ?.id ??
+          (defaultDevice?.workspaces.length === 1
+            ? defaultDevice.workspaces[0]!.id
+            : undefined),
+      },
+      devices,
+      summary:
+        devices.length === 0
+          ? 'No online bridge devices are available for this user right now.'
+          : devices.length === 1
+            ? `1 online bridge device is available: ${devices[0]!.device.displayName}.`
+            : `${devices.length} online bridge devices are available.`,
+    };
+  },
+});
+
+export const startIssueDeviceWorkSession = internalMutation({
+  args: {
+    orgSlug: v.string(),
+    userId: v.id('users'),
+    pageContext: v.optional(assistantPageContextValidator),
+    issueKey: v.optional(v.string()),
+    deviceId: v.optional(v.string()),
+    workspaceId: v.optional(v.string()),
+    provider: v.optional(
+      v.union(
+        v.literal('codex'),
+        v.literal('claude_code'),
+        v.literal('vector_cli'),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { issue } = await resolveAssistantIssueForDeviceWork(ctx, args);
+
+    const devices = await getOwnedOnlineDevices(ctx, args.userId);
+    const normalizedDeviceId = args.deviceId
+      ? ctx.db.normalizeId('agentDevices', args.deviceId)
+      : null;
+    const selectedDevice = args.deviceId
+      ? normalizedDeviceId
+        ? (devices.find(device => device._id === normalizedDeviceId) ?? null)
+        : null
+      : devices.length === 1
+        ? devices[0]
+        : null;
+
+    if (!selectedDevice || selectedDevice.userId !== args.userId) {
+      return {
+        status: 'needs_selection',
+        missing: 'device',
+        message:
+          devices.length === 0
+            ? 'No online bridge devices are available for this user right now.'
+            : 'Multiple online devices are available. Pick one device before starting work.',
+        devices: devices.map(device => ({
+          id: String(device._id),
+          displayName: device.displayName,
+          hostname: device.hostname,
+          platform: device.platform,
+        })),
+      };
+    }
+
+    const workspaces = await getOwnedDelegatedWorkspaces(
+      ctx,
+      selectedDevice._id,
+    );
+    const delegatedWorkspaces = workspaces.filter(
+      workspace => workspace.launchPolicy === 'allow_delegated',
+    );
+    const normalizedWorkspaceId = args.workspaceId
+      ? ctx.db.normalizeId('deviceWorkspaces', args.workspaceId)
+      : null;
+    const selectedWorkspace = normalizedWorkspaceId
+      ? delegatedWorkspaces.find(
+          workspace => workspace._id === normalizedWorkspaceId,
+        )
+      : pickDefaultWorkspace(workspaces);
+
+    if (!selectedWorkspace) {
+      return {
+        status: 'needs_selection',
+        missing: 'workspace',
+        message:
+          delegatedWorkspaces.length === 0
+            ? `No delegated workspace is configured on ${selectedDevice.displayName}.`
+            : 'Multiple delegated workspaces are available. Pick a workspace before starting work.',
+        device: {
+          id: String(selectedDevice._id),
+          displayName: selectedDevice.displayName,
+        },
+        workspaces: delegatedWorkspaces.map(mapAssistantWorkspaceOption),
+      };
+    }
+
+    const provider = args.provider ?? 'codex';
+    const now = Date.now();
+    const providerLabel = AGENT_PROVIDER_LABELS[provider] ?? provider;
+    const liveActivityTitle =
+      provider === 'vector_cli'
+        ? `${selectedDevice.displayName} shell session`
+        : `${providerLabel} on ${selectedDevice.displayName}`;
+
+    const liveActivityId = await ctx.db.insert('issueLiveActivities', {
+      organizationId: issue.organizationId,
+      issueId: issue._id,
+      deviceId: selectedDevice._id,
+      ownerUserId: args.userId,
+      provider,
+      title: liveActivityTitle,
+      status: 'active',
+      startedAt: now,
+      lastEventAt: now,
+    });
+
+    const workSessionId = await ctx.db.insert('workSessions', {
+      organizationId: issue.organizationId,
+      issueId: issue._id,
+      liveActivityId,
+      deviceId: selectedDevice._id,
+      workspaceId: selectedWorkspace._id,
+      ownerUserId: args.userId,
+      title: `${issue.key}: ${issue.title}`,
+      status: 'active',
+      workspacePath: selectedWorkspace.path,
+      cwd: selectedWorkspace.path,
+      agentProvider: provider,
+      startedAt: now,
+      lastEventAt: now,
+    });
+
+    await ctx.db.patch('issueLiveActivities', liveActivityId, {
+      workSessionId,
+    });
+
+    const delegatedRunId = await ctx.db.insert('delegatedRuns', {
+      organizationId: issue.organizationId,
+      issueId: issue._id,
+      liveActivityId,
+      deviceId: selectedDevice._id,
+      workspaceId: selectedWorkspace._id,
+      requestedByUserId: args.userId,
+      provider,
+      launchMode: 'delegated_launch',
+      workspacePath: selectedWorkspace.path,
+      launchStatus: 'pending',
+    });
+
+    await ctx.db.insert('agentCommands', {
+      deviceId: selectedDevice._id,
+      liveActivityId,
+      senderUserId: args.userId,
+      kind: 'launch',
+      payload: {
+        issueId: issue._id,
+        issueKey: issue.key,
+        issueTitle: issue.title,
+        provider,
+        workspacePath: selectedWorkspace.path,
+        workspaceLabel: selectedWorkspace.label,
+        delegatedRunId,
+        liveActivityId,
+      },
+      status: 'pending',
+      createdAt: now,
+    });
+
+    await recordActivity(ctx, {
+      actorId: args.userId,
+      entityType: 'issue',
+      eventType: 'issue_live_activity_delegated',
+      scope: resolveIssueScope(issue),
+      snapshot: snapshotForIssue(issue),
+      details: {
+        field: 'live_activity',
+        liveActivityId,
+        agentProvider: provider,
+        agentProviderLabel: providerLabel,
+        deviceName: selectedDevice.displayName,
+        workspaceLabel: selectedWorkspace.label,
+      },
+    });
+
+    const currentState = issue.workflowStateId
+      ? await ctx.db.get('issueStates', issue.workflowStateId)
+      : null;
+    if (!currentState || ['backlog', 'todo'].includes(currentState.type)) {
+      const inProgressState = await ctx.db
+        .query('issueStates')
+        .withIndex('by_organization', q =>
+          q.eq('organizationId', issue.organizationId),
+        )
+        .filter(q => q.eq(q.field('type'), 'in_progress'))
+        .first();
+      if (inProgressState && issue.workflowStateId !== inProgressState._id) {
+        await ctx.db.patch('issues', issue._id, {
+          workflowStateId: inProgressState._id,
+        });
+      }
+    }
+
+    return {
+      status: 'started',
+      issueKey: issue.key,
+      liveActivityId: String(liveActivityId),
+      workSessionId: String(workSessionId),
+      delegatedRunId: String(delegatedRunId),
+      provider,
+      providerLabel,
+      device: {
+        id: String(selectedDevice._id),
+        displayName: selectedDevice.displayName,
+      },
+      workspace: mapAssistantWorkspaceOption(selectedWorkspace),
+    };
+  },
+});
+
+export const attachIssueToObservedDeviceSession = internalMutation({
+  args: {
+    orgSlug: v.string(),
+    userId: v.id('users'),
+    pageContext: v.optional(assistantPageContextValidator),
+    issueKey: v.optional(v.string()),
+    deviceId: v.optional(v.string()),
+    processId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { issue } = await resolveAssistantIssueForDeviceWork(ctx, args);
+    const devices = await getOwnedOnlineDevices(ctx, args.userId);
+    const normalizedDeviceId = args.deviceId
+      ? ctx.db.normalizeId('agentDevices', args.deviceId)
+      : null;
+    const selectedDevice =
+      normalizedDeviceId !== null
+        ? (devices.find(device => device._id === normalizedDeviceId) ?? null)
+        : devices.length === 1
+          ? devices[0]!
+          : null;
+
+    if (!selectedDevice) {
+      return {
+        status: 'needs_selection',
+        missing: 'device',
+        message:
+          devices.length === 0
+            ? 'No online bridge devices are available for this user right now.'
+            : 'Multiple online devices are available. Pick one device before attaching a session.',
+        devices: devices.map(device => ({
+          id: String(device._id),
+          displayName: device.displayName,
+          hostname: device.hostname,
+          platform: device.platform,
+        })),
+      };
+    }
+
+    const observedProcesses = collapseAssistantProcesses(
+      (
+        await ctx.db
+          .query('agentProcesses')
+          .withIndex('by_device', q => q.eq('deviceId', selectedDevice._id))
+          .collect()
+      ).filter(isAttachableObservedProcess),
+    );
+
+    const normalizedProcessId = args.processId
+      ? ctx.db.normalizeId('agentProcesses', args.processId)
+      : null;
+    const selectedProcess =
+      normalizedProcessId !== null
+        ? (observedProcesses.find(
+            process => process._id === normalizedProcessId,
+          ) ?? null)
+        : observedProcesses.length === 1
+          ? observedProcesses[0]!
+          : null;
+
+    if (!selectedProcess) {
+      return {
+        status: 'needs_selection',
+        missing: 'session',
+        message:
+          observedProcesses.length === 0
+            ? `No attachable tmux, Codex, or Claude sessions are running on ${selectedDevice.displayName}.`
+            : 'Multiple attachable sessions are available. Pick the session to attach.',
+        device: {
+          id: String(selectedDevice._id),
+          displayName: selectedDevice.displayName,
+        },
+        sessions: observedProcesses.map(mapAssistantProcessOption),
+      };
+    }
+
+    const now = Date.now();
+    const providerLabel =
+      selectedProcess.providerLabel ??
+      AGENT_PROVIDER_LABELS[selectedProcess.provider] ??
+      selectedProcess.provider;
+    const liveActivityId = await ctx.db.insert('issueLiveActivities', {
+      organizationId: issue.organizationId,
+      issueId: issue._id,
+      deviceId: selectedDevice._id,
+      processId: selectedProcess._id,
+      ownerUserId: args.userId,
+      provider: selectedProcess.provider,
+      title: selectedProcess.title,
+      status: 'active',
+      startedAt: now,
+      lastEventAt: now,
+    });
+
+    const workSessionId = await ctx.db.insert('workSessions', {
+      organizationId: issue.organizationId,
+      issueId: issue._id,
+      liveActivityId,
+      deviceId: selectedDevice._id,
+      ownerUserId: args.userId,
+      title: selectedProcess.title,
+      status: 'active',
+      workspacePath: selectedProcess.cwd ?? selectedProcess.repoRoot,
+      cwd: selectedProcess.cwd,
+      repoRoot: selectedProcess.repoRoot,
+      branch: selectedProcess.branch,
+      tmuxSessionName: selectedProcess.tmuxSessionName,
+      tmuxWindowName: selectedProcess.tmuxWindowName,
+      tmuxPaneId: selectedProcess.tmuxPaneId,
+      agentProvider: selectedProcess.provider,
+      agentProcessId: selectedProcess._id,
+      agentSessionKey: selectedProcess.sessionKey,
+      startedAt: now,
+      lastEventAt: now,
+    });
+
+    await ctx.db.patch('issueLiveActivities', liveActivityId, {
+      workSessionId,
+    });
+
+    await recordActivity(ctx, {
+      actorId: args.userId,
+      entityType: 'issue',
+      eventType: 'issue_live_activity_started',
+      scope: resolveIssueScope(issue),
+      snapshot: snapshotForIssue(issue),
+      details: {
+        field: 'live_activity',
+        liveActivityId,
+        agentProvider: selectedProcess.provider,
+        agentProviderLabel: providerLabel,
+        deviceName: selectedDevice.displayName,
+      },
+    });
+
+    const currentState = issue.workflowStateId
+      ? await ctx.db.get('issueStates', issue.workflowStateId)
+      : null;
+    if (!currentState || ['backlog', 'todo'].includes(currentState.type)) {
+      const inProgressState = await ctx.db
+        .query('issueStates')
+        .withIndex('by_organization', q =>
+          q.eq('organizationId', issue.organizationId),
+        )
+        .filter(q => q.eq(q.field('type'), 'in_progress'))
+        .first();
+      if (inProgressState && issue.workflowStateId !== inProgressState._id) {
+        await ctx.db.patch('issues', issue._id, {
+          workflowStateId: inProgressState._id,
+        });
+      }
+    }
+
+    return {
+      status: 'attached',
+      issueKey: issue.key,
+      liveActivityId: String(liveActivityId),
+      workSessionId: String(workSessionId),
+      device: {
+        id: String(selectedDevice._id),
+        displayName: selectedDevice.displayName,
+      },
+      session: mapAssistantProcessOption(selectedProcess),
     };
   },
 });

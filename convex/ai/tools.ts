@@ -1,4 +1,5 @@
 import { createTool, type ToolCtx } from '@convex-dev/agent';
+import type { Tool } from 'ai';
 import { z } from 'zod';
 import { internal } from '../_generated/api';
 import type { Id } from '../_generated/dataModel';
@@ -11,6 +12,19 @@ type AssistantToolCtx = ToolCtx & {
   userId: Id<'users'>;
   assistantThreadId: Id<'assistantThreads'>;
   currentPageContext: AssistantPageContext;
+};
+
+type StartIssueDeviceWorkSessionInput = {
+  issueKey?: string;
+  deviceId?: string;
+  workspaceId?: string;
+  provider?: 'codex' | 'claude_code' | 'vector_cli';
+};
+
+type AttachIssueToObservedDeviceSessionInput = {
+  issueKey?: string;
+  deviceId?: string;
+  processId?: string;
 };
 
 export const listWorkspaceReferenceData: any = createTool({
@@ -672,6 +686,104 @@ export const unassignIssue: any = createTool({
       pageContext: ctx.currentPageContext,
       ...args,
     });
+  },
+});
+
+export const listMyDeviceSessionOptions: Tool<{}, unknown> = createTool({
+  description:
+    "List the authenticated user's own online bridge devices, delegated workspaces, active work sessions, and attachable observed sessions. Use this when the user wants you to run or attach work on their computer and you need to inspect available device context. The results are limited to the current user's own devices only.",
+  args: z.object({}),
+  handler: async (ctx: AssistantToolCtx): Promise<unknown> => {
+    return await ctx.runQuery(internal.ai.internal.listMyDeviceSessionOptions, {
+      orgSlug: ctx.currentPageContext.orgSlug,
+      userId: ctx.userId,
+    });
+  },
+});
+
+export const startIssueDeviceWorkSession: Tool<
+  StartIssueDeviceWorkSessionInput,
+  unknown
+> = createTool({
+  description:
+    'Start a new tmux-backed work session for an issue on the authenticated user\'s own bridge device. If provider is omitted, default to Codex. Use provider "vector_cli" for a manual shell session with no managed agent. If deviceId or workspaceId is omitted, this prefers the user\'s single online device and default delegated workspace when unambiguous. If the result returns status "needs_selection", ask one short clarifying question using the provided options.',
+  args: z.object({
+    issueKey: z
+      .string()
+      .optional()
+      .describe('Issue key. Defaults to the current issue page when omitted.'),
+    deviceId: z
+      .string()
+      .optional()
+      .describe(
+        'Device id from listMyDeviceSessionOptions when selection is needed.',
+      ),
+    workspaceId: z
+      .string()
+      .optional()
+      .describe(
+        'Workspace id from listMyDeviceSessionOptions when selection is needed.',
+      ),
+    provider: z
+      .enum(['codex', 'claude_code', 'vector_cli'])
+      .optional()
+      .describe(
+        'Managed agent to launch, or "vector_cli" for a manual shell session.',
+      ),
+  }),
+  handler: async (
+    ctx: AssistantToolCtx,
+    args: StartIssueDeviceWorkSessionInput,
+  ): Promise<unknown> => {
+    return await ctx.runMutation(
+      internal.ai.internal.startIssueDeviceWorkSession,
+      {
+        orgSlug: ctx.currentPageContext.orgSlug,
+        userId: ctx.userId,
+        pageContext: ctx.currentPageContext,
+        ...args,
+      },
+    );
+  },
+});
+
+export const attachIssueToObservedDeviceSession: Tool<
+  AttachIssueToObservedDeviceSessionInput,
+  unknown
+> = createTool({
+  description:
+    'Attach an existing observed tmux, Codex, or Claude session from the authenticated user\'s own device to an issue, so future Vector messages go to that running work. If processId is omitted, this auto-selects only when there is a single clear attachable session. If the result returns status "needs_selection", ask one short clarifying question using the provided options.',
+  args: z.object({
+    issueKey: z
+      .string()
+      .optional()
+      .describe('Issue key. Defaults to the current issue page when omitted.'),
+    deviceId: z
+      .string()
+      .optional()
+      .describe(
+        'Device id from listMyDeviceSessionOptions when multiple devices are online.',
+      ),
+    processId: z
+      .string()
+      .optional()
+      .describe(
+        'Observed session id from listMyDeviceSessionOptions when multiple attachable sessions are available.',
+      ),
+  }),
+  handler: async (
+    ctx: AssistantToolCtx,
+    args: AttachIssueToObservedDeviceSessionInput,
+  ): Promise<unknown> => {
+    return await ctx.runMutation(
+      internal.ai.internal.attachIssueToObservedDeviceSession,
+      {
+        orgSlug: ctx.currentPageContext.orgSlug,
+        userId: ctx.userId,
+        pageContext: ctx.currentPageContext,
+        ...args,
+      },
+    );
   },
 });
 

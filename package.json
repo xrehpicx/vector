@@ -27,6 +27,8 @@
     "build": "next build",
     "start": "next start",
     "cli": "tsx packages/vector-cli/src/index.ts",
+    "vcli:dev": "VECTOR_HOME=$(pwd)/.vector-dev tsx packages/vector-cli/src/index.ts --profile devlocal --app-url http://localhost:3000",
+    "cli:dev-bridge": "VECTOR_HOME=$(pwd)/.vector-dev tsx packages/vector-cli/src/index.ts --profile devlocal --app-url http://localhost:3000 service run",
     "build:cli-package": "pnpm --filter @rehpic/vcli build",
     "test:cli": "vitest run packages/vector-cli/src/auth.test.ts packages/vector-cli/src/index.test.ts packages/vector-cli/src/bridge-service.test.ts packages/vector-cli/src/agent-adapters.test.ts",
     "lint": "eslint .",

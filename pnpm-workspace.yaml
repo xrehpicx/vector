@@ -1,10 +1,10 @@
 packages:
-  - '.'
-  - 'packages/*'
-
+  - .
+  - packages/*
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - es5-ext
   - esbuild
+  - node-datachannel
   - sharp
   - unrs-resolver

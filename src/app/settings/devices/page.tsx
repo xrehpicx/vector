@@ -21,10 +21,14 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { BarsSpinner } from '@/components/bars-spinner';
 import { useQuery } from '@/lib/convex';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -96,10 +100,34 @@ function DeviceRow({
   const removeWorkspace = useMutation(
     api.agentBridge.mutations.removeWorkspace,
   );
+  const renameDevice = useMutation(api.agentBridge.mutations.renameDevice);
 
   const [addingWs, setAddingWs] = useState(false);
   const [wsPath, setWsPath] = useState('');
   const [wsLabel, setWsLabel] = useState('');
+
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(device.displayName);
+  const [renaming, setRenaming] = useState(false);
+
+  const handleRename = async () => {
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === device.displayName) {
+      setEditing(false);
+      setEditName(device.displayName);
+      return;
+    }
+    setRenaming(true);
+    try {
+      await renameDevice({ deviceId: device._id, displayName: trimmed });
+      setEditing(false);
+      toast.success('Device renamed');
+    } catch {
+      toast.error('Failed to rename device');
+    } finally {
+      setRenaming(false);
+    }
+  };
 
   const handleAddWorkspace = async () => {
     if (!wsPath.trim()) return;
@@ -128,7 +156,67 @@ function DeviceRow({
         </div>
         <div className='min-w-0 flex-1'>
           <div className='flex items-center gap-2'>
-            <span className='text-sm font-medium'>{device.displayName}</span>
+            {editing ? (
+              <form
+                className='flex items-center gap-1'
+                onSubmit={e => {
+                  e.preventDefault();
+                  void handleRename();
+                }}
+              >
+                <Input
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className='h-6 w-40 text-sm font-medium'
+                  autoFocus
+                  disabled={renaming}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') {
+                      setEditing(false);
+                      setEditName(device.displayName);
+                    }
+                  }}
+                />
+                <Button
+                  type='submit'
+                  variant='ghost'
+                  size='sm'
+                  className='h-6 px-1'
+                  disabled={renaming}
+                >
+                  {renaming ? (
+                    <BarsSpinner className='size-3' />
+                  ) : (
+                    <Check className='size-3' />
+                  )}
+                </Button>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='sm'
+                  className='h-6 px-1'
+                  disabled={renaming}
+                  onClick={() => {
+                    setEditing(false);
+                    setEditName(device.displayName);
+                  }}
+                >
+                  <X className='size-3' />
+                </Button>
+              </form>
+            ) : (
+              <button
+                type='button'
+                className='group flex items-center gap-1.5 text-sm font-medium'
+                onClick={() => {
+                  setEditName(device.displayName);
+                  setEditing(true);
+                }}
+              >
+                {device.displayName}
+                <Pencil className='text-muted-foreground size-3 opacity-0 group-hover:opacity-100' />
+              </button>
+            )}
             <span
               className={cn(
                 'text-xs capitalize',
@@ -218,13 +306,11 @@ function DeviceRow({
                   key={ws._id}
                   className='flex items-center gap-2 rounded px-2 py-1'
                 >
-                  <FolderOpen className='text-muted-foreground size-3.5 shrink-0' />
-                  <div className='min-w-0 flex-1'>
-                    <span className='text-xs font-medium'>{ws.label}</span>
-                    <span className='text-muted-foreground ml-2 font-mono text-[10px]'>
-                      {ws.path}
-                    </span>
-                  </div>
+                  <FolderOpen className='text-muted-foreground size-3.5 shrink-0 self-center' />
+                  <span className='text-xs font-medium'>{ws.label}</span>
+                  <span className='text-muted-foreground min-w-0 flex-1 truncate font-mono text-[10px]'>
+                    {ws.path}
+                  </span>
                   {ws.isDefault && (
                     <span className='text-muted-foreground text-[10px]'>
                       default

@@ -193,6 +193,12 @@ Copy `sample.env` to `.env.local` and update the values.
 
 For local development, Next.js and Convex can both read from the same root env file, so a single `.env.local` is enough. For production, split variables by the runtime that actually reads them.
 
+The implementation is currently split across three env readers:
+
+- Next.js app code, with limited validation in `src/env.ts`
+- Convex runtime code in `convex/*`, which reads `process.env` directly
+- the Vector CLI, which separately loads `.env.local` and `.env`
+
 ### Minimum Local Setup
 
 If you only want the app running locally, start with these:
@@ -212,6 +218,7 @@ Optional for local development:
 - VAPID variables if you want browser push notifications
 - `OPENROUTER_API_KEY` if you want the Convex assistant enabled
 - `OPENROUTER_MODEL` to override the default assistant model
+- GitHub OAuth and GitHub App variables if you want to test GitHub integration locally
 - `CONVEX_URL` / `CONVEX_ADMIN_KEY` for migration scripts and CLI-only workflows
 
 ### Set In Next.js Environment (`.env.local`, Vercel)
@@ -240,10 +247,15 @@ Optional for local development:
 | `VAPID_SUBJECT`               | Read in `convex/notifications/actions.ts` for push delivery.                                                                                                      |
 | `OPENROUTER_API_KEY`          | Required by `convex/ai/provider.ts` for the organization assistant and all agent responses.                                                                       |
 | `OPENROUTER_MODEL`            | Optional model override for `convex/ai/provider.ts`. Defaults to `moonshotai/kimi-k2.5:nitro`.                                                                    |
+| `GITHUB_CLIENT_ID`            | Optional GitHub OAuth provider configuration in `convex/auth.ts`.                                                                                                 |
+| `GITHUB_CLIENT_SECRET`        | Optional GitHub OAuth provider configuration in `convex/auth.ts`.                                                                                                 |
+| `GITHUB_APP_ID`               | Optional GitHub App integration configuration in `convex/github/node.ts`.                                                                                         |
+| `GITHUB_APP_PRIVATE_KEY`      | Optional GitHub App private key in `convex/github/node.ts`.                                                                                                       |
+| `GITHUB_TOKEN_ENCRYPTION_KEY` | Optional encryption key for stored GitHub fallback tokens in `convex/github/node.ts`.                                                                             |
 
 `NEXT_PUBLIC_APP_URL` has a public-looking prefix, but the current code reads it from Convex auth code rather than browser code.
 
-SMTP and VAPID settings are optional. If you leave them unset locally, the core app still runs. `OPENROUTER_API_KEY` is only required if you want the assistant feature to work.
+SMTP and VAPID settings are optional. If you leave them unset locally, the core app still runs. `OPENROUTER_API_KEY` is only required if you want the assistant feature to work. GitHub webhook secrets are generated per workspace in Vector settings rather than coming from an env var.
 
 ### Local CLI / Convex Tooling Only
 
@@ -252,6 +264,8 @@ SMTP and VAPID settings are optional. If you leave them unset locally, the core 
 | `CONVEX_URL`        | Used by `scripts/run-permission-migrations.ts` when invoking `pnpm convex run`.                |
 | `CONVEX_ADMIN_KEY`  | Only needed by `scripts/run-permission-migrations.ts` for admin-only migrations.               |
 | `CONVEX_DEPLOYMENT` | Managed by the Convex CLI during local development. It is not read by the application runtime. |
+
+For the exhaustive runtime-by-runtime breakdown, see [docs/getting-started/02-environment-variables.md](docs/getting-started/02-environment-variables.md).
 
 ## Development
 

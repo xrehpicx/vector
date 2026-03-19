@@ -9,7 +9,6 @@ import {
   GitBranch,
   GitCommitHorizontal,
   GitPullRequest,
-  Github,
   Link2,
   RefreshCw,
   ShieldOff,
@@ -536,12 +535,9 @@ export function IssueDevelopmentSection({
   }
 
   return (
-    <div className='mb-8'>
-      <div className='mb-1 flex items-center justify-between gap-3'>
-        <div className='flex items-center gap-2'>
-          <Github className='text-muted-foreground size-4' />
-          <h2 className='text-sm font-semibold'>Development</h2>
-        </div>
+    <div>
+      <div className='mb-3 flex items-center justify-between gap-3'>
+        <h2 className='text-sm font-semibold'>Development</h2>
         <div className='flex items-center gap-1'>
           {canEdit && hasGitHubIntegration ? (
             <LinkArtifactInput

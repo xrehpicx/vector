@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   InputOTP,
@@ -21,14 +21,18 @@ import {
   getContrastingTextColor,
   resolveBrandColor,
 } from '@/lib/branding';
+import { api, useQuery } from '@/lib/convex';
 
 const REGEXP_ALPHA = /^[A-Z2-9]$/;
 
 type Stage = 'enter-code' | 'approve' | 'approved' | 'denied';
 
 function DeviceAuthForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const prefilled = searchParams.get('user_code') ?? '';
+  const currentUserQuery = useQuery(api.users.currentUser);
+  const currentUser = currentUserQuery.data;
   const branding = useBranding();
   const accentColor = resolveBrandColor(
     branding.accentColor,
@@ -41,6 +45,44 @@ function DeviceAuthForm() {
   );
   const [userCode, setUserCode] = useState(prefilled);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (currentUserQuery.isPending || currentUserQuery.isError || currentUser) {
+      return;
+    }
+
+    const query = searchParams.toString();
+    const redirectTo = query ? `/device?${query}` : '/device';
+    router.replace(`/auth/login?redirectTo=${encodeURIComponent(redirectTo)}`);
+  }, [
+    currentUser,
+    currentUserQuery.isError,
+    currentUserQuery.isPending,
+    router,
+    searchParams,
+  ]);
+
+  if (
+    currentUserQuery.isPending ||
+    (!currentUserQuery.isError && !currentUser)
+  ) {
+    return (
+      <div className='flex min-h-dvh items-center justify-center px-4'>
+        <div className='w-full max-w-sm space-y-6'>
+          <div className='flex flex-col items-center gap-2'>
+            <Skeleton className='h-12 w-12 rounded-xl' />
+            <Skeleton className='h-7 w-48' />
+            <Skeleton className='h-4 w-40' />
+          </div>
+          <div className='space-y-3'>
+            <Skeleton className='h-16 w-full rounded-md' />
+            <Skeleton className='h-10 w-full rounded-md' />
+            <Skeleton className='h-10 w-full rounded-md' />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleVerify = async () => {
     const code = userCode.trim().replace(/-/g, '').toUpperCase();
