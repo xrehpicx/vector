@@ -73,7 +73,12 @@ export function DeviceSetupGuide({ compact }: { compact?: boolean } = {}) {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const appUrl =
+    typeof window !== 'undefined'
+      ? window.location.protocol === 'https:'
+        ? window.location.hostname
+        : window.location.origin
+      : '';
 
   const steps = [
     { label: 'Install the CLI', cmd: 'npm install -g @rehpic/vcli' },
