@@ -27,7 +27,7 @@ import {
   resolveMentionedUsers,
 } from '../notifications/lib';
 import { buildIssueSearchText } from './search';
-import { getNextAvailableIssueKey } from './keys';
+import { getNextAvailableIssueKey, parseIssueKeyParts } from './keys';
 import { hasAgentMention } from '../ai/comment_agent';
 
 function priorityLabel(
@@ -1502,6 +1502,94 @@ export const changeVisibility = mutation({
     }
 
     return { success: true } as const;
+  },
+});
+
+export const resolveKeyConflict = mutation({
+  args: {
+    issueId: v.id('issues'),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError('UNAUTHORIZED');
+    }
+
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      throw new ConvexError('ISSUE_NOT_FOUND');
+    }
+
+    if (!(await canEditIssue(ctx, issue))) {
+      throw new ConvexError('FORBIDDEN');
+    }
+
+    const duplicates = await ctx.db
+      .query('issues')
+      .withIndex('by_org_key', q =>
+        q.eq('organizationId', issue.organizationId).eq('key', issue.key),
+      )
+      .collect();
+
+    if (duplicates.length <= 1) {
+      return {
+        resolved: false,
+        targetIssueId: issue._id,
+        oldKey: issue.key,
+        newKey: issue.key,
+        currentIssueChanged: false,
+      } as const;
+    }
+
+    const editableCandidates = await Promise.all(
+      duplicates.map(async duplicate => ({
+        issue: duplicate,
+        canEdit: await canEditIssue(ctx, duplicate),
+      })),
+    );
+
+    const nonCurrentEditableCandidates = editableCandidates
+      .filter(
+        candidate => candidate.canEdit && candidate.issue._id !== issue._id,
+      )
+      .sort((a, b) => b.issue._creationTime - a.issue._creationTime);
+
+    const currentEditableCandidate = editableCandidates.find(
+      candidate => candidate.issue._id === issue._id && candidate.canEdit,
+    );
+
+    const target =
+      nonCurrentEditableCandidates[0]?.issue ?? currentEditableCandidate?.issue;
+
+    if (!target) {
+      throw new ConvexError('FORBIDDEN');
+    }
+
+    const nextKeyStart = parseIssueKeyParts(target.key);
+    const nextIssueKey = await getNextAvailableIssueKey(ctx, {
+      organizationId: target.organizationId,
+      prefix: nextKeyStart.prefix,
+      startingSequenceNumber: nextKeyStart.sequenceNumber,
+    });
+
+    await ctx.db.patch('issues', target._id, {
+      key: nextIssueKey.key,
+      sequenceNumber: nextIssueKey.sequenceNumber,
+      searchText: buildIssueSearchText({
+        key: nextIssueKey.key,
+        title: target.title,
+        description: target.description,
+      }),
+      updatedAt: Date.now(),
+    });
+
+    return {
+      resolved: true,
+      targetIssueId: target._id,
+      oldKey: target.key,
+      newKey: nextIssueKey.key,
+      currentIssueChanged: target._id === issue._id,
+    } as const;
   },
 });
 

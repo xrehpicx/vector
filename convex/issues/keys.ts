@@ -34,3 +34,18 @@ export async function getNextAvailableIssueKey(
     sequenceNumber += 1;
   }
 }
+
+export function parseIssueKeyParts(key: string) {
+  const match = key.match(/^(.*)-(\d+)$/);
+  if (!match) {
+    return {
+      prefix: key,
+      sequenceNumber: 2,
+    };
+  }
+
+  return {
+    prefix: match[1],
+    sequenceNumber: Number(match[2]) + 1,
+  };
+}

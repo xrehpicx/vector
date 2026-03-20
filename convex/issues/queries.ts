@@ -143,6 +143,45 @@ export const getByKey = query({
   },
 });
 
+export const getKeyConflict = query({
+  args: {
+    issueId: v.id('issues'),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      return null;
+    }
+
+    if (!(await canViewIssue(ctx, issue))) {
+      throw new ConvexError('FORBIDDEN');
+    }
+
+    const duplicates = await ctx.db
+      .query('issues')
+      .withIndex('by_org_key', q =>
+        q.eq('organizationId', issue.organizationId).eq('key', issue.key),
+      )
+      .collect();
+
+    if (duplicates.length <= 1) {
+      return null;
+    }
+
+    return {
+      issueId: issue._id,
+      key: issue.key,
+      duplicateCount: duplicates.length,
+      otherIssueCount: Math.max(0, duplicates.length - 1),
+    };
+  },
+});
+
 export type IssueVisibilityAccess = {
   userId: Id<'users'>;
   isOrgMember: boolean;

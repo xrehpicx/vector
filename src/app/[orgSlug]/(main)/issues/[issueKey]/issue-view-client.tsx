@@ -15,8 +15,9 @@ import {
   MoreHorizontal,
   GitPullRequest,
   Activity,
-  Cpu,
   Play,
+  AlertTriangle,
+  WandSparkles,
 } from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
 import { useCachedQuery, useMutation, useAction } from '@/lib/convex';
@@ -47,6 +48,7 @@ import {
   PermissionAwareWrapper,
   PermissionAwareSelector,
 } from '@/components/ui/permission-aware';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { IssueCommentsSection } from '@/components/comments/comments-section';
 import { LinkedDocuments } from '@/components/documents/linked-documents';
@@ -220,6 +222,7 @@ export default function IssueViewClient({
   const [linkGithubOpen, setLinkGithubOpen] = useState(false);
   const [linkGithubUrl, setLinkGithubUrl] = useState('');
   const [isLinkingGithub, setIsLinkingGithub] = useState(false);
+  const [isResolvingKeyConflict, setIsResolvingKeyConflict] = useState(false);
   const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
 
   const liveIssue = useCachedQuery(api.issues.queries.getByKey, {
@@ -236,6 +239,10 @@ export default function IssueViewClient({
   const displayDescription = issue?.description ?? '';
   const assignments = useCachedQuery(
     api.issues.queries.getAssignments,
+    issue ? { issueId: issue._id } : 'skip',
+  );
+  const keyConflict = useCachedQuery(
+    api.issues.queries.getKeyConflict,
     issue ? { issueId: issue._id } : 'skip',
   );
 
@@ -283,6 +290,9 @@ export default function IssueViewClient({
     api.issues.mutations.updateEstimatedTimes,
   );
   const deleteIssueMutation = useMutation(api.issues.mutations.deleteIssue);
+  const resolveKeyConflictMutation = useMutation(
+    api.issues.mutations.resolveKeyConflict,
+  );
   const linkArtifactByUrl = useAction(api.github.actions.linkArtifactByUrl);
   const changeTeamMutation = useMutation(
     api.issues.mutations.changeTeam,
@@ -657,6 +667,30 @@ export default function IssueViewClient({
     }
   };
 
+  const handleResolveKeyConflict = async () => {
+    if (!issue) return;
+    setIsResolvingKeyConflict(true);
+    try {
+      const result = await resolveKeyConflictMutation({ issueId: issue._id });
+      if (!result.resolved) {
+        toast.message('Issue key conflict is already resolved');
+        return;
+      }
+
+      if (result.currentIssueChanged) {
+        router.replace(`/${params.orgSlug}/issues/${result.newKey}`);
+      }
+
+      toast.success(
+        `Resolved duplicate key: ${result.oldKey} -> ${result.newKey}`,
+      );
+    } catch {
+      toast.error('Failed to resolve duplicate issue key');
+    } finally {
+      setIsResolvingKeyConflict(false);
+    }
+  };
+
   return (
     <div className='bg-background h-full overflow-y-auto'>
       {/* Page Grid: main area + sidebar */}
@@ -998,6 +1032,30 @@ export default function IssueViewClient({
                   Updated {formatDateHuman(new Date(issue._creationTime))}
                 </span>
               </div>
+
+              {keyConflict ? (
+                <Alert variant='destructive' className='py-2'>
+                  <AlertTriangle className='size-4' />
+                  <AlertDescription className='flex min-w-0 items-center justify-between gap-3'>
+                    <span className='min-w-0 text-xs'>
+                      This key is shared by {keyConflict.duplicateCount} issues.
+                      Auto-fix will move one duplicate to a new key.
+                    </span>
+                    {canEditIssue ? (
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        className='h-7 shrink-0 gap-1.5 px-2 text-xs'
+                        disabled={isResolvingKeyConflict}
+                        onClick={() => void handleResolveKeyConflict()}
+                      >
+                        <WandSparkles className='size-3' />
+                        {isResolvingKeyConflict ? 'Fixing...' : 'Auto-fix'}
+                      </Button>
+                    ) : null}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
               {/* Title */}
               {editingTitle ? (
