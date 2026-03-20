@@ -715,10 +715,11 @@ export const reconnectLiveActivity = mutation({
     const workSession = activity.workSessionId
       ? await ctx.db.get('workSessions', activity.workSessionId)
       : null;
+    const resumedProcessId = workSession?.agentProcessId ?? activity.processId;
 
     await ctx.db.patch('issueLiveActivities', args.liveActivityId, {
       status: 'active',
-      processId: workSession?.workspaceId ? undefined : activity.processId,
+      ...(resumedProcessId && { processId: resumedProcessId }),
       lastEventAt: now,
       endedAt: undefined,
     });
@@ -728,21 +729,11 @@ export const reconnectLiveActivity = mutation({
         status: 'active',
         lastEventAt: now,
         endedAt: undefined,
-        agentProcessId: workSession.workspaceId
-          ? undefined
-          : workSession.agentProcessId,
-        agentSessionKey: workSession.workspaceId
-          ? undefined
-          : workSession.agentSessionKey,
-        tmuxSessionName: workSession.workspaceId
-          ? undefined
-          : workSession.tmuxSessionName,
-        tmuxWindowName: workSession.workspaceId
-          ? undefined
-          : workSession.tmuxWindowName,
-        tmuxPaneId: workSession.workspaceId
-          ? undefined
-          : workSession.tmuxPaneId,
+        agentProcessId: workSession.agentProcessId,
+        agentSessionKey: workSession.agentSessionKey,
+        tmuxSessionName: workSession.tmuxSessionName,
+        tmuxWindowName: workSession.tmuxWindowName,
+        tmuxPaneId: workSession.tmuxPaneId,
         terminalUrl: undefined,
         terminalToken: undefined,
         terminalLocalPort: undefined,
@@ -760,46 +751,12 @@ export const reconnectLiveActivity = mutation({
         q.eq('liveActivityId', args.liveActivityId),
       )
       .first();
-    if (!delegatedRun) {
-      throw new ConvexError('DELEGATED_RUN_NOT_FOUND');
+    if (delegatedRun) {
+      await ctx.db.patch('delegatedRuns', delegatedRun._id, {
+        launchStatus: 'running',
+        endedAt: undefined,
+      });
     }
-
-    const issue = await ctx.db.get('issues', activity.issueId);
-    if (!issue) {
-      throw new ConvexError('ISSUE_NOT_FOUND');
-    }
-
-    const workspace = await ctx.db.get(
-      'deviceWorkspaces',
-      delegatedRun.workspaceId,
-    );
-    if (!workspace || workspace.deviceId !== activity.deviceId) {
-      throw new ConvexError('WORKSPACE_NOT_FOUND');
-    }
-    if (workspace.launchPolicy !== 'allow_delegated') {
-      throw new ConvexError('WORKSPACE_LAUNCH_NOT_ALLOWED');
-    }
-
-    await ctx.db.patch('delegatedRuns', delegatedRun._id, {
-      launchStatus: 'pending',
-      tmuxSessionName: undefined,
-      tmuxWindowName: undefined,
-      tmuxPaneId: undefined,
-      launchCommand: undefined,
-      launchedAt: undefined,
-      endedAt: undefined,
-    });
-
-    await enqueueDelegatedLaunchCommand(ctx, {
-      issue,
-      deviceId: activity.deviceId,
-      workspace,
-      delegatedRunId: delegatedRun._id,
-      liveActivityId: args.liveActivityId,
-      senderUserId: userId,
-      provider: workSession.agentProvider,
-      createdAt: now,
-    });
   },
 });
 
