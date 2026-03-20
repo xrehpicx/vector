@@ -173,8 +173,8 @@ function LiveActivityPreviewFallback({
   const statusLabel = activity.status.replace(/_/g, ' ');
 
   return (
-    <div className='border-border/70 bg-muted/20 mt-2 overflow-hidden rounded-md border'>
-      <div className='flex items-center gap-2 px-2.5 py-2'>
+    <div className='-mx-3 mt-2 overflow-hidden'>
+      <div className='border-border/60 bg-muted/20 flex items-center gap-2 border-y px-3 py-2'>
         <span
           className={cn(
             'size-1.5 shrink-0 rounded-full',
@@ -280,8 +280,8 @@ export function LiveActivityPreview({
         )}
       </div>
 
-      <div className='border-border/60 border-t bg-[#0b0b0d]'>
-        <div className='flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] text-zinc-400'>
+      <div className='bg-[#0b0b0d]'>
+        <div className='flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-zinc-400'>
           {workspaceName ? (
             <>
               <span className='min-w-0 truncate font-medium text-zinc-300'>
@@ -305,7 +305,7 @@ export function LiveActivityPreview({
               rounded={false}
             />
           ) : (
-            <div className='flex min-h-24 items-center px-2.5 pb-2 font-mono text-[10px] text-zinc-500'>
+            <div className='flex min-h-24 items-center px-3 pb-2 font-mono text-[10px] text-zinc-500'>
               Terminal preview will appear here once the session writes output.
             </div>
           )}
