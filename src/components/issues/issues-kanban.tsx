@@ -238,6 +238,7 @@ export function IssuesKanban({
           assignments: [assignment],
           updatedAt: row.updatedAt ?? 0,
           linkedPrs: row.linkedPrs ?? [],
+          activeLiveActivities: row.activeLiveActivities,
         });
       }
     }

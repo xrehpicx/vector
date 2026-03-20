@@ -2,6 +2,11 @@
 
 import { cn } from '@/lib/utils';
 import { Activity, Cpu, Terminal } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 type LiveActivitySummary = {
   _id: string;
@@ -39,7 +44,7 @@ function providerLabel(provider: string) {
 
 /**
  * Compact inline indicator for issue rows (list/timeline).
- * Shows a pulsing dot + provider icon when an agent/shell is active.
+ * Shows a pulsing dot + provider icon. Click to see details in a popover.
  */
 export function LiveActivityBadge({
   activities,
@@ -55,27 +60,78 @@ export function LiveActivityBadge({
     primary.status === 'active' || primary.status === 'waiting_for_input';
 
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium',
-        isActive
-          ? 'bg-green-500/10 text-green-700 dark:text-green-400'
-          : 'bg-muted text-muted-foreground',
-        className,
-      )}
-      title={`${providerLabel(primary.provider)} ${primary.status.replace(/_/g, ' ')}${activities.length > 1 ? ` (+${activities.length - 1} more)` : ''}`}
-    >
-      <span
-        className={cn(
-          'size-1.5 rounded-full',
-          isActive ? 'animate-pulse bg-green-500' : 'bg-muted-foreground',
-        )}
-      />
-      <ProviderIcon provider={primary.provider} className='size-3' />
-      {activities.length > 1 && (
-        <span className='text-[9px]'>+{activities.length - 1}</span>
-      )}
-    </span>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type='button'
+          onClick={e => e.stopPropagation()}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium transition-opacity hover:opacity-80',
+            isActive
+              ? 'bg-green-500/10 text-green-700 dark:text-green-400'
+              : 'bg-muted text-muted-foreground',
+            className,
+          )}
+        >
+          <span
+            className={cn(
+              'size-1.5 rounded-full',
+              isActive ? 'animate-pulse bg-green-500' : 'bg-muted-foreground',
+            )}
+          />
+          <ProviderIcon provider={primary.provider} className='size-3' />
+          {activities.length > 1 && (
+            <span className='text-[9px]'>+{activities.length - 1}</span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align='start'
+        className='w-64 p-0'
+        onClick={e => e.stopPropagation()}
+      >
+        <div className='px-3 py-2'>
+          <div className='text-xs font-medium'>
+            {activities.length === 1
+              ? 'Active work session'
+              : `${activities.length} active sessions`}
+          </div>
+        </div>
+        <div className='border-t px-2 py-1.5'>
+          {activities.map(activity => {
+            const active =
+              activity.status === 'active' ||
+              activity.status === 'waiting_for_input';
+            const label = providerLabel(activity.provider);
+            const statusLabel = activity.status.replace(/_/g, ' ');
+
+            return (
+              <div
+                key={activity._id}
+                className='flex items-center gap-2 rounded-md px-1.5 py-1.5'
+              >
+                <span
+                  className={cn(
+                    'size-1.5 shrink-0 rounded-full',
+                    active
+                      ? 'animate-pulse bg-green-500'
+                      : 'bg-muted-foreground',
+                  )}
+                />
+                <ProviderIcon
+                  provider={activity.provider}
+                  className='text-muted-foreground size-3.5 shrink-0'
+                />
+                <span className='text-sm font-medium'>{label}</span>
+                <span className='text-muted-foreground text-xs capitalize'>
+                  {statusLabel}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
