@@ -28,6 +28,7 @@ import {
   Maximize2,
   Minimize2,
   Monitor,
+  RefreshCw,
   Share2,
   Unlink,
   UserRoundPlus,
@@ -128,8 +129,12 @@ export function LiveActivityCard({
   const [fullscreen, setFullscreen] = useState(false);
   const [markingDone, setMarkingDone] = useState(false);
   const [detaching, setDetaching] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const updateStatus = useMutation(
     api.agentBridge.mutations.updateLiveActivityStatus,
+  );
+  const reconnectMutation = useMutation(
+    api.agentBridge.mutations.reconnectLiveActivity,
   );
   const changeWorkflowState = useMutation(
     api.issues.mutations.changeWorkflowState,
@@ -157,6 +162,9 @@ export function LiveActivityCard({
   const isOwner = currentUser?._id === activity.ownerUserId;
   const canInteractSession = activity.canInteract ?? isOwner;
   const canManageSession = activity.canManageSession ?? isOwner;
+  const isReconnectable =
+    (activity.status === 'disconnected' || activity.status === 'canceled') &&
+    isOwner;
   const workSession = activity.workSession;
   const workspaceLabel =
     workSession?.repoRoot ??
@@ -211,6 +219,19 @@ export function LiveActivityCard({
       toast.error('Failed to mark issue as done');
     } finally {
       setMarkingDone(false);
+    }
+  };
+
+  const handleReconnect = async () => {
+    if (reconnecting) return;
+    setReconnecting(true);
+    try {
+      await reconnectMutation({ liveActivityId: activity._id });
+      toast.success('Session reconnected');
+    } catch {
+      toast.error('Failed to reconnect session');
+    } finally {
+      setReconnecting(false);
     }
   };
 
@@ -346,14 +367,28 @@ export function LiveActivityCard({
         </div>
       )}
 
-      {/* Terminal status + mark done for completed/failed sessions */}
+      {/* Terminal status + actions for ended sessions */}
       {expanded && isTerminal && !fullscreen && (
         <div className='mt-2 space-y-2'>
           <div className='text-muted-foreground flex items-center gap-3 text-xs'>
             <div className='bg-border h-px flex-1' />
-            <span>Session {activity.status}</span>
+            <span>Session {activity.status.replace(/_/g, ' ')}</span>
             <div className='bg-border h-px flex-1' />
           </div>
+          {isReconnectable && (
+            <Button
+              variant='outline'
+              size='sm'
+              className='h-7 w-full gap-1.5 text-xs'
+              onClick={() => void handleReconnect()}
+              disabled={reconnecting}
+            >
+              <RefreshCw
+                className={cn('size-3.5', reconnecting && 'animate-spin')}
+              />
+              {reconnecting ? 'Reconnecting...' : 'Reconnect session'}
+            </Button>
+          )}
           {doneState &&
             (activity.status === 'completed' ||
               activity.status === 'failed') && (

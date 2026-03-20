@@ -657,6 +657,47 @@ export const attachLiveActivity = mutation({
   },
 });
 
+/** Reconnect a disconnected/canceled live activity back to active. */
+export const reconnectLiveActivity = mutation({
+  args: {
+    liveActivityId: v.id('issueLiveActivities'),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const activity = await ctx.db.get(
+      'issueLiveActivities',
+      args.liveActivityId,
+    );
+    if (!activity || activity.ownerUserId !== userId) {
+      throw new ConvexError('LIVE_ACTIVITY_NOT_FOUND');
+    }
+
+    if (!['disconnected', 'canceled'].includes(activity.status)) {
+      throw new ConvexError('ACTIVITY_NOT_RECONNECTABLE');
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch('issueLiveActivities', args.liveActivityId, {
+      status: 'active',
+      lastEventAt: now,
+      endedAt: undefined,
+    });
+
+    if (activity.workSessionId) {
+      await ctx.db.patch('workSessions', activity.workSessionId, {
+        status: 'active',
+        lastEventAt: now,
+        endedAt: undefined,
+        terminalUrl: undefined,
+        terminalToken: undefined,
+        terminalLocalPort: undefined,
+        terminalViewerActive: undefined,
+      });
+    }
+  },
+});
+
 /** Update a live activity's status. */
 export const updateLiveActivityStatus = mutation({
   args: {
