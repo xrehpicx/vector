@@ -286,7 +286,7 @@ function GitHubConnectionSection() {
 
   useEffect(() => {
     const githubStatus = searchParams.get('github');
-    if (githubConnection === undefined) {
+    if (githubConnection === undefined || githubConnection === null) {
       return;
     }
 
