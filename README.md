@@ -48,6 +48,8 @@ The goal is not to clone every Linear feature. The goal is to build an opinionat
 - Multi-tenant organizations
 - Projects, issues, teams, and role-based permissions
 - Kanban and table views for issue tracking
+- Saved views with table, kanban, and timeline layouts
+- Public views that can power a shareable roadmap surface
 - Issue-linked work sessions with attach, delegate, and shared terminal flows
 - Rich document editor with markdown, mentions, and slash commands
 - Real-time data updates with Convex
@@ -58,6 +60,8 @@ The goal is not to clone every Linear feature. The goal is to build an opinionat
 ## What You Get
 
 - A focused issue tracker with table and kanban views
+- Saved views for teams, projects, and custom slices of work
+- Public roadmap publishing from a public saved view
 - Work sessions that let you manage the issue and do the work in the same place
 - Projects, teams, and org-level workflows in one app
 - Rich collaborative docs with mentions and slash commands
@@ -77,6 +81,8 @@ Vector’s core workspace entities are:
 - Views: saved issue configurations that define filters, layout, grouping, and sharing behavior.
 
 For the fuller explanation of how these entities relate and what each one is for, see [docs/product/04-entities.md](docs/product/04-entities.md).
+
+Views are also how Vector exposes a public roadmap: make a saved view public, then select it as the organization's public landing view to publish that slice of work at your public org URL.
 
 ## Screenshots
 

@@ -67,9 +67,10 @@ Basic functionality:
 - table, kanban, and timeline layouts
 - private, organization, or public visibility
 - shared/public landing surfaces for an organization
+- public roadmap publishing by promoting a public view to the org landing page
 - reusable links into the same issue data from different perspectives
 
-Use views when people need a stable operational lens on the issue set without duplicating data.
+Use views when people need a stable operational lens on the issue set without duplicating data. Public views can also be used as outward-facing roadmap or status surfaces for customers, partners, or stakeholders.
 
 ## How The Entities Work Together
 
