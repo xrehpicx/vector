@@ -68,6 +68,8 @@ export function WorkSessionTerminal({
   isTerminal,
   canInteract: canInteractProp,
   fullscreen,
+  autoFocus = true,
+  heightClassName,
 }: {
   snapshot: string;
   terminalUrl?: string;
@@ -77,6 +79,8 @@ export function WorkSessionTerminal({
   isTerminal?: boolean;
   canInteract?: boolean;
   fullscreen?: boolean;
+  autoFocus?: boolean;
+  heightClassName?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -124,7 +128,9 @@ export function WorkSessionTerminal({
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     fitAddon.fit();
-    terminal.focus();
+    if (autoFocus) {
+      terminal.focus();
+    }
 
     // Forward keystrokes to WebSocket (only if user has controller access)
     terminal.onData(data => {
@@ -218,7 +224,9 @@ export function WorkSessionTerminal({
         connectedRef.current = true;
         setConnectionStatus('connected');
         terminal.clear();
-        terminal.focus();
+        if (autoFocus) {
+          terminal.focus();
+        }
 
         // Only controllers can resize the pane
         if (canInteract) {
@@ -281,7 +289,9 @@ export function WorkSessionTerminal({
         connectedRef.current = true;
         setConnectionStatus('connected');
         terminal.clear();
-        terminal.focus();
+        if (autoFocus) {
+          terminal.focus();
+        }
         const dims = fitAddon?.proposeDimensions();
         if (dims) {
           localWs.send(
@@ -319,7 +329,7 @@ export function WorkSessionTerminal({
       wsRef.current = null;
       connectedRef.current = false;
     };
-  }, [canInteract, terminalUrl, terminalToken, terminalLocalPort]);
+  }, [autoFocus, canInteract, terminalUrl, terminalToken, terminalLocalPort]);
 
   // Render snapshot fallback when not connected via WebSocket
   useEffect(() => {
@@ -351,7 +361,7 @@ export function WorkSessionTerminal({
         ref={containerRef}
         className={cn(
           'vector-terminal w-full',
-          fullscreen ? 'h-full' : 'h-[350px]',
+          fullscreen ? 'h-full' : (heightClassName ?? 'h-[350px]'),
         )}
         style={{ backgroundColor: terminalTheme.background }}
       />

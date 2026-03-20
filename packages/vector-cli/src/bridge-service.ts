@@ -53,6 +53,7 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 const COMMAND_POLL_INTERVAL_MS = 5_000;
 const LIVE_ACTIVITY_SYNC_INTERVAL_MS = 5_000;
 const PROCESS_DISCOVERY_INTERVAL_MS = 60_000;
+const TERMINAL_SNAPSHOT_REFRESH_INTERVAL_MS = 180_000;
 
 export interface BridgeConfig {
   deviceId: string;
@@ -142,6 +143,19 @@ export class BridgeService {
   private config: BridgeConfig;
   private timers: ReturnType<typeof setInterval>[] = [];
   private terminalPeer: TerminalPeerManager | null = null;
+  private deviceLiveActivities: Array<{
+    _id: Id<'issueLiveActivities'>;
+    title?: string;
+    workSessionId?: Id<'workSessions'>;
+    workspacePath?: string;
+    tmuxPaneId?: string;
+    cwd?: string;
+    repoRoot?: string;
+    branch?: string;
+    agentProvider?: AgentProvider;
+    agentProcessId?: Id<'agentProcesses'>;
+    agentSessionKey?: string;
+  }> = [];
 
   constructor(config: BridgeConfig) {
     this.config = config;
@@ -261,6 +275,7 @@ export class BridgeService {
           deviceSecret: this.config.deviceSecret,
         },
       );
+      this.deviceLiveActivities = activities;
       writeLiveActivitiesCache(activities);
 
       // Watch active sessions for interactive terminal viewers
@@ -480,6 +495,7 @@ export class BridgeService {
     await this.heartbeat();
     await this.reportProcesses();
     await this.refreshLiveActivities();
+    await this.syncWorkSessionTerminals(this.deviceLiveActivities);
     console.log(`[${ts()}] Service running. Ctrl+C to stop.\n`);
 
     // Loops
@@ -513,6 +529,17 @@ export class BridgeService {
           console.error(`[${ts()}] Discovery error:`, e.message),
         );
       }, PROCESS_DISCOVERY_INTERVAL_MS),
+    );
+
+    this.timers.push(
+      setInterval(() => {
+        this.syncWorkSessionTerminals(this.deviceLiveActivities).catch(e =>
+          console.error(
+            `[${ts()}] Terminal snapshot refresh error:`,
+            e.message,
+          ),
+        );
+      }, TERMINAL_SNAPSHOT_REFRESH_INTERVAL_MS),
     );
 
     // Graceful shutdown

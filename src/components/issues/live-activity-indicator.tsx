@@ -6,6 +6,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Activity, Cpu, Monitor, Terminal } from 'lucide-react';
+import { WorkSessionTerminal } from '@/components/live-activity/work-session-terminal';
 import {
   Popover,
   PopoverContent,
@@ -48,14 +49,6 @@ function providerLabel(provider: string) {
 
 function isSessionActive(status: string) {
   return status === 'active' || status === 'waiting_for_input';
-}
-
-function stripAnsi(value: string) {
-  return value.replace(/\u001B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
-}
-
-function terminalPreviewLines(snapshot: string) {
-  return stripAnsi(snapshot).split(/\r?\n/).slice(-6).join('\n').trim();
 }
 
 /**
@@ -213,7 +206,7 @@ function LiveActivityPreviewFallback({
 
 /**
  * Kanban card live activity preview.
- * Shows a taller terminal snapshot for the primary active session.
+ * Shows a taller live terminal preview for the primary active session.
  */
 export function LiveActivityPreview({
   activities,
@@ -259,9 +252,9 @@ export function LiveActivityPreview({
   const timeAgo = formatDistanceToNow(activity.lastEventAt, {
     addSuffix: true,
   });
-  const preview = terminalPreviewLines(
-    activity.workSession?.terminalSnapshot ?? '',
-  );
+  const workSession = activity.workSession;
+  const terminalSnapshot = workSession?.terminalSnapshot?.trim() ?? '';
+  const showTerminal = terminalSnapshot.length > 0;
 
   return (
     <div className='border-border/70 bg-muted/20 mt-2 overflow-hidden rounded-md border'>
@@ -303,14 +296,13 @@ export function LiveActivityPreview({
           <span className='shrink-0'>{timeAgo}</span>
         </div>
 
-        <div className='relative min-h-24 px-2.5 pb-2'>
-          {preview ? (
-            <>
-              <pre className='overflow-hidden font-mono text-[10px] leading-4 break-all whitespace-pre-wrap text-zinc-200'>
-                {preview}
-              </pre>
-              <div className='pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#0b0b0d] to-transparent' />
-            </>
+        <div className='px-2.5 pb-2'>
+          {showTerminal ? (
+            <WorkSessionTerminal
+              snapshot={terminalSnapshot}
+              autoFocus={false}
+              heightClassName='h-36'
+            />
           ) : (
             <div className='flex min-h-24 items-center font-mono text-[10px] text-zinc-500'>
               Terminal preview will appear here once the session writes output.
