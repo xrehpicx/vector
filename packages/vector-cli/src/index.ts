@@ -3440,8 +3440,7 @@ async function checkForUpdate(): Promise<{
     const latest = tags.latest?.includes('beta')
       ? (tags.beta ?? tags.latest)
       : (tags.latest ?? tags.beta ?? '');
-    const pkg = await import('../package.json', { with: { type: 'json' } });
-    const current = (pkg.default?.version ?? pkg.version ?? '0.0.0') as string;
+    const current = readPackageVersionSync();
     return {
       current,
       latest,
