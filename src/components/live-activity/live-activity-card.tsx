@@ -184,8 +184,10 @@ export function LiveActivityCard({
     : 'Shell';
 
   const terminalSnapshot = workSession?.terminalSnapshot?.trim() ?? '';
-  const showTerminal =
-    terminalSnapshot.length > 0 || Boolean(workSession?.tmuxPaneId);
+  const hasTmux = Boolean(
+    workSession?.tmuxSessionName || workSession?.tmuxPaneId,
+  );
+  const showTerminal = terminalSnapshot.length > 0 || hasTmux;
 
   const toggleExpanded = () => {
     setExpanded(current => !current);
@@ -353,17 +355,13 @@ export function LiveActivityCard({
         </div>
       )}
 
-      {expanded && !showTerminal && !isTerminal && (
-        <div className='mt-1 flex items-center justify-center gap-2 rounded-lg border py-6'>
-          <span className='size-1.5 animate-pulse rounded-full bg-yellow-500' />
-          <span className='text-muted-foreground text-sm'>
-            Setting up terminal session...
-          </span>
-        </div>
-      )}
-      {expanded && !showTerminal && isTerminal && (
+      {expanded && !showTerminal && (
         <div className='text-muted-foreground mt-1 rounded-lg border py-6 text-center text-sm'>
-          No terminal output available.
+          {isTerminal
+            ? 'No terminal output available.'
+            : hasTmux
+              ? 'Setting up terminal session...'
+              : 'This session does not have a terminal pane.'}
         </div>
       )}
 

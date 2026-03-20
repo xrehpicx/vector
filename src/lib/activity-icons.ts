@@ -7,6 +7,7 @@ import {
   GitBranch,
   MessageSquare,
   Plus,
+  Terminal,
   Type,
   Users,
 } from 'lucide-react';
@@ -52,6 +53,12 @@ export function getActivityIcon(eventType: string): {
     case 'issue_github_artifact_suppressed':
     case 'issue_github_artifact_status_changed':
       return { Icon: GitBranch, color: 'text-muted-foreground' };
+    case 'issue_live_activity_started':
+    case 'issue_live_activity_delegated':
+      return { Icon: Terminal, color: 'text-green-500' };
+    case 'issue_live_activity_completed':
+    case 'issue_live_activity_status_changed':
+      return { Icon: Terminal, color: 'text-muted-foreground' };
     default:
       return { Icon: FileText, color: 'text-muted-foreground' };
   }
@@ -98,6 +105,14 @@ export function getActivityLabel(eventType: string | null | undefined): string {
       return 'PR suppressed';
     case 'issue_github_artifact_status_changed':
       return 'PR status changed';
+    case 'issue_live_activity_started':
+      return 'Work session started';
+    case 'issue_live_activity_delegated':
+      return 'Work session delegated';
+    case 'issue_live_activity_completed':
+      return 'Work session ended';
+    case 'issue_live_activity_status_changed':
+      return 'Work session updated';
     default:
       return 'Activity';
   }
