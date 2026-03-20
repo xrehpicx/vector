@@ -48,6 +48,7 @@ import { FunctionReturnType } from 'convex/server';
 // Permission system
 import { PermissionAware } from '@/components/ui/permission-aware';
 import { PERMISSIONS } from '@/convex/_shared/permissions';
+import { LiveActivityBadge } from '@/components/issues/live-activity-indicator';
 
 // Infer issue row type directly from tRPC router output to stay in sync with DB.
 export type IssueRowData = Prettify<
@@ -426,13 +427,17 @@ function IssueTableRow({
         </div>
       )}
 
-      <div className='min-w-0 flex-1'>
+      <div className='flex min-w-0 flex-1 items-center gap-1.5'>
         <Link
           href={`/${orgSlug}/issues/${issue.key}`}
-          className='hover:text-primary block truncate text-sm font-medium transition-colors'
+          className='hover:text-primary truncate text-sm font-medium transition-colors'
         >
           {issue.title}
         </Link>
+        {issue.activeLiveActivities &&
+          issue.activeLiveActivities.length > 0 && (
+            <LiveActivityBadge activities={issue.activeLiveActivities} />
+          )}
       </div>
 
       <div className='hidden md:contents'>

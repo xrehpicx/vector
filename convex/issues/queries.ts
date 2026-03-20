@@ -838,6 +838,7 @@ export async function flattenIssueRows(
     assigneeMap,
     stateMap,
     latestActivityResults,
+    liveActivitiesPerIssue,
   ] = await Promise.all([
     loadDocMap(ctx, 'projects', projectIds),
     loadDocMap(ctx, 'teams', teamIds),
@@ -859,12 +860,33 @@ export async function flattenIssueRows(
               .first(),
       ),
     ),
-  ]);
+    // Fetch active live activities per issue
+    Promise.all(
+      issues.map(issue =>
+        ctx.db
+          .query('issueLiveActivities')
+          .withIndex('by_issue', q => q.eq('issueId', issue._id))
+          .collect()
+          .then(activities =>
+            activities
+              .filter(a => !a.endedAt)
+              .map(a => ({
+                _id: a._id,
+                provider: a.provider,
+                status: a.status,
+              })),
+          ),
+      ),
+    ),
+  ] as const);
   const latestActivityByIssue = new Map(
     issues.flatMap((issue, i) => {
       const event = latestActivityResults[i];
       return event ? [[issue._id, event] as const] : [];
     }),
+  );
+  const liveActivitiesByIssue = new Map(
+    issues.map((issue, i) => [issue._id, liveActivitiesPerIssue[i]] as const),
   );
 
   return issues.flatMap(issue => {
@@ -930,6 +952,8 @@ export async function flattenIssueRows(
     const linkedPrs = prLinksByIssue.get(issue._id) ?? [];
     const latestEvent = latestActivityByIssue.get(issue._id);
 
+    const activeLiveActivities = liveActivitiesByIssue.get(issue._id) ?? [];
+
     return hydratedAssignments.map(assignment => ({
       ...issue,
       id: issue._id,
@@ -950,6 +974,7 @@ export async function flattenIssueRows(
       reporterName: reporter?.name,
       parentIssueKey: parentIssue?.key,
       linkedPrs,
+      activeLiveActivities,
       ...assignment,
     }));
   });

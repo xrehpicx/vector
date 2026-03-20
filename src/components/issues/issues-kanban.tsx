@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DynamicIcon, getDynamicIcon } from '@/lib/dynamic-icons';
+import { LiveActivityPreview } from '@/components/issues/live-activity-indicator';
 import { UserAvatar } from '@/components/user-avatar';
 import { formatDateHuman } from '@/lib/date';
 import {
@@ -112,6 +113,11 @@ interface GroupedIssue {
   }>;
   updatedAt: number;
   linkedPrs: Array<{ number: number; state: string; url: string }>;
+  activeLiveActivities?: Array<{
+    _id: string;
+    provider: string;
+    status: string;
+  }>;
 }
 
 /** Generic column definition for any groupBy field */
@@ -1091,6 +1097,11 @@ function KanbanCardContent({
           {issue.title}
         </p>
       </Link>
+
+      {/* Live activity preview */}
+      {issue.activeLiveActivities && issue.activeLiveActivities.length > 0 && (
+        <LiveActivityPreview activities={issue.activeLiveActivities} />
+      )}
 
       {/* Bottom row: assignees + date */}
       <div className='mt-2 flex min-w-0 flex-wrap items-center justify-between gap-y-1'>
