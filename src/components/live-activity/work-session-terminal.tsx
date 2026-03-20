@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import { useTheme } from 'next-themes';
@@ -279,6 +279,7 @@ export function WorkSessionTerminal({
         attachWs(localWs);
         // Re-trigger onopen since we just attached
         connectedRef.current = true;
+        setConnectionStatus('connected');
         terminal.clear();
         terminal.focus();
         const dims = fitAddon?.proposeDimensions();
@@ -318,7 +319,7 @@ export function WorkSessionTerminal({
       wsRef.current = null;
       connectedRef.current = false;
     };
-  }, [terminalUrl, terminalToken, terminalLocalPort]);
+  }, [canInteract, terminalUrl, terminalToken, terminalLocalPort]);
 
   // Render snapshot fallback when not connected via WebSocket
   useEffect(() => {

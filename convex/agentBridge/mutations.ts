@@ -509,6 +509,40 @@ async function createWorkSessionForLiveActivity(
   });
 }
 
+async function enqueueDelegatedLaunchCommand(
+  ctx: MutationCtx,
+  args: {
+    issue: Doc<'issues'>;
+    deviceId: Id<'agentDevices'>;
+    workspace: Doc<'deviceWorkspaces'>;
+    delegatedRunId: Id<'delegatedRuns'>;
+    liveActivityId: Id<'issueLiveActivities'>;
+    senderUserId: Id<'users'>;
+    provider?: 'codex' | 'claude_code' | 'vector_cli';
+    createdAt?: number;
+  },
+) {
+  return ctx.db.insert('agentCommands', {
+    deviceId: args.deviceId,
+    liveActivityId: args.liveActivityId,
+    senderUserId: args.senderUserId,
+    kind: 'launch',
+    payload: {
+      issueId: args.issue._id,
+      issueKey: args.issue.key,
+      issueTitle: args.issue.title,
+      issueDescription: args.issue.description,
+      provider: args.provider,
+      workspacePath: args.workspace.path,
+      workspaceLabel: args.workspace.label,
+      delegatedRunId: args.delegatedRunId,
+      liveActivityId: args.liveActivityId,
+    },
+    status: 'pending',
+    createdAt: args.createdAt ?? Date.now(),
+  });
+}
+
 /**
  * Auto-transition an issue to "in_progress" when a live activity starts,
  * but only if the issue is currently in a pre-progress state (backlog/todo).
@@ -678,23 +712,94 @@ export const reconnectLiveActivity = mutation({
 
     const now = Date.now();
 
+    const workSession = activity.workSessionId
+      ? await ctx.db.get('workSessions', activity.workSessionId)
+      : null;
+
     await ctx.db.patch('issueLiveActivities', args.liveActivityId, {
       status: 'active',
+      processId: workSession?.workspaceId ? undefined : activity.processId,
       lastEventAt: now,
       endedAt: undefined,
     });
 
-    if (activity.workSessionId) {
-      await ctx.db.patch('workSessions', activity.workSessionId, {
+    if (workSession) {
+      await ctx.db.patch('workSessions', workSession._id, {
         status: 'active',
         lastEventAt: now,
         endedAt: undefined,
+        agentProcessId: workSession.workspaceId
+          ? undefined
+          : workSession.agentProcessId,
+        agentSessionKey: workSession.workspaceId
+          ? undefined
+          : workSession.agentSessionKey,
+        tmuxSessionName: workSession.workspaceId
+          ? undefined
+          : workSession.tmuxSessionName,
+        tmuxWindowName: workSession.workspaceId
+          ? undefined
+          : workSession.tmuxWindowName,
+        tmuxPaneId: workSession.workspaceId
+          ? undefined
+          : workSession.tmuxPaneId,
         terminalUrl: undefined,
         terminalToken: undefined,
         terminalLocalPort: undefined,
         terminalViewerActive: undefined,
       });
     }
+
+    if (!workSession?.workspaceId) {
+      return;
+    }
+
+    const delegatedRun = await ctx.db
+      .query('delegatedRuns')
+      .withIndex('by_live_activity', q =>
+        q.eq('liveActivityId', args.liveActivityId),
+      )
+      .first();
+    if (!delegatedRun) {
+      throw new ConvexError('DELEGATED_RUN_NOT_FOUND');
+    }
+
+    const issue = await ctx.db.get('issues', activity.issueId);
+    if (!issue) {
+      throw new ConvexError('ISSUE_NOT_FOUND');
+    }
+
+    const workspace = await ctx.db.get(
+      'deviceWorkspaces',
+      delegatedRun.workspaceId,
+    );
+    if (!workspace || workspace.deviceId !== activity.deviceId) {
+      throw new ConvexError('WORKSPACE_NOT_FOUND');
+    }
+    if (workspace.launchPolicy !== 'allow_delegated') {
+      throw new ConvexError('WORKSPACE_LAUNCH_NOT_ALLOWED');
+    }
+
+    await ctx.db.patch('delegatedRuns', delegatedRun._id, {
+      launchStatus: 'pending',
+      tmuxSessionName: undefined,
+      tmuxWindowName: undefined,
+      tmuxPaneId: undefined,
+      launchCommand: undefined,
+      launchedAt: undefined,
+      endedAt: undefined,
+    });
+
+    await enqueueDelegatedLaunchCommand(ctx, {
+      issue,
+      deviceId: activity.deviceId,
+      workspace,
+      delegatedRunId: delegatedRun._id,
+      liveActivityId: args.liveActivityId,
+      senderUserId: userId,
+      provider: workSession.agentProvider,
+      createdAt: now,
+    });
   },
 });
 
@@ -1300,23 +1405,14 @@ export const delegateIssue = mutation({
     });
 
     // Enqueue launch command to the device
-    await ctx.db.insert('agentCommands', {
+    await enqueueDelegatedLaunchCommand(ctx, {
+      issue,
       deviceId: args.deviceId,
+      workspace,
+      delegatedRunId: runId,
       liveActivityId,
       senderUserId: userId,
-      kind: 'launch',
-      payload: {
-        issueId: args.issueId,
-        issueKey: issue.key,
-        issueTitle: issue.title,
-        issueDescription: issue.description,
-        provider: args.provider,
-        workspacePath: workspace.path,
-        workspaceLabel: workspace.label,
-        delegatedRunId: runId,
-        liveActivityId,
-      },
-      status: 'pending',
+      provider: args.provider,
       createdAt: now,
     });
 
@@ -1489,7 +1585,6 @@ export const sendTerminalInput = mutation({
     data: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
     const workSession = await ctx.db.get('workSessions', args.workSessionId);
     if (!workSession) throw new ConvexError('WORK_SESSION_NOT_FOUND');
 
