@@ -264,14 +264,47 @@ export class BridgeService {
       writeLiveActivitiesCache(activities);
 
       // Watch active sessions for interactive terminal viewers
-      if (this.terminalPeer) {
-        for (const activity of activities) {
-          if (activity.workSessionId && activity.tmuxSessionName) {
-            this.terminalPeer.watchSession(
-              activity.workSessionId,
-              activity.tmuxSessionName,
-              activity.tmuxPaneId,
-            );
+      // and auto-update titles from tmux pane state
+      for (const activity of activities) {
+        if (activity.workSessionId && activity.tmuxSessionName) {
+          this.terminalPeer?.watchSession(
+            activity.workSessionId,
+            activity.tmuxSessionName,
+            activity.tmuxPaneId,
+          );
+        }
+
+        // Auto-generate title from tmux pane
+        if (activity.workSessionId && activity.tmuxPaneId) {
+          try {
+            const paneTitle = execFileSync(
+              'tmux',
+              [
+                'display-message',
+                '-p',
+                '-t',
+                activity.tmuxPaneId,
+                '#{pane_title}',
+              ],
+              { encoding: 'utf-8', timeout: 3000 },
+            ).trim();
+            if (
+              paneTitle &&
+              paneTitle !== activity.workSessionTitle &&
+              !activity.titleLockedByUser
+            ) {
+              void this.client.mutation(
+                api.agentBridge.bridgePublic.updateWorkSessionAutoTitle,
+                {
+                  deviceId: this.config.deviceId as Id<'agentDevices'>,
+                  deviceSecret: this.config.deviceSecret,
+                  workSessionId: activity.workSessionId,
+                  title: paneTitle,
+                },
+              );
+            }
+          } catch {
+            // tmux pane might not exist
           }
         }
       }

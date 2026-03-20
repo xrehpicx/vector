@@ -1183,6 +1183,7 @@ export default defineSchema({
     terminalCols: v.optional(v.number()),
     terminalRows: v.optional(v.number()),
     terminalViewerActive: v.optional(v.boolean()),
+    titleLockedByUser: v.optional(v.boolean()),
     terminalUrl: v.optional(v.string()),
     terminalToken: v.optional(v.string()),
     terminalLocalPort: v.optional(v.number()),

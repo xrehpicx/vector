@@ -287,6 +287,8 @@ export const getDeviceLiveActivities = query({
             terminalSnapshot: workSession?.terminalSnapshot,
             tmuxPaneId: workSession?.tmuxPaneId,
             tmuxSessionName: workSession?.tmuxSessionName,
+            workSessionTitle: workSession?.title,
+            titleLockedByUser: workSession?.titleLockedByUser ?? false,
             agentProvider: workSession?.agentProvider,
             agentProcessId: workSession?.agentProcessId,
             agentSessionKey: workSession?.agentSessionKey,
@@ -623,6 +625,32 @@ export const updateWorkSessionTerminal = mutation({
         agentSessionKey: args.agentSessionKey,
       }),
     });
+  },
+});
+
+/** Update the auto-generated title for a work session (bridge only, skips user-locked titles). */
+export const updateWorkSessionAutoTitle = mutation({
+  args: {
+    deviceId: v.id('agentDevices'),
+    deviceSecret: v.string(),
+    workSessionId: v.id('workSessions'),
+    title: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await validateDeviceSecret(ctx, args.deviceId, args.deviceSecret);
+
+    const ws = await ctx.db.get('workSessions', args.workSessionId);
+    if (!ws || ws.deviceId !== args.deviceId) return;
+
+    // Don't overwrite user-set titles
+    if (ws.titleLockedByUser) return;
+
+    // Only update if the title actually changed
+    if (ws.title !== args.title) {
+      await ctx.db.patch('workSessions', args.workSessionId, {
+        title: args.title,
+      });
+    }
   },
 });
 

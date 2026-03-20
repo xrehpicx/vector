@@ -496,10 +496,8 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
         guard let tags = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
           return
         }
-        // Pick the newest: if 'latest' is a beta, prefer the 'beta' tag
-        let latestTag = tags["latest"] ?? ""
-        let betaTag = tags["beta"] ?? ""
-        let latestVersion = latestTag.contains("beta") ? (betaTag.isEmpty ? latestTag : betaTag) : (latestTag.isEmpty ? betaTag : latestTag)
+        // Use the beta tag (where active builds go), fall back to latest
+        let latestVersion = tags["beta"] ?? tags["latest"] ?? ""
 
         // Get current version
         let versionTask = Process()

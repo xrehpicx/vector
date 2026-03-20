@@ -3436,10 +3436,8 @@ async function checkForUpdate(): Promise<{
       timeout: 10000,
     }).trim();
     const tags = JSON.parse(tagsRaw) as Record<string, string>;
-    // Prefer 'latest' if it's a real release, otherwise use 'beta'
-    const latest = tags.latest?.includes('beta')
-      ? (tags.beta ?? tags.latest)
-      : (tags.latest ?? tags.beta ?? '');
+    // Use the beta tag (where active builds go) — fall back to latest
+    const latest = tags.beta ?? tags.latest ?? '';
     const current = readPackageVersionSync();
     return {
       current,

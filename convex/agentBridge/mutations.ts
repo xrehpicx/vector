@@ -1453,6 +1453,33 @@ export const clearTerminalSignals = mutation({
   },
 });
 
+/** Set or clear a custom title for a work session. */
+export const setWorkSessionTitle = mutation({
+  args: {
+    workSessionId: v.id('workSessions'),
+    title: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuthUserId(ctx);
+    const ws = await ctx.db.get('workSessions', args.workSessionId);
+    if (!ws) throw new ConvexError('WORK_SESSION_NOT_FOUND');
+    await requireWorkSessionViewer(ctx, ws);
+
+    if (args.title) {
+      // User set a custom title — lock it
+      await ctx.db.patch('workSessions', args.workSessionId, {
+        title: args.title,
+        titleLockedByUser: true,
+      });
+    } else {
+      // User cleared the custom title — unlock for auto-generation
+      await ctx.db.patch('workSessions', args.workSessionId, {
+        titleLockedByUser: false,
+      });
+    }
+  },
+});
+
 // ── Interactive Terminal (Convex-relay) ─────────────────────────────────────
 
 /** Send terminal input (keystrokes) from the browser to the bridge via Convex. */
