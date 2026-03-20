@@ -1607,24 +1607,9 @@ func buildMetadataLine(
   workspaces: [DeviceWorkspaceSummary],
   workSessions: [WorkSessionSummary]
 ) -> String {
-  let userLabel = sessionInfo.email?.split(separator: "@").first.map(String.init)
-  let profileLabel: String? = {
-    guard profiles.count > 1 || activeProfile != "default" || defaultProfile != "default" else {
-      return nil
-    }
-    if activeProfile == defaultProfile {
-      return activeProfile
-    }
-    return "\(activeProfile) → \(defaultProfile)"
-  }()
-  let workspaceLabel = summarizeWorkspace(workspaces: workspaces, workSessions: workSessions)
-  let orgLabel = sessionInfo.appDomain.map { "\(sessionInfo.orgSlug) @ \($0)" } ?? sessionInfo.orgSlug
-  return [userLabel, profileLabel, config.displayName, workspaceLabel, orgLabel]
-    .compactMap { value in
-      guard let value, !value.isEmpty else { return nil }
-      return value
-    }
-    .joined(separator: " | ")
+  let deviceName = config.displayName
+  let orgLabel = sessionInfo.orgSlug
+  return "\(deviceName) · \(orgLabel)"
 }
 
 func summarizeWorkspace(

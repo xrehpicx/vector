@@ -3389,39 +3389,37 @@ bridgeCommand
 // CLI Update
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function detectInstallMethod(): {
+function detectInstallMethod(version: string): {
   method: 'volta' | 'npm' | 'pnpm' | 'yarn' | 'unknown';
   command: string[];
 } {
   const execPath = process.argv[1] ?? '';
+  const pkg = `@rehpic/vcli@${version}`;
 
   if (execPath.includes('.volta')) {
     return {
       method: 'volta',
-      command: ['volta', 'install', '@rehpic/vcli@latest'],
+      command: ['volta', 'install', pkg],
     };
   }
 
-  // Check if installed via pnpm
   if (execPath.includes('pnpm')) {
     return {
       method: 'pnpm',
-      command: ['pnpm', 'add', '-g', '@rehpic/vcli@latest'],
+      command: ['pnpm', 'add', '-g', pkg],
     };
   }
 
-  // Check if installed via yarn
   if (execPath.includes('yarn')) {
     return {
       method: 'yarn',
-      command: ['yarn', 'global', 'add', '@rehpic/vcli@latest'],
+      command: ['yarn', 'global', 'add', pkg],
     };
   }
 
-  // Default: npm
   return {
     method: 'npm',
-    command: ['npm', 'install', '-g', '@rehpic/vcli@latest'],
+    command: ['npm', 'install', '-g', pkg],
   };
 }
 
@@ -3432,16 +3430,22 @@ async function checkForUpdate(): Promise<{
 } | null> {
   try {
     const { execSync: exec } = await import('child_process');
-    const latest = exec('npm view @rehpic/vcli version', {
+    // Get all dist-tags and pick the newest version
+    const tagsRaw = exec('npm view @rehpic/vcli dist-tags --json', {
       encoding: 'utf-8',
       timeout: 10000,
     }).trim();
+    const tags = JSON.parse(tagsRaw) as Record<string, string>;
+    // Prefer 'latest' if it's a real release, otherwise use 'beta'
+    const latest = tags.latest?.includes('beta')
+      ? (tags.beta ?? tags.latest)
+      : (tags.latest ?? tags.beta ?? '');
     const pkg = await import('../package.json', { with: { type: 'json' } });
     const current = (pkg.default?.version ?? pkg.version ?? '0.0.0') as string;
     return {
       current,
       latest,
-      hasUpdate: latest !== current && !current.includes('beta'),
+      hasUpdate: Boolean(latest) && latest !== current,
     };
   } catch {
     return null;
@@ -3468,7 +3472,7 @@ program
     }
     s.stop(`Update available: ${updateInfo.current} → ${updateInfo.latest}`);
 
-    const install = detectInstallMethod();
+    const install = detectInstallMethod(updateInfo.latest);
     log.info(`Install method: ${install.method}`);
 
     // 2. Stop the bridge service
