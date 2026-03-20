@@ -1089,11 +1089,12 @@ function buildLaunchPrompt(
   workspacePath: string,
 ): string {
   return [
-    `You are working on Vector issue ${issueKey}: ${issueTitle}.`,
-    `The repository is already checked out at ${workspacePath}.`,
-    'Inspect the codebase, identify the relevant implementation area, and start the work.',
-    'In your first reply, summarize your plan and the first concrete step you are taking.',
-  ].join('\n\n');
+    `You are working on issue ${issueKey}: ${issueTitle}`,
+    `The repository is at ${workspacePath}.`,
+    'Do exactly and only what the issue describes — nothing more, nothing less.',
+    'If anything is unclear or ambiguous, ask clarifying questions before making changes.',
+    'Do not refactor, clean up, or "improve" code that is not part of the issue scope.',
+  ].join('\n');
 }
 
 function summarizeMessage(message: string | undefined): string | undefined {
