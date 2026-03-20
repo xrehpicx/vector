@@ -264,6 +264,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
   @Published private(set) var selectingProfileName: String?
   @Published private(set) var updateAvailable: String?
   @Published private(set) var isUpdating = false
+  @Published var autoUpdateEnabled = true
   private var lastUpdateCheck = Date.distantPast
 
   init(configDir: URL, cliCommand: String, cliArgs: [String]) {
@@ -509,9 +510,13 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
         DispatchQueue.main.async {
           if !latestVersion.isEmpty && !currentVersion.isEmpty
             && latestVersion != currentVersion
-            && !currentVersion.contains("beta")
           {
             self.updateAvailable = latestVersion
+            // Auto-update if enabled
+            if self.autoUpdateEnabled && !self.isUpdating {
+              self.log("auto-updating to \(latestVersion)")
+              self.updateCLI()
+            }
           } else {
             self.updateAvailable = nil
           }
@@ -652,9 +657,23 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
   private func updateStatusButton() {
     guard let button = statusItem.button else { return }
     button.title = ""
+
+    // Show update dot indicator
+    if updateAvailable != nil {
+      button.title = " \u{2022}" // bullet dot
+    }
+
     button.image = brandIcon ?? fallbackStatusIcon()
     button.image?.isTemplate = false
-    button.alphaValue = transition != nil && !blinkVisible ? 0.35 : 1.0
+
+    // Dim icon when bridge is not running (and not transitioning)
+    if transition != nil && !blinkVisible {
+      button.alphaValue = 0.35
+    } else if !snapshot.running && !snapshot.starting && transition == nil {
+      button.alphaValue = 0.5
+    } else {
+      button.alphaValue = 1.0
+    }
   }
 
   private func performIssueSearch(processId: String, query: String) {
@@ -817,21 +836,20 @@ struct TrayPopoverView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      VStack(alignment: .leading, spacing: 6) {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(controller.statusTitle())
-            .font(.system(size: 13, weight: .semibold))
-          Text(controller.metadataLine())
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-          Spacer(minLength: 0)
-          StatusChip(text: controller.statusBadgeLabel())
-        }
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Text(controller.statusTitle())
+          .font(.system(size: 13, weight: .semibold))
+        Text(controller.metadataLine())
+          .font(.system(size: 11, weight: .medium))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+        Spacer(minLength: 0)
 
-        HStack(spacing: 8) {
-          Menu {
+        // Settings menu
+        Menu {
+          // Profile section
+          Menu("Profile: \(currentProfile?.name ?? "None")") {
             if sortedProfiles.isEmpty {
               Text("No CLI profiles found")
             } else {
@@ -851,16 +869,10 @@ struct TrayPopoverView: View {
                 .disabled(profile.isDefault || controller.isSelecting(profileName: profile.name))
               }
             }
-          } label: {
-            CompactSelectorChip(
-              title: "Profile",
-              value: currentProfile?.name ?? "None",
-              detail: currentProfile?.hasSession == true ? "Signed in" : "No session"
-            )
           }
-          .menuStyle(.borderlessButton)
 
-          Menu {
+          // Workspace section
+          Menu("Workspace: \(currentWorkspace?.displayLabel ?? "None")") {
             if sortedWorkspaces.isEmpty {
               Text("No workspaces configured")
             } else {
@@ -884,15 +896,24 @@ struct TrayPopoverView: View {
                 .disabled(workspace.isDefault || controller.isSelecting(workspaceId: workspace.id))
               }
             }
-          } label: {
-            CompactSelectorChip(
-              title: "Workspace",
-              value: currentWorkspace?.displayLabel ?? "None",
-              detail: currentWorkspace?.policyLabel ?? "Configure"
-            )
           }
-          .menuStyle(.borderlessButton)
+
+          Divider()
+
+          // Auto-update toggle
+          Toggle("Auto-update CLI", isOn: Binding(
+            get: { controller.autoUpdateEnabled },
+            set: { controller.autoUpdateEnabled = $0 }
+          ))
+        } label: {
+          Image(systemName: "gearshape")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
         }
+        .menuStyle(.borderlessButton)
+        .frame(width: 20)
+
+        StatusChip(text: controller.statusBadgeLabel())
       }
 
       Divider()
