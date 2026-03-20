@@ -266,6 +266,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
   @Published private(set) var isUpdating = false
   @Published var autoUpdateEnabled = true
   private var lastUpdateCheck = Date.distantPast
+  private let launchTime = Date()
 
   init(configDir: URL, cliCommand: String, cliArgs: [String]) {
     self.configDir = configDir
@@ -512,8 +513,9 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
             && latestVersion != currentVersion
           {
             self.updateAvailable = latestVersion
-            // Auto-update if enabled
-            if self.autoUpdateEnabled && !self.isUpdating {
+            // Auto-update if enabled (but not within the first 5 minutes or while popover is open)
+            let uptime = Date().timeIntervalSince(self.launchTime)
+            if self.autoUpdateEnabled && !self.isUpdating && uptime > 300 && !self.popover.isShown {
               self.log("auto-updating to \(latestVersion)")
               self.updateCLI()
             }
@@ -846,73 +848,6 @@ struct TrayPopoverView: View {
           .truncationMode(.tail)
         Spacer(minLength: 0)
 
-        // Settings menu
-        Menu {
-          // Profile section
-          Menu("Profile: \(currentProfile?.name ?? "None")") {
-            if sortedProfiles.isEmpty {
-              Text("No CLI profiles found")
-            } else {
-              ForEach(sortedProfiles) { profile in
-                Button {
-                  controller.selectProfile(profile)
-                } label: {
-                  Label {
-                    Text(profile.name)
-                  } icon: {
-                    Image(
-                      systemName:
-                        profile.isDefault ? "checkmark.circle.fill" : "circle"
-                    )
-                  }
-                }
-                .disabled(profile.isDefault || controller.isSelecting(profileName: profile.name))
-              }
-            }
-          }
-
-          // Workspace section
-          Menu("Workspace: \(currentWorkspace?.displayLabel ?? "None")") {
-            if sortedWorkspaces.isEmpty {
-              Text("No workspaces configured")
-            } else {
-              ForEach(sortedWorkspaces) { workspace in
-                Button {
-                  controller.selectWorkspace(workspace)
-                } label: {
-                  Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                      Text(workspace.displayLabel)
-                      Text(workspace.path)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    }
-                  } icon: {
-                    Image(
-                      systemName:
-                        workspace.isDefault ? "checkmark.circle.fill" : "circle"
-                    )
-                  }
-                }
-                .disabled(workspace.isDefault || controller.isSelecting(workspaceId: workspace.id))
-              }
-            }
-          }
-
-          Divider()
-
-          // Auto-update toggle
-          Toggle("Auto-update CLI", isOn: Binding(
-            get: { controller.autoUpdateEnabled },
-            set: { controller.autoUpdateEnabled = $0 }
-          ))
-        } label: {
-          Image(systemName: "gearshape")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-        }
-        .menuStyle(.borderlessButton)
-        .frame(width: 20)
-
         StatusChip(text: controller.statusBadgeLabel())
       }
 
@@ -1098,6 +1033,58 @@ struct TrayPopoverView: View {
 
         Divider()
       }
+
+      // Settings row
+      HStack(spacing: 12) {
+        HStack(spacing: 4) {
+          Text("Profile:")
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+          Menu(currentProfile?.name ?? "None") {
+            ForEach(sortedProfiles) { profile in
+              Button(profile.name) {
+                controller.selectProfile(profile)
+              }
+              .disabled(profile.isDefault)
+            }
+          }
+          .font(.system(size: 10, weight: .medium))
+          .menuStyle(.borderlessButton)
+          .fixedSize()
+        }
+
+        HStack(spacing: 4) {
+          Text("Workspace:")
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+          Menu(currentWorkspace?.displayLabel ?? "None") {
+            ForEach(sortedWorkspaces) { workspace in
+              Button(workspace.displayLabel) {
+                controller.selectWorkspace(workspace)
+              }
+              .disabled(workspace.isDefault)
+            }
+          }
+          .font(.system(size: 10, weight: .medium))
+          .menuStyle(.borderlessButton)
+          .fixedSize()
+        }
+
+        Spacer(minLength: 0)
+
+        Toggle(isOn: Binding(
+          get: { controller.autoUpdateEnabled },
+          set: { controller.autoUpdateEnabled = $0 }
+        )) {
+          Text("Auto-update")
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.mini)
+      }
+
+      Divider()
 
       HStack(spacing: 8) {
         if controller.isUpdating {
