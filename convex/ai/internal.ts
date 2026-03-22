@@ -19,7 +19,10 @@ import {
 import { buildIssueSearchText } from '../issues/search';
 import { getNextAvailableIssueKey } from '../issues/keys';
 import { createNotificationEvent } from '../notifications/lib';
-import { syncDocumentMentions } from '../documents/mentions';
+import {
+  extractReferencedDocumentIds,
+  syncDocumentMentions,
+} from '../documents/mentions';
 import {
   recordActivity,
   resolveIssueScope,
@@ -196,6 +199,38 @@ export const getCurrentUserContextSummary = internalQuery({
         'Additional organization context provided by the workspace admin:',
         organization.agentContext.trim(),
       );
+    }
+
+    // Include the org context document and its referenced documents
+    if (organization.agentContextDocumentId) {
+      const contextDoc = await ctx.db.get(
+        'documents',
+        organization.agentContextDocumentId,
+      );
+      if (contextDoc?.content) {
+        lines.push(
+          '',
+          `Organization context document "${contextDoc.title}":`,
+          contextDoc.content,
+        );
+
+        // Follow document references within the context document (1 level deep)
+        const referencedDocIds = await extractReferencedDocumentIds(
+          ctx,
+          organization._id,
+          contextDoc.content,
+        );
+        for (const refDocId of referencedDocIds) {
+          const refDoc = await ctx.db.get('documents', refDocId);
+          if (refDoc?.content) {
+            lines.push(
+              '',
+              `Referenced document "${refDoc.title}":`,
+              refDoc.content,
+            );
+          }
+        }
+      }
     }
 
     return lines.join('\n');
@@ -1117,6 +1152,25 @@ export const getDocument = internalQuery({
       throw new ConvexError('FORBIDDEN');
     }
 
+    // Resolve document links/mentions in content
+    const referencedDocs: { id: string; title: string }[] = [];
+    if (document.content) {
+      const refDocIds = await extractReferencedDocumentIds(
+        ctx,
+        organization._id,
+        document.content,
+      );
+      for (const refDocId of refDocIds) {
+        const refDoc = await ctx.db.get('documents', refDocId);
+        if (refDoc) {
+          referencedDocs.push({
+            id: String(refDoc._id),
+            title: refDoc.title,
+          });
+        }
+      }
+    }
+
     return {
       id: String(document._id),
       title: document.title,
@@ -1127,6 +1181,8 @@ export const getDocument = internalQuery({
       projectId: document.projectId ? String(document.projectId) : undefined,
       icon: document.icon ?? undefined,
       color: document.color ?? undefined,
+      referencedDocuments:
+        referencedDocs.length > 0 ? referencedDocs : undefined,
     };
   },
 });

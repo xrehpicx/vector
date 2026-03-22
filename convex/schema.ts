@@ -148,6 +148,7 @@ export default defineSchema({
       ),
     ),
     agentContext: v.optional(v.string()),
+    agentContextDocumentId: v.optional(v.id('documents')),
   }).index('by_slug', ['slug']),
 
   // Organization members (equivalent to Drizzle 'member' table)
@@ -989,6 +990,7 @@ export default defineSchema({
       v.literal('team'),
       v.literal('project'),
       v.literal('issue'),
+      v.literal('document'),
     ),
     // The referenced entity ID (polymorphic — one of users/teams/projects/issues)
     entityId: v.string(),

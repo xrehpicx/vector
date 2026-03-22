@@ -2,18 +2,19 @@
  * Utilities for extracting and syncing document mentions.
  *
  * Mentions are stored as links in document HTML content with specific href patterns:
- * - Users:    /{orgSlug}/people/{userId}
- * - Teams:    /{orgSlug}/teams/{TEAM_KEY}
- * - Projects: /{orgSlug}/projects/{PROJECT_KEY}
- * - Issues:   /{orgSlug}/issues/{ISSUE_KEY}
+ * - Users:      /{orgSlug}/people/{userId}
+ * - Teams:      /{orgSlug}/teams/{TEAM_KEY}
+ * - Projects:   /{orgSlug}/projects/{PROJECT_KEY}
+ * - Issues:     /{orgSlug}/issues/{ISSUE_KEY}
+ * - Documents:  /{orgSlug}/documents/{documentId}
  */
 
-import type { MutationCtx } from '../_generated/server';
+import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
 
 export type MentionRef = {
-  mentionType: 'user' | 'team' | 'project' | 'issue';
-  /** For users this is the Convex user ID; for others it's the key (e.g. "TEAM", "PROJ-1") */
+  mentionType: 'user' | 'team' | 'project' | 'issue' | 'document';
+  /** For users this is the Convex user ID; for others it's the key (e.g. "TEAM", "PROJ-1") or document ID */
   rawRef: string;
 };
 
@@ -36,6 +37,8 @@ const MENTION_PATTERNS: {
   },
   // /orgSlug/issues/{ISSUE_KEY} e.g. PROJ-42
   { type: 'issue', pattern: /\/[^/]+\/issues\/([A-Z]+-\d+)/ },
+  // /orgSlug/documents/{documentId} — documentId is a Convex ID
+  { type: 'document', pattern: /\/[^/]+\/documents\/([^#/?]+)/ },
 ];
 
 /** Extract unique mention references from document HTML content. */
@@ -127,10 +130,52 @@ export async function resolveMentionIds(
         }
         break;
       }
+      case 'document': {
+        // rawRef is a Convex document ID
+        try {
+          const doc = await ctx.db.get(
+            'documents',
+            ref.rawRef as Id<'documents'>,
+          );
+          if (doc && doc.organizationId === orgId) {
+            resolved.push({ mentionType: 'document', entityId: doc._id });
+          }
+        } catch {
+          // Invalid ID format — skip
+        }
+        break;
+      }
     }
   }
 
   return resolved;
+}
+
+/**
+ * Extract document IDs referenced in HTML content (via links or @mentions).
+ * Returns only valid document IDs that belong to the given org.
+ */
+export async function extractReferencedDocumentIds(
+  ctx: QueryCtx | MutationCtx,
+  orgId: Id<'organizations'>,
+  html: string,
+): Promise<Id<'documents'>[]> {
+  const refs = extractMentions(html);
+  const docRefs = refs.filter(r => r.mentionType === 'document');
+  const ids: Id<'documents'>[] = [];
+
+  for (const ref of docRefs) {
+    try {
+      const doc = await ctx.db.get('documents', ref.rawRef as Id<'documents'>);
+      if (doc && doc.organizationId === orgId) {
+        ids.push(doc._id);
+      }
+    } catch {
+      // Invalid ID format — skip
+    }
+  }
+
+  return ids;
 }
 
 /**

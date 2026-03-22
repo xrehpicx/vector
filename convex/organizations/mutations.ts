@@ -434,6 +434,7 @@ export const update = mutation({
         v.union(v.array(socialLinkValidator), v.null()),
       ),
       agentContext: v.optional(v.union(v.string(), v.null())),
+      agentContextDocumentId: v.optional(v.union(v.id('documents'), v.null())),
     }),
   },
   handler: async (ctx, args) => {
@@ -557,6 +558,19 @@ export const update = mutation({
     if (args.data.agentContext !== undefined) {
       const trimmed = args.data.agentContext?.trim() ?? '';
       updateData.agentContext = trimmed || undefined;
+    }
+    if (args.data.agentContextDocumentId !== undefined) {
+      if (args.data.agentContextDocumentId) {
+        const doc = await ctx.db.get(
+          'documents',
+          args.data.agentContextDocumentId,
+        );
+        if (!doc || doc.organizationId !== org._id) {
+          throw new ConvexError('DOCUMENT_NOT_FOUND');
+        }
+      }
+      updateData.agentContextDocumentId =
+        args.data.agentContextDocumentId ?? undefined;
     }
 
     if (Object.keys(updateData).length > 0) {

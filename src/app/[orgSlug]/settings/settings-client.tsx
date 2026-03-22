@@ -8,6 +8,7 @@ import {
   Building,
   Check,
   ChevronsUpDown,
+  FileText,
   Github,
   Globe,
   Instagram,
@@ -15,6 +16,7 @@ import {
   Plus,
   Trash2,
   Twitter,
+  X,
   Youtube,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -145,6 +147,80 @@ function PublicViewSelector({
   );
 }
 
+function AgentContextDocumentSelector({
+  documents,
+  value,
+  disabled,
+  onChange,
+}: {
+  documents: Array<{ _id: Id<'documents'>; title: string }>;
+  value: Id<'documents'> | null;
+  disabled: boolean;
+  onChange: (value: Id<'documents'> | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDoc = documents.find(doc => doc._id === value);
+
+  return (
+    <div className='flex items-center gap-2'>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type='button'
+            variant='outline'
+            className='h-8 w-full justify-between px-2 text-sm'
+            disabled={disabled}
+          >
+            <span className='flex items-center gap-1.5 truncate'>
+              <FileText className='text-muted-foreground size-3.5 shrink-0' />
+              {selectedDoc?.title ?? 'No context document'}
+            </span>
+            <ChevronsUpDown className='text-muted-foreground size-3.5 shrink-0' />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className='w-[320px] p-0' align='start'>
+          <Command>
+            <CommandInput placeholder='Search documents...' />
+            <CommandList>
+              <CommandEmpty>No documents found.</CommandEmpty>
+              <CommandGroup>
+                {documents.map(doc => (
+                  <CommandItem
+                    key={doc._id}
+                    value={doc.title}
+                    onSelect={() => {
+                      onChange(doc._id);
+                      setOpen(false);
+                    }}
+                  >
+                    <FileText className='text-muted-foreground mr-1.5 size-3.5 shrink-0' />
+                    <span className='truncate'>{doc.title}</span>
+                    {value === doc._id ? (
+                      <Check className='text-muted-foreground ml-auto size-3.5 shrink-0' />
+                    ) : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {value ? (
+        <Button
+          type='button'
+          variant='outline'
+          size='sm'
+          className='h-8 w-8 shrink-0 p-0'
+          disabled={disabled}
+          onClick={() => onChange(null)}
+        >
+          <X className='size-3.5' />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function SocialPlatformSelector({
   value,
   disabled,
@@ -225,6 +301,10 @@ export default function OrgSettingsPageClient({
     api.views.queries.listViews,
     user?._id ? { orgSlug } : 'skip',
   );
+  const documents = useCachedQuery(
+    api.documents.queries.list,
+    user?._id ? { orgSlug } : 'skip',
+  );
   const updateOrganization = useMutation(
     api.organizations.mutations.update,
   ).withOptimisticUpdate((store, args) => {
@@ -254,6 +334,10 @@ export default function OrgSettingsPageClient({
           args.data.agentContext !== undefined
             ? (args.data.agentContext ?? undefined)
             : current.agentContext,
+        agentContextDocumentId:
+          args.data.agentContextDocumentId !== undefined
+            ? (args.data.agentContextDocumentId ?? undefined)
+            : current.agentContextDocumentId,
       }),
     );
 
@@ -290,8 +374,7 @@ export default function OrgSettingsPageClient({
   const [publicSocialLinks, setPublicSocialLinks] = useState<SocialLink[]>([]);
   const [hasPublicEdits, setHasPublicEdits] = useState(false);
   const [isSavingPublicSettings, setIsSavingPublicSettings] = useState(false);
-  const [agentContext, setAgentContext] = useState('');
-  const [isSavingAgentContext, setIsSavingAgentContext] = useState(false);
+  const [isSavingAgentDoc, setIsSavingAgentDoc] = useState(false);
 
   useEffect(() => {
     if (!org || hasPublicEdits) {
@@ -303,13 +386,6 @@ export default function OrgSettingsPageClient({
     setPublicLandingViewId(org.publicLandingViewId ?? null);
     setPublicSocialLinks(org.publicSocialLinks ?? []);
   }, [org, hasPublicEdits]);
-
-  useEffect(() => {
-    if (!org) {
-      return;
-    }
-    setAgentContext(org.agentContext ?? '');
-  }, [org?.agentContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const userRole = members?.find(member => member.userId === user?._id)?.role;
   const isOwner = userRole === 'owner';
@@ -711,65 +787,49 @@ export default function OrgSettingsPageClient({
                 Vector assistant context
               </div>
               <p className='text-muted-foreground mt-1 text-xs'>
-                Provide additional context about what your organization works
-                on. This information is included in the assistant&apos;s system
-                prompt so it can give more relevant responses.
+                Set a document as the organization context for the Vector
+                assistant. The document content (and any documents it @mentions)
+                will be included in the assistant&apos;s system prompt.
               </p>
             </div>
 
             <div className='space-y-4 p-3'>
               <div className='space-y-2'>
-                <label className='text-sm font-medium'>
-                  Organization context
-                </label>
-                <textarea
-                  value={agentContext}
-                  onChange={event => setAgentContext(event.target.value)}
-                  placeholder='e.g. "We build a SaaS analytics platform. Our main product is a real-time dashboard for e-commerce metrics. Engineering uses Go microservices and a React frontend."'
-                  className='border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring min-h-[120px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none'
-                  maxLength={2000}
-                />
-                <p className='text-muted-foreground text-xs'>
-                  Describe your org&apos;s domain, products, tech stack, or
-                  anything else that helps the assistant understand your
-                  workspace. Max 2,000 characters.
-                </p>
-              </div>
-
-              <div className='flex items-center gap-2'>
-                <Button
-                  type='button'
-                  className='h-8'
-                  disabled={
-                    isSavingAgentContext ||
-                    agentContext === (org?.agentContext ?? '')
-                  }
-                  onClick={async () => {
-                    setIsSavingAgentContext(true);
+                <label className='text-sm font-medium'>Context document</label>
+                <AgentContextDocumentSelector
+                  documents={documents ?? []}
+                  value={org.agentContextDocumentId ?? null}
+                  disabled={isSavingAgentDoc}
+                  onChange={async documentId => {
+                    setIsSavingAgentDoc(true);
                     try {
                       await updateOrganization({
                         orgSlug,
-                        data: { agentContext: agentContext || null },
+                        data: {
+                          agentContextDocumentId: documentId,
+                        },
                       });
-                      toast.success('Assistant context updated');
+                      toast.success(
+                        documentId
+                          ? 'Context document set'
+                          : 'Context document removed',
+                      );
                     } catch (error) {
                       toast.error(
                         error instanceof Error
                           ? error.message
-                          : 'Failed to update assistant context',
+                          : 'Failed to update context document',
                       );
                     } finally {
-                      setIsSavingAgentContext(false);
+                      setIsSavingAgentDoc(false);
                     }
                   }}
-                >
-                  Save assistant context
-                </Button>
-                {agentContext !== (org?.agentContext ?? '') ? (
-                  <span className='text-muted-foreground text-xs'>
-                    Unsaved changes
-                  </span>
-                ) : null}
+                />
+                <p className='text-muted-foreground text-xs'>
+                  Create a document describing your org&apos;s domain, products,
+                  tech stack, or workflows. Use @mentions to link other
+                  documents — the assistant will follow those references too.
+                </p>
               </div>
             </div>
           </div>

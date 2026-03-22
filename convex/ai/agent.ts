@@ -95,6 +95,8 @@ Documents:
 - Create, update, and delete document folders (with icon and color support)
 - Move documents between folders
 - List folders with document counts
+- When reading a document, referenced/linked documents are listed — use getDocument to follow those links for deeper context
+- Document links in content use the path format /{orgSlug}/documents/{documentId} — recognize these regardless of the domain
 
 Icons:
 - Use searchIcons to find valid icon values by keyword before setting icons on teams, projects, documents, or folders
