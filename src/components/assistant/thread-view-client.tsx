@@ -727,7 +727,7 @@ export function ThreadViewClient() {
                 ref={inputRef}
                 orgSlug={orgSlug}
                 onSubmit={handleSend}
-                disabled={isSending}
+                disabled={isSending || isAssistantActive}
                 className='min-h-10 flex-1 px-3 py-2 text-sm leading-10 placeholder:text-center'
                 placeholder='Ask anything...'
               />
@@ -735,7 +735,7 @@ export function ThreadViewClient() {
                 <Button
                   size='sm'
                   className='size-8 rounded-md p-0'
-                  disabled={isSending}
+                  disabled={isSending || isAssistantActive}
                   onClick={() => inputRef.current?.submit()}
                 >
                   {isSending || threadRow.threadStatus === 'pending' ? (

@@ -146,7 +146,9 @@ function PreviewMessage({ message }: { message: UIMessage }) {
     return (
       <div className='px-1 py-0.5'>
         <div className='bg-muted text-foreground ml-auto max-w-[85%] rounded-2xl px-3 py-1.5 text-[11px] leading-4'>
-          {text}
+          <AssistantResponse className='text-[11px] leading-4 [&_p]:my-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0'>
+            {text}
+          </AssistantResponse>
         </div>
       </div>
     );
@@ -172,7 +174,9 @@ function UserMessage({ message }: { message: UIMessage }) {
       className='sticky top-0 z-10 mt-4 ml-auto w-fit max-w-[85%]'
     >
       <div className='bg-muted text-foreground inline-block w-fit rounded-3xl px-4 py-2'>
-        <div className='text-sm break-words whitespace-pre-wrap'>{text}</div>
+        <AssistantResponse className='text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0'>
+          {text}
+        </AssistantResponse>
       </div>
     </motion.div>
   );
