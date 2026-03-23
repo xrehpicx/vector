@@ -191,21 +191,66 @@ async function resolveAutoLinkIssueKeys(
     return [];
   }
 
-  const searchQuery = [args.title, args.body ?? '', args.branchName ?? '']
+  // Clean branch name: "feature/add-user-auth" → "add user auth"
+  const cleanBranch = (args.branchName ?? '')
+    .replace(
+      /^(feature|fix|bugfix|hotfix|chore|refactor|docs|ci|test)[\/\-_]/i,
+      '',
+    )
+    .replace(/[\/\-_]+/g, ' ')
+    .trim();
+
+  // Strip markdown noise from PR body (code blocks, URLs, template headers)
+  const cleanBody = (args.body ?? '')
+    .replace(/```[\s\S]*?```/g, '') // code blocks
+    .replace(/https?:\/\/\S+/g, '') // URLs
+    .replace(/#+\s*/g, '') // headers
+    .replace(/<!--[\s\S]*?-->/g, '') // HTML comments
+    .replace(/\[x\]|\[ \]/g, '') // checkboxes
+    .replace(/[*_~`]/g, '') // formatting
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
+
+  // Run multiple search passes for better recall
+  // Pass 1: title-focused (most relevant signal)
+  const titleQuery = args.title.replace(/\s+/g, ' ').trim().slice(0, 200);
+  // Pass 2: branch-focused (often contains issue description)
+  const branchQuery = cleanBranch.slice(0, 100);
+  // Pass 3: broader search with body context
+  const broadQuery = [args.title, cleanBranch, cleanBody]
+    .filter(Boolean)
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 400);
 
-  const candidates = await ctx.runQuery(
-    internal.github.queries.searchAutoLinkIssueCandidates,
-    {
-      organizationId: args.organizationId,
-      searchQuery,
-      limit: 10,
-      repoFullName: args.repoFullName,
-    },
-  );
+  const candidateMap = new Map<string, any>();
+
+  for (const searchQuery of [titleQuery, branchQuery, broadQuery]) {
+    if (!searchQuery.trim()) continue;
+
+    const batch = await ctx.runQuery(
+      internal.github.queries.searchAutoLinkIssueCandidates,
+      {
+        organizationId: args.organizationId,
+        searchQuery,
+        limit: 8,
+        repoFullName: args.repoFullName,
+      },
+    );
+
+    for (const candidate of batch) {
+      if (!candidateMap.has(candidate.key)) {
+        candidateMap.set(candidate.key, candidate);
+      }
+    }
+
+    // Stop early if we have enough candidates
+    if (candidateMap.size >= 10) break;
+  }
+
+  const candidates = Array.from(candidateMap.values()).slice(0, 12);
 
   if (candidates.length === 0) {
     return [];
@@ -222,6 +267,8 @@ async function resolveAutoLinkIssueKeys(
         'Choose at most one Vector issue that this GitHub artifact should link to.',
         'A single Vector issue can correctly have multiple linked pull requests.',
         'If a candidate already has related pull requests linked, treat that as supporting evidence instead of a reason to reject it.',
+        'Match based on semantic similarity — the PR and issue describe the same work even if worded differently.',
+        'Consider the branch name as a strong signal (e.g. "fix-login-bug" matches an issue about login authentication).',
         'Only choose an issue if the match is clearly the same work item.',
         'If the match is uncertain, return null with low confidence.',
         '',
@@ -229,7 +276,7 @@ async function resolveAutoLinkIssueKeys(
         `Repository: ${args.repoFullName}`,
         `Title: ${args.title}`,
         args.branchName ? `Branch: ${args.branchName}` : '',
-        args.body ? `Body: ${args.body.slice(0, 1200)}` : '',
+        args.body ? `Body (summary): ${cleanBody.slice(0, 800)}` : '',
         '',
         'Candidate Vector issues:',
         ...candidates.flatMap(
