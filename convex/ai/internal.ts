@@ -4465,6 +4465,80 @@ export const renameMember = internalMutation({
   },
 });
 
+export const sendEmailToMember = internalMutation({
+  args: {
+    orgSlug: v.string(),
+    userId: v.id('users'),
+    recipientName: v.string(),
+    subject: v.string(),
+    body: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const organization = await requireOrgForAssistant(
+      ctx,
+      args.orgSlug,
+      args.userId,
+    );
+    await requireOrgPermissionForUser(
+      ctx,
+      organization._id,
+      args.userId,
+      PERMISSIONS.ORG_MANAGE_MEMBERS,
+    );
+
+    const memberMatch = await findMemberByName(
+      ctx,
+      organization._id,
+      args.recipientName,
+    );
+    if (!memberMatch) throw new ConvexError('MEMBER_NOT_FOUND');
+
+    const recipientEmail = memberMatch.user.email;
+    if (!recipientEmail) {
+      throw new ConvexError('Member does not have an email address');
+    }
+
+    const sender = await ctx.db.get('users', args.userId);
+    const senderName =
+      sender?.name ?? sender?.email ?? sender?.username ?? 'Vector';
+
+    // Build a simple HTML email
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0a0a0a;color:#f0f0f0;font-family:Poppins,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+  <div style="max-width:560px;margin:0 auto;padding:32px 16px">
+    <div style="background:#111111;border:1px solid #222222;border-radius:8px;padding:24px">
+      <div style="font-size:22px;font-weight:600;font-family:Urbanist,Poppins,sans-serif;margin-bottom:16px;color:#ffffff">${args.subject}</div>
+      <div style="font-size:14px;line-height:1.6;color:#f0f0f0;white-space:pre-wrap">${args.body}</div>
+      <hr style="border:none;border-top:1px solid #222222;margin:20px 0">
+      <div style="font-size:12px;color:#888888">Sent by ${senderName} via Vector &middot; ${organization.name}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.notifications.actions.sendCustomEmail,
+      {
+        to: recipientEmail,
+        subject: args.subject,
+        html,
+      },
+    );
+
+    const displayName =
+      memberMatch.user.name ?? memberMatch.user.email ?? 'Unknown';
+    return {
+      message: `Email sent to ${displayName} (${recipientEmail})`,
+      recipient: displayName,
+      recipientEmail,
+      subject: args.subject,
+    };
+  },
+});
+
 // ──── Activity feed ────
 
 type ActivityEventDoc = Doc<'activityEvents'>;

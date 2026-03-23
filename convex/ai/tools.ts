@@ -1151,6 +1151,35 @@ export const renameMember: any = createTool({
   },
 });
 
+export const sendEmailToMember: any = createTool({
+  description:
+    'Send an email to an organization member. Requires admin or owner role. The email is sent from the workspace SMTP configuration.',
+  args: z.object({
+    recipientName: z
+      .string()
+      .describe('Name, username, or email of the member to email'),
+    subject: z.string().min(1).describe('Email subject line'),
+    body: z
+      .string()
+      .min(1)
+      .describe(
+        'Email body content (plain text, will be rendered in the Vector email template)',
+      ),
+  }),
+  handler: async (
+    ctx: AssistantToolCtx,
+    args: { recipientName: string; subject: string; body: string },
+  ) => {
+    return await ctx.runMutation(internal.ai.internal.sendEmailToMember, {
+      orgSlug: ctx.currentPageContext.orgSlug,
+      userId: ctx.userId,
+      recipientName: args.recipientName,
+      subject: args.subject,
+      body: args.body,
+    });
+  },
+});
+
 // ──── Activity feed ────
 
 export const listActivity: any = createTool({

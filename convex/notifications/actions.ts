@@ -78,6 +78,22 @@ function configureWebPush() {
   return true;
 }
 
+export const sendCustomEmail = internalAction({
+  args: {
+    to: v.string(),
+    subject: v.string(),
+    html: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const result = await sendEmail({
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+    });
+    return result;
+  },
+});
+
 export const deliverRecipient = internalAction({
   args: {
     recipientId: v.id('notificationRecipients'),

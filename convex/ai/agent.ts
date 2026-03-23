@@ -37,6 +37,7 @@ import {
   performClientAction,
   renameMember,
   removeOrgMember,
+  sendEmailToMember,
   removeProjectMember,
   removeTeamMember,
   requestDeleteDocument,
@@ -88,6 +89,7 @@ Organization Members:
 - List pending invitations
 - Change a member's role between member and admin (cannot change owner)
 - Rename members (change their display name) — requires admin or owner role
+- Send emails to members with any subject and body content — requires admin or owner role
 - Remove members from the organization (cascades to all teams and projects)
 - Revoke pending invitations
 - Use listOrgMembers to see current members and listOrgInvites to see pending invites
@@ -173,6 +175,7 @@ export const assistantAgent: Agent<any, any> = new Agent(components.agent, {
     removeOrgMember,
     updateOrgMemberRole,
     renameMember,
+    sendEmailToMember,
     // Team member management
     addTeamMember,
     removeTeamMember,
