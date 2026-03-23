@@ -45,6 +45,8 @@ import { useConfirm } from '@/hooks/use-confirm';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AssistantDockMessage } from './assistant-message-renderer';
+import { ProgressiveBlur } from '@/components/ui/progressive-blur';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type PendingAction = {
   id: string;
@@ -54,6 +56,60 @@ type PendingAction = {
   entities?: Array<{ entityId: string; entityLabel: string }>;
   summary: string;
 };
+
+function ThreadLoadingSkeleton() {
+  return (
+    <div className='bg-background relative flex h-full min-h-0 overflow-hidden'>
+      {/* Header skeleton */}
+      <div className='absolute top-0 right-0 left-0 z-50 p-2 px-2'>
+        <ProgressiveBlur
+          direction='top'
+          blurLayers={10}
+          blurIntensity={0.8}
+          bgGradient
+          className='pointer-events-none absolute inset-0 h-20'
+        />
+        <div className='relative z-[100] flex items-center justify-between gap-1'>
+          <div className='flex items-center gap-2'>
+            <Skeleton className='h-8 w-8 rounded-md' />
+            <Skeleton className='h-4 w-32' />
+          </div>
+          <div className='flex items-center gap-1'>
+            <Skeleton className='h-8 w-8 rounded-md' />
+          </div>
+        </div>
+      </div>
+
+      {/* Messages skeleton */}
+      <div className='mx-auto min-h-0 w-full max-w-[700px] flex-1 space-y-6 overflow-y-auto px-4 pt-20 pb-32'>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className='space-y-3'>
+            <div className='flex items-start gap-3'>
+              <div className='flex-1 space-y-2'>
+                <Skeleton className='h-4 w-full' />
+                <Skeleton className='h-4 w-3/4' />
+                <Skeleton className='h-4 w-1/2' />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Input skeleton */}
+      <div className='absolute right-0 bottom-0 left-0 z-10 px-4 pt-8 pb-4'>
+        <ProgressiveBlur
+          direction='bottom'
+          blurLayers={6}
+          blurIntensity={0.3}
+          className='pointer-events-none absolute inset-0'
+        />
+        <div className='relative mx-auto max-w-[700px]'>
+          <Skeleton className='h-12 w-full rounded-lg' />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ThreadViewClient() {
   const { orgSlug, threadId: threadIdParam } = useParams<{
@@ -427,11 +483,7 @@ export function ThreadViewClient() {
 
   // Loading state
   if (!isReady || threadQuery.isPending) {
-    return (
-      <div className='flex h-full items-center justify-center'>
-        <Loader2 className='text-muted-foreground size-5 animate-spin' />
-      </div>
-    );
+    return <ThreadLoadingSkeleton />;
   }
 
   if (!threadRow) {
@@ -451,122 +503,128 @@ export function ThreadViewClient() {
   }
 
   return (
-    <div className='flex h-full flex-col'>
-      {/* Header */}
-      <div className='border-border flex items-center gap-3 border-b px-4 py-3'>
-        <Button
-          variant='ghost'
-          size='sm'
-          className='size-8 p-0'
-          onClick={() => router.push(`/${orgSlug}/threads`)}
-        >
-          <ArrowLeft className='size-4' />
-        </Button>
-
-        <div className='flex min-w-0 flex-1 items-center gap-2'>
-          {isEditingTitle ? (
-            <div className='flex items-center gap-1'>
-              <input
-                type='text'
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') void handleSaveTitle();
-                  if (e.key === 'Escape') setIsEditingTitle(false);
-                }}
-                className='bg-muted h-7 rounded-md border px-2 text-sm focus:outline-none'
-                autoFocus
-              />
-              <button
-                type='button'
-                onClick={() => void handleSaveTitle()}
-                className='text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded'
-              >
-                <Check className='size-3.5' />
-              </button>
-              <button
-                type='button'
-                onClick={() => setIsEditingTitle(false)}
-                className='text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded'
-              >
-                <X className='size-3.5' />
-              </button>
-            </div>
-          ) : (
-            <button
-              type='button'
-              onClick={() => {
-                setEditTitle(threadRow.title || '');
-                setIsEditingTitle(true);
-              }}
-              className='group flex items-center gap-1.5 text-sm font-medium'
+    <div className='bg-background relative flex h-full min-h-0 overflow-hidden'>
+      {/* Floating header with progressive blur */}
+      <div className='absolute top-0 right-0 left-0 z-50 p-2 px-3'>
+        <ProgressiveBlur
+          direction='top'
+          blurLayers={10}
+          blurIntensity={0.8}
+          bgGradient
+          className='pointer-events-none absolute inset-0 h-20'
+        />
+        <div className='relative z-[100] flex items-center justify-between gap-2'>
+          {/* Left — back + title */}
+          <div className='flex min-w-0 items-center gap-1'>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='size-8 shrink-0'
+              onClick={() => router.push(`/${orgSlug}/threads`)}
             >
-              <span className='truncate'>
-                {threadRow.title || 'Untitled Thread'}
-              </span>
-              <Pencil className='size-3 opacity-0 transition-opacity group-hover:opacity-60' />
-            </button>
-          )}
-        </div>
+              <ArrowLeft className='size-4' />
+            </Button>
 
-        {/* Visibility toggle */}
-        <div className='flex items-center gap-1'>
-          {(['private', 'organization', 'public'] as const).map(vis => {
-            const Icon =
-              vis === 'public'
-                ? Globe
-                : vis === 'organization'
-                  ? Building
-                  : Lock;
-            const isActive = (threadRow.visibility ?? 'private') === vis;
-            return (
+            {isEditingTitle ? (
+              <div className='flex items-center gap-1'>
+                <input
+                  type='text'
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') void handleSaveTitle();
+                    if (e.key === 'Escape') setIsEditingTitle(false);
+                  }}
+                  className='bg-muted h-7 rounded-md border px-2 text-sm focus:outline-none'
+                  autoFocus
+                />
+                <button
+                  type='button'
+                  onClick={() => void handleSaveTitle()}
+                  className='text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded'
+                >
+                  <Check className='size-3.5' />
+                </button>
+                <button
+                  type='button'
+                  onClick={() => setIsEditingTitle(false)}
+                  className='text-muted-foreground hover:text-foreground flex size-6 items-center justify-center rounded'
+                >
+                  <X className='size-3.5' />
+                </button>
+              </div>
+            ) : (
               <button
-                key={vis}
                 type='button'
-                onClick={() => void handleVisibilityChange(vis)}
-                className={cn(
-                  'flex size-7 items-center justify-center rounded transition-colors',
-                  isActive
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground/50 hover:text-muted-foreground',
-                )}
-                title={vis.charAt(0).toUpperCase() + vis.slice(1)}
+                onClick={() => {
+                  setEditTitle(threadRow.title || '');
+                  setIsEditingTitle(true);
+                }}
+                className='group flex min-w-0 items-center gap-1.5 text-sm font-medium'
               >
-                <Icon className='size-3.5' />
+                <span className='truncate'>
+                  {threadRow.title || 'Untitled Thread'}
+                </span>
+                <Pencil className='size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60' />
               </button>
-            );
-          })}
-        </div>
+            )}
+          </div>
 
-        <Button
-          variant='ghost'
-          size='sm'
-          className='text-muted-foreground hover:text-destructive size-8 p-0'
-          onClick={() => void handleDelete()}
-          disabled={isDeleting}
-        >
-          {isDeleting ? (
-            <Loader2 className='size-4 animate-spin' />
-          ) : (
-            <Trash2 className='size-4' />
-          )}
-        </Button>
+          {/* Right — visibility + delete */}
+          <div className='flex shrink-0 items-center gap-1'>
+            {(['private', 'organization', 'public'] as const).map(vis => {
+              const Icon =
+                vis === 'public'
+                  ? Globe
+                  : vis === 'organization'
+                    ? Building
+                    : Lock;
+              const isActive = (threadRow.visibility ?? 'private') === vis;
+              return (
+                <button
+                  key={vis}
+                  type='button'
+                  onClick={() => void handleVisibilityChange(vis)}
+                  className={cn(
+                    'flex size-7 items-center justify-center rounded transition-colors',
+                    isActive
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground/50 hover:text-muted-foreground',
+                  )}
+                  title={vis.charAt(0).toUpperCase() + vis.slice(1)}
+                >
+                  <Icon className='size-3.5' />
+                </button>
+              );
+            })}
+
+            <Button
+              variant='ghost'
+              size='icon'
+              className='text-muted-foreground hover:text-destructive size-8'
+              onClick={() => void handleDelete()}
+              disabled={isDeleting}
+              title='Delete thread'
+            >
+              {isDeleting ? (
+                <Loader2 className='size-4 animate-spin' />
+              ) : (
+                <Trash2 className='size-4' />
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {/* Messages */}
-      <div className='relative min-w-0 flex-1 overflow-hidden'>
-        <ScrollArea
-          className='h-full w-full'
-          viewportClassName='overscroll-contain'
-          maskHeight={12}
-          viewportRef={viewportRef}
-        >
-          <div
-            ref={contentRef}
-            className='mx-auto max-w-3xl space-y-3 px-4 pt-4 pb-4'
-          >
+      {/* Messages area — full height scroll */}
+      <ScrollArea
+        className='mx-auto h-full w-full max-w-[700px] flex-1'
+        viewportRef={viewportRef}
+      >
+        <div ref={contentRef}>
+          <div className='space-y-3 px-4 pt-16 pb-36'>
             {!hasMessages && (
-              <div className='text-muted-foreground flex flex-col items-center justify-center gap-2 py-20 text-sm'>
+              <div className='text-muted-foreground flex flex-col items-center justify-center gap-2 py-32 text-sm'>
                 <svg
                   width='32'
                   height='32'
@@ -610,47 +668,52 @@ export function ThreadViewClient() {
             ))}
             <div ref={endRef} aria-hidden className='h-px' />
           </div>
-        </ScrollArea>
-      </div>
-
-      {/* Pending action banner */}
-      {pendingAction ? (
-        <div className='border-border mx-auto flex w-full max-w-3xl items-center gap-2 border-t px-4 py-2'>
-          <Trash2 className='size-3.5 text-[#cb706f]' />
-          <div className='min-w-0 flex-1'>
-            <div className='truncate text-xs'>{pendingAction.summary}</div>
-          </div>
-          <Button
-            size='sm'
-            variant='outline'
-            className='h-6 text-xs'
-            onClick={handleConfirmAction}
-          >
-            Confirm
-          </Button>
-          <button
-            type='button'
-            className='text-muted-foreground hover:text-foreground'
-            onClick={() => void cancelPendingAction({ orgSlug })}
-          >
-            <X className='size-3.5' />
-          </button>
         </div>
-      ) : null}
+      </ScrollArea>
 
-      {/* Error banner */}
-      {threadRow.threadStatus === 'error' && threadRow.errorMessage ? (
-        <div className='mx-auto w-full max-w-3xl px-4 py-1'>
-          <div className='rounded-md border border-[#cb706f]/20 px-3 py-1.5 text-xs text-[#cb706f]'>
-            {threadRow.errorMessage}
-          </div>
-        </div>
-      ) : null}
+      {/* Floating input area with progressive blur */}
+      <div className='absolute right-0 bottom-0 left-0 z-10 px-4 pt-2 pb-4'>
+        <ProgressiveBlur
+          direction='bottom'
+          blurLayers={6}
+          blurIntensity={0.3}
+          className='pointer-events-none absolute inset-0'
+        />
+        <div className='relative mx-auto max-w-[700px]'>
+          {/* Pending action banner */}
+          {pendingAction ? (
+            <div className='mb-2 flex items-center gap-2 rounded-md border border-[#cb706f]/20 px-3 py-1.5'>
+              <Trash2 className='size-3.5 text-[#cb706f]' />
+              <div className='min-w-0 flex-1'>
+                <div className='truncate text-xs'>{pendingAction.summary}</div>
+              </div>
+              <Button
+                size='sm'
+                variant='outline'
+                className='h-6 text-xs'
+                onClick={handleConfirmAction}
+              >
+                Confirm
+              </Button>
+              <button
+                type='button'
+                className='text-muted-foreground hover:text-foreground'
+                onClick={() => void cancelPendingAction({ orgSlug })}
+              >
+                <X className='size-3.5' />
+              </button>
+            </div>
+          ) : null}
 
-      {/* Input */}
-      <div className='border-border border-t px-4 py-3'>
-        <div className='mx-auto max-w-3xl'>
-          <div className='border-border/60 bg-background/60 overflow-hidden rounded-lg border'>
+          {/* Error banner */}
+          {threadRow.threadStatus === 'error' && threadRow.errorMessage ? (
+            <div className='mb-2 rounded-md border border-[#cb706f]/20 px-3 py-1.5 text-xs text-[#cb706f]'>
+              {threadRow.errorMessage}
+            </div>
+          ) : null}
+
+          {/* Input */}
+          <div className='border-border/60 bg-background/80 overflow-hidden rounded-xl border backdrop-blur-sm'>
             <div className='flex items-center gap-1'>
               <AssistantInput
                 ref={inputRef}
