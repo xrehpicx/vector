@@ -300,7 +300,7 @@ export const updateIssue: any = createTool({
 
 export const changeIssueKey: any = createTool({
   description:
-    'Change an issue\'s key by regenerating it based on a different context. Use "project" to base the key on the issue\'s project (e.g. PROJ-5), "team" to base it on the issue\'s team (e.g. ENG-3), or "user" to base it on the current user\'s name/username. The issue must already have the relevant team or project assigned.',
+    'Change an issue\'s key prefix by regenerating it based on a different scope. This changes the KEY PREFIX (e.g. PROJ-5 → ENG-3), NOT the issue visibility. Use "project" to base the key on the issue\'s project key, "team" on the team key, "org" on the organization slug, or "user" on the current user\'s name/username. The issue must already have the relevant team or project assigned for those scopes.',
   args: z.object({
     issueKey: z
       .string()
@@ -309,9 +309,9 @@ export const changeIssueKey: any = createTool({
         'Key of the issue to change. Defaults to the current issue page.',
       ),
     context: z
-      .enum(['team', 'project', 'user'])
+      .enum(['team', 'project', 'user', 'org'])
       .describe(
-        'Which context to derive the new key prefix from: "project" uses the project key, "team" uses the team key, "user" uses the user\'s username or initials.',
+        'Which scope to derive the new key prefix from: "project" uses the project key, "team" uses the team key, "org" uses the uppercased org slug, "user" uses the user\'s username or initials.',
       ),
   }),
   handler: async (ctx: AssistantToolCtx, args) => {

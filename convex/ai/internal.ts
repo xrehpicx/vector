@@ -2214,6 +2214,7 @@ export const changeIssueKey = internalMutation({
       v.literal('team'),
       v.literal('project'),
       v.literal('user'),
+      v.literal('org'),
     ),
   },
   handler: async (ctx, args) => {
@@ -2261,6 +2262,9 @@ export const changeIssueKey = internalMutation({
       }
       prefix = team.key;
       contextLabel = `team "${team.name}" (${team.key})`;
+    } else if (args.context === 'org') {
+      prefix = organization.slug.toUpperCase();
+      contextLabel = `organization "${organization.name}" (${organization.slug})`;
     } else {
       // user context — use the user's username or name initials
       const user = await ctx.db.get('users', args.userId);

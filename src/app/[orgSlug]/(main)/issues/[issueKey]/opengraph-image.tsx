@@ -10,7 +10,7 @@ export const contentType = 'image/png';
 
 interface IssueData {
   key: string;
-  title: string;
+  title: string | null;
   orgName: string;
   orgSlug: string;
   state: { name: string; color?: string; type: string } | null;
@@ -112,9 +112,24 @@ function IssueOgImage({ data }: { data: IssueData }) {
   );
 }
 
-function NotFoundImage() {
+function PrivateIssueImage({ data }: { data: IssueData }) {
   return (
-    <OgCard orgName='Vector' entityType='Issue' entityKey=''>
+    <OgCard orgName={data.orgName} entityType='Issue' entityKey={data.key}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ fontSize: 44, fontWeight: 700, color: '#f9fafb' }}>
+          {data.key}
+        </div>
+        <div style={{ fontSize: 24, color: '#6b7280' }}>
+          This issue is not public. Sign in to view it.
+        </div>
+      </div>
+    </OgCard>
+  );
+}
+
+function NotFoundImage({ orgSlug }: { orgSlug: string }) {
+  return (
+    <OgCard orgName={orgSlug} entityType='Issue' entityKey=''>
       <div style={{ fontSize: 44, fontWeight: 700, color: '#6b7280' }}>
         Issue not found
       </div>
@@ -140,8 +155,14 @@ export default async function Image({
     // fall through to not-found
   }
 
-  return new ImageResponse(
-    data ? <IssueOgImage data={data} /> : <NotFoundImage />,
-    { ...size },
-  );
+  let content;
+  if (data && data.title) {
+    content = <IssueOgImage data={data} />;
+  } else if (data) {
+    content = <PrivateIssueImage data={data} />;
+  } else {
+    content = <NotFoundImage orgSlug={orgSlug} />;
+  }
+
+  return new ImageResponse(content, { ...size });
 }

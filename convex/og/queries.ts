@@ -24,7 +24,19 @@ export const getPublicIssue = query({
         q.eq('organizationId', org._id).eq('key', args.issueKey),
       )
       .first();
-    if (!issue || issue.visibility !== 'public') return null;
+    if (!issue) return null;
+
+    if (issue.visibility !== 'public') {
+      return {
+        key: issue.key,
+        title: null,
+        orgName: org.name,
+        orgSlug: org.slug,
+        state: null,
+        priority: null,
+        project: null,
+      };
+    }
 
     const state = issue.workflowStateId
       ? await ctx.db.get('issueStates', issue.workflowStateId)
