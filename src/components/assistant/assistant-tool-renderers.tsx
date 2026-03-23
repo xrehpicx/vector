@@ -4,18 +4,27 @@ import type { ToolUIPart } from 'ai';
 import {
   CheckCircle2,
   AlertCircle,
+  Loader2,
   Mail,
+  Trash2,
   Wrench,
   FileText,
   CircleDot,
   FolderKanban,
   Users,
+  X,
 } from 'lucide-react';
 import { BarsSpinner } from '@/components/bars-spinner';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { Fragment, useState, type ComponentType, type ReactNode } from 'react';
+import { useMutation } from '@/lib/convex';
+import { api } from '@/convex/_generated/api';
+import { useConfirm } from '@/hooks/use-confirm';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -206,21 +215,130 @@ export function DefaultAssistantToolResult({
 }
 
 function DeleteRequestToolResult({ tool }: AssistantToolComponentProps) {
-  const output = getToolOutput(tool) as { summary?: string } | null;
+  const output = getToolOutput(tool) as {
+    summary?: string;
+    id?: string;
+    entityType?: string;
+    entityLabel?: string;
+    entities?: Array<{ entityId: string; entityLabel: string }>;
+    kind?: string;
+  } | null;
+  const { orgSlug } = useParams<{ orgSlug: string }>();
+  const executeConfirmedAction = useMutation(
+    api.ai.mutations.executeConfirmedAction,
+  );
+  const cancelPendingAction = useMutation(api.ai.mutations.cancelPendingAction);
+  const [confirmAction, ConfirmDialog] = useConfirm();
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isDone, setIsDone] = useState(false);
+
+  const handleConfirm = async () => {
+    if (!output?.id || !orgSlug) return;
+
+    const isBulk = output.kind === 'bulk_delete_entities';
+    const description = isBulk
+      ? `This will permanently delete ${output.entities?.length ?? 0} ${output.entityType ?? 'item'}(s) and cannot be undone.\n\n${(output.entities ?? []).map(e => `• ${e.entityLabel}`).join('\n')}`
+      : `This will permanently delete "${output.entityLabel ?? 'this item'}" and cannot be undone.`;
+
+    const ok = await confirmAction({
+      title: isBulk
+        ? `Delete ${output.entities?.length ?? 0} ${output.entityType ?? 'item'}s`
+        : `Delete ${output.entityType ?? 'item'}`,
+      description,
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+
+    setIsExecuting(true);
+    try {
+      await executeConfirmedAction({
+        orgSlug,
+        actionId: output.id,
+      });
+      setIsDone(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Delete failed');
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!orgSlug) return;
+    setIsCancelling(true);
+    try {
+      await cancelPendingAction({ orgSlug });
+      setIsDone(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Cancel failed');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  if (isDone) {
+    return (
+      <DenseToolShell
+        icon={<CheckCircle2 className='size-3' />}
+        title={getDisplayName(tool)}
+        status='done'
+        tone='success'
+      >
+        {output?.summary ? (
+          <div className='text-muted-foreground/60 min-w-0 text-[11px] leading-4 break-words'>
+            {output.summary}
+          </div>
+        ) : null}
+      </DenseToolShell>
+    );
+  }
 
   return (
-    <DenseToolShell
-      icon={<Wrench className='size-3' />}
-      title={getDisplayName(tool)}
-      status='awaiting confirmation'
-      tone='destructive'
-    >
-      {output?.summary ? (
-        <div className='text-muted-foreground/60 min-w-0 text-[11px] leading-4 break-words'>
-          {output.summary}
-        </div>
-      ) : null}
-    </DenseToolShell>
+    <>
+      <DenseToolShell
+        icon={<Trash2 className='size-3' />}
+        title={getDisplayName(tool)}
+        status='awaiting confirmation'
+        tone='destructive'
+      >
+        {output?.summary ? (
+          <div className='text-muted-foreground/60 min-w-0 text-[11px] leading-4 break-words'>
+            {output.summary}
+          </div>
+        ) : null}
+        {output?.id ? (
+          <div className='mt-1.5 flex items-center gap-1.5'>
+            <Button
+              size='sm'
+              variant='destructive'
+              className='h-6 px-2.5 text-[11px]'
+              onClick={() => void handleConfirm()}
+              disabled={isExecuting || isCancelling}
+            >
+              {isExecuting ? (
+                <Loader2 className='mr-1 size-3 animate-spin' />
+              ) : null}
+              Confirm delete
+            </Button>
+            <Button
+              size='sm'
+              variant='ghost'
+              className='text-muted-foreground h-6 px-2 text-[11px]'
+              onClick={() => void handleCancel()}
+              disabled={isExecuting || isCancelling}
+            >
+              {isCancelling ? (
+                <Loader2 className='mr-1 size-3 animate-spin' />
+              ) : null}
+              Cancel
+            </Button>
+          </div>
+        ) : null}
+      </DenseToolShell>
+      <ConfirmDialog />
+    </>
   );
 }
 
