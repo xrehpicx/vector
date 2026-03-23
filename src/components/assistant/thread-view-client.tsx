@@ -713,14 +713,14 @@ export function ThreadViewClient() {
           ) : null}
 
           {/* Input */}
-          <div className='border-border/60 bg-background/80 overflow-hidden rounded-xl border backdrop-blur-sm'>
+          <div className='border-border/60 bg-background/80 overflow-hidden rounded-lg border backdrop-blur-sm'>
             <div className='flex items-center gap-1'>
               <AssistantInput
                 ref={inputRef}
                 orgSlug={orgSlug}
                 onSubmit={handleSend}
                 disabled={isSending}
-                className='min-h-10 flex-1 px-3 py-2 text-sm'
+                className='min-h-10 flex-1 px-3 py-2 text-sm placeholder:text-center'
                 placeholder='Ask anything...'
               />
               <div className='flex shrink-0 items-center gap-1 px-1.5'>
