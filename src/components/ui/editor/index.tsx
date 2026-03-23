@@ -308,7 +308,7 @@ export function Editor({
           node.type.name === 'paragraph'
             ? (customPlaceholder ?? "Press '/' for commands")
             : '',
-        showOnlyCurrent: !customPlaceholder,
+        showOnlyCurrent: true,
         showOnlyWhenEditable: false,
         includeChildren: true,
       }),
