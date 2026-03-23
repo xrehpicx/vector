@@ -98,6 +98,14 @@ export function buildNotificationCopy(
         body: payload.issueTitle ?? 'A work session has failed.',
         href: payload.href,
       };
+    case 'issue_reminder':
+      return {
+        title: `Reminder: ${payload.issueKey ?? 'an issue'} needs attention`,
+        body:
+          payload.issueTitle ??
+          'You have a pending issue that needs attention.',
+        href: payload.href,
+      };
   }
 }
 

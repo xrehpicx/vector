@@ -396,6 +396,78 @@
   max-width: 100%;
 }
 
+/* Resizable image node view */
+.resizable-image-wrapper {
+  display: block;
+}
+
+.resizable-image-container {
+  display: inline-block;
+  position: relative;
+  max-width: 100%;
+  border-radius: 8px;
+  transition: outline 0.15s;
+}
+
+.resizable-image-container img {
+  display: block;
+  border-radius: 8px;
+  max-width: 100%;
+  height: auto;
+}
+
+.resizable-image-container.selected {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.resizable-image-container.resizing {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+  user-select: none;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  border-radius: 3px;
+  transition:
+    background-color 0.15s,
+    opacity 0.15s;
+  opacity: 0;
+}
+
+.resizable-image-container:hover .resize-handle,
+.resizable-image-container.selected .resize-handle,
+.resizable-image-container.resizing .resize-handle {
+  opacity: 1;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 40px;
+  max-height: 50%;
+  border-radius: 2px;
+  background-color: hsl(var(--primary));
+}
+
+.resize-handle-left {
+  left: -3px;
+}
+
+.resize-handle-right {
+  right: -3px;
+}
+
 .document-prose .tiptap table {
   border-collapse: collapse;
   width: 100%;

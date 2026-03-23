@@ -1,6 +1,11 @@
 import { type HTMLAttributes, useEffect, useRef, useState } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
-import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
+import {
+  EditorContent,
+  ReactNodeViewRenderer,
+  useEditor,
+  useEditorState,
+} from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -31,6 +36,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ResizableImageView } from './resizable-image-view';
 import SlashCommands from './slash-command/commands';
 import MentionExtension from './mention/mention-extension';
 import { createMentionSuggestion } from './mention/mention-suggestion';
@@ -68,6 +74,15 @@ const UploadableImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (element: HTMLElement) => {
+          const w = element.getAttribute('width') || element.style.width;
+          return w ? parseInt(String(w), 10) || null : null;
+        },
+        renderHTML: (attributes: { width?: number | null }) =>
+          attributes.width ? { width: attributes.width } : {},
+      },
       uploadId: {
         default: null,
         parseHTML: (element: HTMLElement) =>
@@ -92,6 +107,9 @@ const UploadableImage = Image.extend({
             : {},
       },
     };
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ResizableImageView);
   },
 });
 
@@ -951,6 +969,19 @@ export function Editor({
     setShowAltInput(false);
   };
 
+  const setImageWidthPercent = (percent: number) => {
+    if (!enableImages || !isOnImage) return;
+    const editorEl = editor.view.dom;
+    const parentWidth = editorEl.getBoundingClientRect().width;
+    const px = Math.round((parentWidth * percent) / 100);
+    editor.chain().focus().updateAttributes('image', { width: px }).run();
+  };
+
+  const resetImageWidth = () => {
+    if (!enableImages || !isOnImage) return;
+    editor.chain().focus().updateAttributes('image', { width: null }).run();
+  };
+
   const addRow = () => editor.chain().focus().addRowAfter().run();
   const removeRow = () => editor.chain().focus().deleteRow().run();
   const addColumn = () => editor.chain().focus().addColumnAfter().run();
@@ -1001,10 +1032,12 @@ export function Editor({
           const hasEditorFocus =
             view.hasFocus() || element.contains(document.activeElement);
           if (!hasEditorFocus) return false;
+          const onImage = enableImages && bubbleEditor.isActive('image');
           return (
             showLinkInput ||
             showTableActions ||
             showAltInput ||
+            onImage ||
             (!bubbleEditor.state.selection.empty && from !== to)
           );
         }}
@@ -1138,6 +1171,35 @@ export function Editor({
                 disabled,
                 className: 'ml-auto',
               })}
+            </div>
+          ) : null}
+          {isOnImage && !showAltInput ? (
+            <div
+              data-state='open'
+              className='border-border bg-popover data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-1 inline-flex w-fit flex-nowrap items-center gap-1 self-end overflow-x-auto rounded-md border p-1 whitespace-nowrap shadow-sm duration-200'
+            >
+              <span className='text-muted-foreground ml-1 text-xs'>Size:</span>
+              {([25, 50, 75, 100] as const).map(pct => (
+                <button
+                  key={pct}
+                  type='button'
+                  onClick={() => setImageWidthPercent(pct)}
+                  disabled={disabled}
+                  className={toolbarButtonClass + ' w-auto px-1.5 text-xs'}
+                  title={`${pct}% width`}
+                >
+                  {pct}%
+                </button>
+              ))}
+              <button
+                type='button'
+                onClick={resetImageWidth}
+                disabled={disabled}
+                className={toolbarButtonClass + ' w-auto px-1.5 text-xs'}
+                title='Reset to original size'
+              >
+                Auto
+              </button>
             </div>
           ) : null}
           {showTableActions && isInTable ? (

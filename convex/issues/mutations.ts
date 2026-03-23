@@ -1647,3 +1647,63 @@ export const deleteComment = mutation({
     return { success: true } as const;
   },
 });
+
+export const sendReminder = mutation({
+  args: {
+    issueId: v.id('issues'),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError('UNAUTHORIZED');
+    }
+
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      throw new ConvexError('ISSUE_NOT_FOUND');
+    }
+
+    const hasAccess = await canViewIssue(ctx, issue);
+    if (!hasAccess) {
+      throw new ConvexError('FORBIDDEN');
+    }
+
+    const org = await ctx.db.get('organizations', issue.organizationId);
+    if (!org) {
+      throw new ConvexError('ORGANIZATION_NOT_FOUND');
+    }
+
+    const assignmentRows = await ctx.db
+      .query('issueAssignees')
+      .withIndex('by_issue', q => q.eq('issueId', args.issueId))
+      .collect();
+
+    const assigneeIds = assignmentRows
+      .map(row => row.assigneeId)
+      .filter((id): id is Id<'users'> => Boolean(id));
+
+    if (assigneeIds.length === 0) {
+      throw new ConvexError('NO_ASSIGNEES');
+    }
+
+    const href = getIssueHref(org.slug, issue.key);
+
+    await createNotificationEvent(ctx, {
+      type: 'issue_reminder',
+      actorId: userId,
+      organizationId: issue.organizationId,
+      issueId: issue._id,
+      projectId: issue.projectId,
+      teamId: issue.teamId,
+      payload: {
+        organizationName: org.name,
+        issueKey: issue.key,
+        issueTitle: issue.title,
+        href,
+      },
+      recipients: assigneeIds.map(id => ({ userId: id })),
+    });
+
+    return { sent: assigneeIds.length } as const;
+  },
+});

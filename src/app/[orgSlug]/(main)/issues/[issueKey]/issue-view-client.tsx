@@ -18,6 +18,7 @@ import {
   Play,
   AlertTriangle,
   WandSparkles,
+  Bell,
 } from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
 import { useCachedQuery, useMutation, useAction } from '@/lib/convex';
@@ -216,6 +217,7 @@ export default function IssueViewClient({
   const [isUpdatingDescription, setIsUpdatingDescription] = useState(false);
   const [isUpdatingEstimates, setIsUpdatingEstimates] = useState(false);
   const [isDeletingIssue, setIsDeletingIssue] = useState(false);
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [attachProcessOpen, setAttachProcessOpen] = useState(false);
   const [delegateRunOpen, setDelegateRunOpen] = useState(false);
@@ -290,6 +292,7 @@ export default function IssueViewClient({
     api.issues.mutations.updateEstimatedTimes,
   );
   const deleteIssueMutation = useMutation(api.issues.mutations.deleteIssue);
+  const sendReminderMutation = useMutation(api.issues.mutations.sendReminder);
   const resolveKeyConflictMutation = useMutation(
     api.issues.mutations.resolveKeyConflict,
   );
@@ -667,6 +670,25 @@ export default function IssueViewClient({
     }
   };
 
+  const handleSendReminder = async () => {
+    if (!issue) return;
+    setIsSendingReminder(true);
+    try {
+      const result = await sendReminderMutation({ issueId: issue._id });
+      toast.success(
+        `Reminder sent to ${result.sent} assignee${result.sent === 1 ? '' : 's'}`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.includes('NO_ASSIGNEES')
+          ? 'No assignees to remind'
+          : 'Failed to send reminder';
+      toast.error(message);
+    } finally {
+      setIsSendingReminder(false);
+    }
+  };
+
   const handleResolveKeyConflict = async () => {
     if (!issue) return;
     setIsResolvingKeyConflict(true);
@@ -938,6 +960,27 @@ export default function IssueViewClient({
                             </div>
                           </div>
                         </CommandItem>
+                        <CommandItem
+                          value='Send reminder'
+                          className='cursor-pointer'
+                          disabled={isSendingReminder}
+                          onSelect={() => {
+                            setActionsOpen(false);
+                            void handleSendReminder();
+                          }}
+                        >
+                          <Bell className='mr-2 h-4 w-4' />
+                          <div className='flex-1'>
+                            <div className='font-medium'>
+                              {isSendingReminder
+                                ? 'Sending...'
+                                : 'Send reminder'}
+                            </div>
+                            <div className='text-muted-foreground text-xs'>
+                              Notify all assignees about this issue
+                            </div>
+                          </div>
+                        </CommandItem>
                         <PermissionAwareSelector
                           orgSlug={params.orgSlug}
                           permission={PERMISSIONS.ISSUE_DELETE}
@@ -1158,7 +1201,7 @@ export default function IssueViewClient({
                     value={descriptionValue}
                     onChange={setDescriptionValue}
                     placeholder='Add a description...'
-                    mode='compact'
+                    mode='full'
                     orgSlug={params.orgSlug}
                   />
                   <div className='flex items-center gap-3'>
@@ -1206,7 +1249,7 @@ export default function IssueViewClient({
                         <RichEditor
                           value={displayDescription}
                           onChange={() => {}}
-                          mode='compact'
+                          mode='full'
                           disabled={true}
                         />
                       </div>

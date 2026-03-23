@@ -16,6 +16,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'issue_comment_on_assigned_issue',
   'work_session_completed',
   'work_session_failed',
+  'issue_reminder',
 ] as const;
 
 export const NOTIFICATION_CHANNELS = ['email', 'push'] as const;
@@ -110,5 +111,7 @@ export function categoryForEvent(
     case 'work_session_completed':
     case 'work_session_failed':
       return 'work_sessions';
+    case 'issue_reminder':
+      return 'assignments';
   }
 }
