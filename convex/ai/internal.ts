@@ -1913,6 +1913,52 @@ export const updateIssue = internalMutation({
     const nextTitle = args.title ?? issue.title;
     const nextDescription = args.description ?? issue.description;
 
+    // Re-key the issue when its project or team scope changes
+    let newKey: string | undefined;
+    let newSequenceNumber: number | undefined;
+    if (
+      project !== undefined ||
+      (team !== undefined && project === undefined && args.projectKey === null)
+    ) {
+      const resolvedProject =
+        project ??
+        (issue.projectId
+          ? await ctx.db.get('projects', issue.projectId)
+          : null);
+      const resolvedTeam =
+        team ?? (issue.teamId ? await ctx.db.get('teams', issue.teamId) : null);
+
+      let prefix: string;
+      if (resolvedProject) {
+        prefix = resolvedProject.key;
+      } else if (resolvedTeam) {
+        prefix = resolvedTeam.key;
+      } else {
+        prefix = organization.slug.toUpperCase();
+      }
+
+      // Only re-key if the prefix actually changed
+      const currentPrefix = issue.key.replace(/-\d+$/, '');
+      if (prefix !== currentPrefix) {
+        const existingWithPrefix = await ctx.db
+          .query('issues')
+          .withIndex('by_organization', q =>
+            q.eq('organizationId', organization._id),
+          )
+          .collect();
+        const samePrefix = existingWithPrefix.filter(i =>
+          i.key.startsWith(`${prefix}-`),
+        );
+        const nextIssueKey = await getNextAvailableIssueKey(ctx, {
+          organizationId: organization._id,
+          prefix,
+          startingSequenceNumber: samePrefix.length + 1,
+        });
+        newKey = nextIssueKey.key;
+        newSequenceNumber = nextIssueKey.sequenceNumber;
+      }
+    }
+
     if (hasIssueFieldEdits) {
       await ctx.db.patch('issues', issue._id, {
         ...(args.title !== undefined ? { title: args.title.trim() } : {}),
@@ -1932,8 +1978,11 @@ export const updateIssue = internalMutation({
           ? { dueDate: args.dueDate ?? undefined }
           : {}),
         ...(parentIssueId !== undefined ? { parentIssueId } : {}),
+        ...(newKey !== undefined
+          ? { key: newKey, sequenceNumber: newSequenceNumber! }
+          : {}),
         searchText: buildIssueSearchText({
-          key: issue.key,
+          key: newKey ?? issue.key,
           title: nextTitle,
           description: nextDescription,
         }),
@@ -2147,7 +2196,8 @@ export const updateIssue = internalMutation({
 
     return {
       issueId: String(issue._id),
-      key: issue.key,
+      key: newKey ?? issue.key,
+      ...(newKey ? { oldKey: issue.key } : {}),
       title: nextTitle,
       ...(changes.length > 0 ? { changes: changes.join(', ') } : {}),
     };
