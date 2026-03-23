@@ -440,6 +440,7 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
     setIsExpanded(true);
     setIsSending(true);
     shouldAutoFollowRef.current = true;
+    scrollToTail('smooth');
 
     try {
       let ensuredThreadId = threadRow?.threadId ?? null;
@@ -449,6 +450,7 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
       }
       pendingThreadIdRef.current = ensuredThreadId;
       await sendMessage({ orgSlug, pageContext, prompt });
+      scrollToTail('smooth');
       return true;
     } catch (error) {
       pendingThreadIdRef.current = null;

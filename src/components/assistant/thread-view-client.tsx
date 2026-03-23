@@ -387,6 +387,7 @@ export function ThreadViewClient() {
 
     setIsSending(true);
     shouldAutoFollowRef.current = true;
+    scrollToTail('smooth');
 
     try {
       await sendMessage({
@@ -395,6 +396,7 @@ export function ThreadViewClient() {
         prompt,
         threadId: assistantThreadId,
       });
+      scrollToTail('smooth');
       return true;
     } catch (error) {
       toast.error(
