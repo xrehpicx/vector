@@ -364,23 +364,24 @@ export function Editor({
 
           const selectionFragment = editor.state.selection.content().content;
 
-          if (format === 'markdown') {
-            const markdown =
-              editor.storage.markdown?.manager?.serialize(
-                selectionFragment.toJSON(),
-              ) ?? '';
-            copyEvent.clipboardData.setData('text/plain', markdown);
-            copyEvent.preventDefault();
-            return true;
-          }
-
+          // Always include text/html so paste preserves rich formatting
           const serializer = DOMSerializer.fromSchema(editor.state.schema);
           const container = document.createElement('div');
           container.append(serializer.serializeFragment(selectionFragment));
           const html = container.innerHTML;
 
           copyEvent.clipboardData.setData('text/html', html);
-          copyEvent.clipboardData.setData('text/plain', html);
+
+          if (format === 'markdown') {
+            const markdown =
+              editor.storage.markdown?.manager?.serialize(
+                selectionFragment.toJSON(),
+              ) ?? '';
+            copyEvent.clipboardData.setData('text/plain', markdown);
+          } else {
+            copyEvent.clipboardData.setData('text/plain', html);
+          }
+
           copyEvent.preventDefault();
           return true;
         },
