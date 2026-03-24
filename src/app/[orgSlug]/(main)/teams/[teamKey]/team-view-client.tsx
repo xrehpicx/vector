@@ -1522,24 +1522,9 @@ export default function TeamViewClient({
                 <div className='flex flex-wrap items-center justify-between gap-2'>
                   <div className='overflow-x-auto overflow-y-hidden'>
                     <TabsList>
-                      <TabsTrigger value='issues'>
-                        Issues
-                        <span className='text-muted-foreground text-xs'>
-                          {teamIssuesData?.total || 0}
-                        </span>
-                      </TabsTrigger>
-                      <TabsTrigger value='members'>
-                        Members
-                        <span className='text-muted-foreground text-xs'>
-                          {teamMembers?.length ?? 0}
-                        </span>
-                      </TabsTrigger>
-                      <TabsTrigger value='projects'>
-                        Projects
-                        <span className='text-muted-foreground text-xs'>
-                          {teamProjects.length}
-                        </span>
-                      </TabsTrigger>
+                      <TabsTrigger value='issues'>Issues</TabsTrigger>
+                      <TabsTrigger value='members'>Members</TabsTrigger>
+                      <TabsTrigger value='projects'>Projects</TabsTrigger>
                       <TabsTrigger value='documents'>Documents</TabsTrigger>
                       <TabsTrigger value='activity'>Activity</TabsTrigger>
                     </TabsList>
