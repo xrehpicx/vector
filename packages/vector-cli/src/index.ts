@@ -2065,6 +2065,95 @@ statusCommand
     printOutput(result ?? { success: true }, runtime.json);
   });
 
+// ── User presence / custom status ──────────────────────────────────────────
+
+const presenceCommand = program
+  .command('presence')
+  .description('User presence and custom status (Discord-like)');
+
+presenceCommand.command('get').action(async (_options, command) => {
+  const { client, runtime } = await getClient(command);
+  const result = await runQuery(client, api.status.getCurrentUserStatus, {});
+  printOutput(result ?? { presence: 'online' }, runtime.json);
+});
+
+presenceCommand
+  .command('set <presence>')
+  .description('Set presence: online, idle, dnd, invisible')
+  .action(async (presence, _options, command) => {
+    const valid = ['online', 'idle', 'dnd', 'invisible'] as const;
+    if (!valid.includes(presence as (typeof valid)[number])) {
+      throw new Error(
+        `Invalid presence "${presence}". Must be one of: ${valid.join(', ')}`,
+      );
+    }
+    const { client, runtime } = await getClient(command);
+    await runMutation(client, api.status.setPresence, {
+      presence: presence as 'online' | 'idle' | 'dnd' | 'invisible',
+    });
+    printOutput({ ok: true, presence }, runtime.json);
+  });
+
+presenceCommand
+  .command('custom')
+  .description('Set a custom status with emoji and text')
+  .option('--emoji <emoji>', 'Status emoji')
+  .option('--text <text>', 'Status text')
+  .option(
+    '--clear-after <duration>',
+    'Auto-clear: 30m, 1h, 4h, today, or never (default)',
+  )
+  .action(async (options, command) => {
+    const emoji = (options as { emoji?: string }).emoji?.trim();
+    const text = (options as { text?: string }).text?.trim();
+    const clearAfterRaw = (options as { clearAfter?: string }).clearAfter;
+
+    if (!emoji && !text) {
+      throw new Error('At least --emoji or --text is required.');
+    }
+
+    let clearsAt: number | undefined;
+    if (clearAfterRaw) {
+      const durations: Record<string, number | 'today'> = {
+        '30m': 30 * 60 * 1000,
+        '1h': 60 * 60 * 1000,
+        '4h': 4 * 60 * 60 * 1000,
+        today: 'today',
+        never: 0,
+      };
+      const dur = durations[clearAfterRaw];
+      if (dur === undefined) {
+        throw new Error(
+          `Invalid --clear-after "${clearAfterRaw}". Must be one of: 30m, 1h, 4h, today, never`,
+        );
+      }
+      if (dur === 'today') {
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        clearsAt = end.getTime();
+      } else if (dur > 0) {
+        clearsAt = Date.now() + dur;
+      }
+    }
+
+    const { client, runtime } = await getClient(command);
+    await runMutation(client, api.status.setCustomStatus, {
+      customEmoji: emoji,
+      customText: text,
+      clearsAt,
+    });
+    printOutput({ ok: true, emoji, text, clearsAt }, runtime.json);
+  });
+
+presenceCommand
+  .command('clear')
+  .description('Clear custom status')
+  .action(async (_options, command) => {
+    const { client, runtime } = await getClient(command);
+    await runMutation(client, api.status.clearCustomStatus, {});
+    printOutput({ ok: true }, runtime.json);
+  });
+
 const adminCommand = program.command('admin').description('Platform admin');
 
 adminCommand.command('branding').action(async (_options, command) => {

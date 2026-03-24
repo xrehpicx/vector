@@ -166,6 +166,7 @@ Mention command groups in practical terms instead of listing them with no contex
 - `priority`
 - `state`
 - `status`
+- `presence`
 
 ### Core Entities
 

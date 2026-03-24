@@ -206,6 +206,28 @@ class VectorMenuBarApp: NSObject, NSApplicationDelegate {
             }
         }
 
+        // ── User Presence ──
+        if running {
+            menu.addItem(NSMenuItem.separator())
+
+            let presenceHeader = NSMenuItem(title: "Your Status", action: nil, keyEquivalent: "")
+            presenceHeader.isEnabled = false
+            menu.addItem(presenceHeader)
+
+            let presenceOptions: [(String, String, String)] = [
+                ("🟢  Online", "online", ""),
+                ("🟡  Idle", "idle", ""),
+                ("🔴  Do Not Disturb", "dnd", ""),
+                ("👻  Invisible", "invisible", ""),
+            ]
+            for (label, value, key) in presenceOptions {
+                let item = NSMenuItem(title: label, action: #selector(setPresence(_:)), keyEquivalent: key)
+                item.target = self
+                item.representedObject = value
+                menu.addItem(item)
+            }
+        }
+
         // ── Controls ──
         menu.addItem(NSMenuItem.separator())
 
@@ -259,6 +281,14 @@ class VectorMenuBarApp: NSObject, NSApplicationDelegate {
         if let url = URL(string: urlStr) {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    @objc func setPresence(_ sender: NSMenuItem) {
+        guard let presence = sender.representedObject as? String else { return }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.arguments = ["-c", "vcli presence set \(presence)"]
+        try? task.run()
     }
 
     @objc func startBridge() {
