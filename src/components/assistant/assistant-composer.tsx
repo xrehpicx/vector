@@ -160,7 +160,9 @@ export const AssistantComposer = forwardRef<
   const [model, setModel] = useState('');
   const [customModelDraft, setCustomModelDraft] = useState('');
   const [skipConfirmations, setSkipConfirmations] = useState(false);
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [thinkingLevel, setThinkingLevel] = useState<
+    'off' | 'low' | 'medium' | 'high'
+  >('off');
   const [modelOpen, setModelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const attachmentIdPrefix = useId();
@@ -212,9 +214,14 @@ export const AssistantComposer = forwardRef<
     setSkipConfirmations(
       window.localStorage.getItem(SKIP_CONFIRM_STORAGE_KEY) === 'true',
     );
-    setThinkingEnabled(
-      window.localStorage.getItem(THINKING_STORAGE_KEY) === 'true',
-    );
+    const storedThinking = window.localStorage.getItem(THINKING_STORAGE_KEY);
+    if (
+      storedThinking === 'low' ||
+      storedThinking === 'medium' ||
+      storedThinking === 'high'
+    ) {
+      setThinkingLevel(storedThinking);
+    }
   }, []);
 
   useEffect(() => {
@@ -251,13 +258,16 @@ export const AssistantComposer = forwardRef<
     });
   }, []);
 
-  const handleToggleThinking = useCallback(() => {
-    setThinkingEnabled(current => {
-      const next = !current;
-      window.localStorage.setItem(
-        THINKING_STORAGE_KEY,
-        next ? 'true' : 'false',
-      );
+  const handleCycleThinking = useCallback(() => {
+    setThinkingLevel(current => {
+      const order = ['off', 'low', 'medium', 'high'] as const;
+      const nextIndex = (order.indexOf(current) + 1) % order.length;
+      const next = order[nextIndex];
+      if (next === 'off') {
+        window.localStorage.removeItem(THINKING_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(THINKING_STORAGE_KEY, next);
+      }
       return next;
     });
   }, []);
@@ -332,10 +342,15 @@ export const AssistantComposer = forwardRef<
 
   const handleSubmit = useCallback(
     async (text: string, mentions: MentionRef[]) => {
-      // Prepend thinking instruction if enabled
+      // Prepend thinking instruction based on level
       let finalText = text;
-      if (thinkingEnabled && text.trim()) {
-        finalText = `[Think step-by-step before responding]\n\n${text}`;
+      if (thinkingLevel !== 'off' && text.trim()) {
+        const thinkingInstructions = {
+          low: '[Think briefly before responding]',
+          medium: '[Think step-by-step before responding]',
+          high: '[Think deeply and exhaustively before responding, considering all angles]',
+        };
+        finalText = `${thinkingInstructions[thinkingLevel]}\n\n${text}`;
       }
 
       const shouldClear = await onSubmit(finalText, mentions, {
@@ -355,7 +370,7 @@ export const AssistantComposer = forwardRef<
 
       return shouldClear;
     },
-    [attachments, model, onSubmit, skipConfirmations, thinkingEnabled],
+    [attachments, model, onSubmit, skipConfirmations, thinkingLevel],
   );
 
   const canInteract = !disabled && !busy && !isUploadingAttachment;
@@ -493,10 +508,10 @@ export const AssistantComposer = forwardRef<
             variant='ghost'
             className={cn(
               iconButtonClass,
-              thinkingEnabled &&
+              thinkingLevel !== 'off' &&
                 'bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 dark:text-amber-400',
             )}
-            onClick={handleToggleThinking}
+            onClick={handleCycleThinking}
           >
             <Lightbulb
               className={cn(variant === 'dock' ? 'size-3' : 'size-3.5')}
@@ -504,7 +519,10 @@ export const AssistantComposer = forwardRef<
           </Button>
         </TooltipTrigger>
         <TooltipContent side='top'>
-          {thinkingEnabled ? 'Thinking: On' : 'Thinking: Off'}
+          Thinking:{' '}
+          {thinkingLevel === 'off'
+            ? 'Off'
+            : thinkingLevel.charAt(0).toUpperCase() + thinkingLevel.slice(1)}
         </TooltipContent>
       </Tooltip>
 
@@ -634,7 +652,7 @@ export const AssistantComposer = forwardRef<
               >
                 <Settings2 className='size-3' />
                 <span className='text-muted-foreground'>Options</span>
-                {(skipConfirmations || thinkingEnabled || model) && (
+                {(skipConfirmations || thinkingLevel !== 'off' || model) && (
                   <span className='bg-primary size-1.5 rounded-full' />
                 )}
               </Button>
