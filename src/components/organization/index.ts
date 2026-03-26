@@ -13,6 +13,7 @@ export * from './states-management-dialog';
 export * from './states-management-popover';
 export * from './priorities-management-dialog';
 export * from './priorities-management-popover';
+export * from './kanban-border-tags-management-popover';
 export * from './roles-page-content';
 export * from './create-role-dialog';
 export * from './edit-role-dialog';

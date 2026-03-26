@@ -29,6 +29,20 @@ import {
 import { buildIssueSearchText } from './search';
 import { getNextAvailableIssueKey, parseIssueKeyParts } from './keys';
 import { hasAgentMention } from '../ai/comment_agent';
+import {
+  normalizeKanbanBorderColor,
+  KANBAN_BORDER_COLOR_OPTIONS,
+} from '../../src/lib/kanban-border-tags';
+
+const kanbanBorderTagValidator = v.union(
+  ...KANBAN_BORDER_COLOR_OPTIONS.map(option => v.literal(option.value)),
+  v.literal('rose'),
+  v.literal('orange'),
+  v.literal('amber'),
+  v.literal('emerald'),
+  v.literal('sky'),
+  v.literal('violet'),
+);
 
 function priorityLabel(
   priority: Doc<'issuePriorities'> | null | undefined,
@@ -1029,6 +1043,36 @@ export const changePriority = mutation({
         snapshot: snapshotForIssue(issue),
       });
     }
+  },
+});
+
+export const changeKanbanBorderColor = mutation({
+  args: {
+    issueId: v.id('issues'),
+    borderColor: v.union(kanbanBorderTagValidator, v.null()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError('UNAUTHORIZED');
+    }
+
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      throw new ConvexError('ISSUE_NOT_FOUND');
+    }
+
+    if (!(await canEditIssue(ctx, issue))) {
+      throw new ConvexError('FORBIDDEN');
+    }
+
+    await ctx.db.patch('issues', args.issueId, {
+      kanbanBorderTag:
+        normalizeKanbanBorderColor(args.borderColor) ?? undefined,
+      kanbanBorderColor: undefined,
+    });
+
+    return { success: true } as const;
   },
 });
 

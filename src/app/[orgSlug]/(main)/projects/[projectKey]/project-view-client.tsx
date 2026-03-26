@@ -44,6 +44,10 @@ import {
   type VisibilityState,
 } from '@/components/ui/visibility-selector';
 import { IssuesKanban } from '@/components/issues/issues-kanban';
+import {
+  normalizeKanbanBorderColor,
+  type KanbanBorderColor,
+} from '@/components/issues/kanban-border-colors';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { CreateIssueDialog } from '@/components/issues/create-issue-dialog';
 import { TableSkeleton, KanbanSkeleton } from '@/components/ui/table-skeleton';
@@ -494,6 +498,23 @@ export default function ProjectViewClient({
           priorityName: nextPriority?.name ?? undefined,
           priorityIcon: nextPriority?.icon ?? undefined,
           priorityColor: nextPriority?.color ?? undefined,
+        })),
+    );
+  });
+  const changeKanbanBorderColorMutation = useMutation(
+    api.issues.mutations.changeKanbanBorderColor,
+  ).withOptimisticUpdate((store, args) => {
+    if (!projectIssuesQueryArgs) return;
+    updateQuery(
+      store,
+      api.issues.queries.listIssues,
+      projectIssuesQueryArgs,
+      current =>
+        updateIssueRows(current, String(args.issueId), row => ({
+          ...row,
+          kanbanBorderTag:
+            normalizeKanbanBorderColor(args.borderColor) ?? undefined,
+          kanbanBorderColor: undefined,
         })),
     );
   });
@@ -1405,6 +1426,15 @@ export default function ProjectViewClient({
                         void updateAssigneesMutation({
                           issueId: issueId as Id<'issues'>,
                           assigneeIds: assigneeIds as Id<'users'>[],
+                        });
+                      }}
+                      onKanbanBorderColorChange={(
+                        issueId,
+                        borderColor: KanbanBorderColor | '',
+                      ) => {
+                        void changeKanbanBorderColorMutation({
+                          issueId: issueId as Id<'issues'>,
+                          borderColor: borderColor || null,
                         });
                       }}
                       onDelete={canDeleteIssue ? handleDeleteIssue : undefined}

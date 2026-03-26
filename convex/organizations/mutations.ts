@@ -14,6 +14,11 @@ import {
   PROJECT_STATUS_DEFAULTS,
 } from '../../src/lib/defaults';
 import {
+  getDefaultKanbanBorderTags,
+  normalizeKanbanBorderTags,
+  KANBAN_BORDER_COLOR_OPTIONS,
+} from '../../src/lib/kanban-border-tags';
+import {
   normalizeSocialLinkUrl,
   SOCIAL_LINK_PLATFORMS,
 } from '../../src/lib/social-links';
@@ -26,6 +31,10 @@ const socialLinkValidator = v.object({
   platform: socialLinkPlatformValidator,
   url: v.string(),
 });
+
+const kanbanBorderTagValidator = v.union(
+  ...KANBAN_BORDER_COLOR_OPTIONS.map(option => v.literal(option.value)),
+);
 
 async function requireOrgAccess(
   ctx: MutationCtx,
@@ -375,6 +384,7 @@ export const create = mutation({
       name: args.data.name.trim(),
       slug: args.data.slug.trim(),
       logo: args.data.logo,
+      kanbanBorderTags: getDefaultKanbanBorderTags(),
     });
 
     await ctx.db.insert('members', {
@@ -667,6 +677,54 @@ export const resetIssuePriorities = mutation({
         icon: priority.icon,
       });
     }
+  },
+});
+
+export const updateKanbanBorderTag = mutation({
+  args: {
+    orgSlug: v.string(),
+    tagId: kanbanBorderTagValidator,
+    name: v.string(),
+    color: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const org = await requireOrgAccess(
+      ctx,
+      args.orgSlug,
+      PERMISSIONS.ORG_MANAGE_SETTINGS,
+    );
+
+    const normalizedTags = normalizeKanbanBorderTags(org.kanbanBorderTags);
+    const trimmedName = args.name.trim();
+
+    await ctx.db.patch('organizations', org._id, {
+      kanbanBorderTags: normalizedTags.map(tag =>
+        tag.id === args.tagId
+          ? {
+              ...tag,
+              name: trimmedName,
+              color: args.color.trim() || tag.color,
+            }
+          : tag,
+      ),
+    });
+  },
+});
+
+export const resetKanbanBorderTags = mutation({
+  args: {
+    orgSlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const org = await requireOrgAccess(
+      ctx,
+      args.orgSlug,
+      PERMISSIONS.ORG_MANAGE_SETTINGS,
+    );
+
+    await ctx.db.patch('organizations', org._id, {
+      kanbanBorderTags: getDefaultKanbanBorderTags(),
+    });
   },
 });
 

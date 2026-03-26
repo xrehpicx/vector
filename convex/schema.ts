@@ -33,6 +33,7 @@ import {
   notificationEventTypeValidator,
   notificationPayloadValidator,
 } from './notifications/shared';
+import { KANBAN_BORDER_COLOR_OPTIONS } from '../src/lib/kanban-border-tags';
 import { SOCIAL_LINK_PLATFORMS } from '../src/lib/social-links';
 
 const permissionValidator = v.union(
@@ -52,6 +53,16 @@ const systemRoleKeyValidator = v.union(
 const socialLinkPlatformValidator = v.union(
   ...SOCIAL_LINK_PLATFORMS.map(platform => v.literal(platform)),
 );
+
+const kanbanBorderTagValidator = v.union(
+  ...KANBAN_BORDER_COLOR_OPTIONS.map(option => v.literal(option.value)),
+);
+
+const kanbanBorderTagSettingValidator = v.object({
+  id: kanbanBorderTagValidator,
+  name: v.string(),
+  color: v.string(),
+});
 
 export default defineSchema({
   users: defineTable({
@@ -160,6 +171,7 @@ export default defineSchema({
         }),
       ),
     ),
+    kanbanBorderTags: v.optional(v.array(kanbanBorderTagSettingValidator)),
     agentContext: v.optional(v.string()),
     agentContextDocumentId: v.optional(v.id('documents')),
   }).index('by_slug', ['slug']),
@@ -504,6 +516,17 @@ export default defineSchema({
         v.literal('private'), // only creator/assignees can view
         v.literal('organization'), // full org can see it
         v.literal('public'), // publicly accessible (view-only)
+      ),
+    ),
+    kanbanBorderTag: v.optional(kanbanBorderTagValidator),
+    kanbanBorderColor: v.optional(
+      v.union(
+        v.literal('rose'),
+        v.literal('orange'),
+        v.literal('amber'),
+        v.literal('emerald'),
+        v.literal('sky'),
+        v.literal('violet'),
       ),
     ),
     createdBy: v.optional(v.id('users')), // Made optional for backwards compatibility with existing data

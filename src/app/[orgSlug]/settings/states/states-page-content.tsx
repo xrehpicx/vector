@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Settings2, Plus, Clock, Pencil } from 'lucide-react';
+import { Settings2, Plus, Clock, Pencil, Tags } from 'lucide-react';
 import {
+  KanbanBorderTagsManagementPopover,
   StatesManagementDialog,
   StatesManagementPopover,
 } from '@/components/organization';
@@ -17,6 +18,11 @@ import { toast } from 'sonner';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
 import { Id } from '@/convex/_generated/dataModel';
 import { ISSUE_STATE_DEFAULTS, PROJECT_STATUS_DEFAULTS } from '@/lib/defaults';
+import {
+  getKanbanBorderTagDisplayName,
+  getKanbanBorderTagSlotLabel,
+  type KanbanBorderTagSetting,
+} from '@/lib/kanban-border-tags';
 
 type IssueStateType = 'backlog' | 'todo' | 'in_progress' | 'done' | 'canceled';
 type ProjectStatusType =
@@ -99,6 +105,12 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
       orgSlug,
     },
   );
+  const kanbanBorderTags = useCachedQuery(
+    api.organizations.queries.listKanbanBorderTags,
+    {
+      orgSlug,
+    },
+  );
 
   const createIssueState = useMutation(
     api.organizations.mutations.createIssueState,
@@ -126,6 +138,12 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
   );
   const resetPriorities = useMutation(
     api.organizations.mutations.resetIssuePriorities,
+  );
+  const updateKanbanBorderTag = useMutation(
+    api.organizations.mutations.updateKanbanBorderTag,
+  );
+  const resetKanbanBorderTags = useMutation(
+    api.organizations.mutations.resetKanbanBorderTags,
   );
 
   const [dialogState, setDialogState] = useState<{
@@ -528,6 +546,72 @@ export function StatesPageContent({ orgSlug }: StatesPageContentProps) {
               No priorities configured
             </div>
           )}
+        </div>
+      </div>
+
+      <div className='mt-20 space-y-4'>
+        <div className='flex items-center justify-between'>
+          <div className='flex items-center gap-2'>
+            <Tags className='text-muted-foreground size-5' />
+            <h2 className='text-lg font-semibold'>Kanban Border Tags</h2>
+          </div>
+          <div className='flex gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={async () => {
+                await resetKanbanBorderTags({ orgSlug });
+                toast.success('Kanban border tags reset to defaults');
+              }}
+              className='h-7 text-xs'
+            >
+              Reset
+            </Button>
+          </div>
+        </div>
+
+        <p className='text-muted-foreground text-xs'>
+          Keep these as simple color slots or give them names for the kanban
+          board menu.
+        </p>
+
+        <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'>
+          {kanbanBorderTags?.map(tag => (
+            <KanbanBorderTagsManagementPopover
+              key={tag.id}
+              tag={tag as KanbanBorderTagSetting}
+              onSave={data => {
+                void updateKanbanBorderTag({
+                  orgSlug,
+                  tagId: data.id,
+                  name: data.name,
+                  color: data.color,
+                });
+              }}
+            >
+              <button className='bg-background hover:bg-muted/30 group flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors'>
+                <span
+                  className='size-3 flex-shrink-0 rounded-full'
+                  style={{ backgroundColor: tag.color }}
+                />
+                <div className='min-w-0 flex-1'>
+                  <span className='block truncate text-xs font-medium'>
+                    {tag.name.trim() ? (
+                      getKanbanBorderTagDisplayName(tag)
+                    ) : (
+                      <span className='text-muted-foreground italic'>
+                        Add tag name
+                      </span>
+                    )}
+                  </span>
+                  <span className='text-muted-foreground block text-[11px]'>
+                    {getKanbanBorderTagSlotLabel(tag.id)}
+                  </span>
+                </div>
+                <Pencil className='text-muted-foreground group-hover:text-foreground size-3 opacity-0 transition-colors group-hover:opacity-100' />
+              </button>
+            </KanbanBorderTagsManagementPopover>
+          ))}
         </div>
       </div>
 

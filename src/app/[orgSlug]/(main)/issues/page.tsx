@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { IssuesKanban } from '@/components/issues/issues-kanban';
 import { IssuesTimeline } from '@/components/issues/issues-timeline';
+import type { KanbanBorderColor } from '@/components/issues/kanban-border-colors';
 import type { IssueGroupByField } from '@/lib/group-by';
 import { GroupBySelector } from '@/components/ui/group-by-selector';
 import { PageSkeleton, KanbanSkeleton } from '@/components/ui/table-skeleton';
@@ -178,6 +179,9 @@ export default function IssuesPage() {
   );
   const changeTeamMutation = useMutation(api.issues.mutations.changeTeam);
   const changeProjectMutation = useMutation(api.issues.mutations.changeProject);
+  const changeKanbanBorderColorMutation = useMutation(
+    api.issues.mutations.changeKanbanBorderColor,
+  );
   const changeAssignmentStateMutation = useMutation(
     api.issues.mutations.changeAssignmentState,
   );
@@ -287,6 +291,17 @@ export default function IssuesPage() {
     void changeProjectMutation({
       issueId: issueId as Id<'issues'>,
       projectId: (projectId as Id<'projects'>) || null,
+    });
+  };
+
+  const handleKanbanBorderColorChange = (
+    issueId: string,
+    borderColor: KanbanBorderColor | '',
+  ) => {
+    if (!user) return;
+    void changeKanbanBorderColorMutation({
+      issueId: issueId as Id<'issues'>,
+      borderColor: borderColor || null,
     });
   };
 
@@ -632,6 +647,7 @@ export default function IssuesPage() {
               }}
               onTeamChange={handleTeamChange}
               onProjectChange={handleProjectChange}
+              onKanbanBorderColorChange={handleKanbanBorderColorChange}
               onDelete={handleDelete}
               deletePending={isDeleting}
               groupBy={kanbanGroupBy}

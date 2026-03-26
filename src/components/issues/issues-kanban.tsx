@@ -8,14 +8,17 @@ import {
   ExternalLink,
   FolderOpen,
   GitPullRequest,
+  Plus,
   Trash2,
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DynamicIcon, getDynamicIcon } from '@/lib/dynamic-icons';
+import { api, useCachedQuery, useMutation } from '@/lib/convex';
 import { LiveActivityPreview } from '@/components/issues/live-activity-indicator';
 import { UserAvatar } from '@/components/user-avatar';
 import { formatDateHuman } from '@/lib/date';
+import { useOptimisticValue } from '@/hooks/use-optimistic';
 import {
   DragOverlay,
   useDndMonitor,
@@ -37,6 +40,16 @@ import type { IssueRowData } from './issues-table';
 import type { IssueGroupByField } from '@/lib/group-by';
 import { CreateIssueDialog } from './create-issue-dialog';
 import {
+  getDefinedKanbanBorderTags,
+  getDefaultKanbanBorderTags,
+  getKanbanBorderColorHex,
+  getKanbanBorderTag,
+  getKanbanBorderTagDisplayName,
+  normalizeKanbanBorderColor,
+  type KanbanBorderColor,
+  type KanbanBorderTagSetting,
+} from './kanban-border-colors';
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -46,6 +59,8 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { IssueDragData } from '@/components/assistant/assistant-issue-dnd';
 
@@ -67,6 +82,10 @@ export interface IssuesKanbanProps {
   onAssigneesChange?: (issueId: string, assigneeIds: string[]) => void;
   onTeamChange?: (issueId: string, teamId: string) => void;
   onProjectChange?: (issueId: string, projectId: string) => void;
+  onKanbanBorderColorChange?: (
+    issueId: string,
+    borderColor: KanbanBorderColor | '',
+  ) => void;
   onDelete?: (issueId: string) => void;
   deletePending?: boolean;
   /** Extra defaults passed to the create-issue dialog (e.g. projectId) */
@@ -87,6 +106,7 @@ interface GroupedIssue {
   priorityName: string | null;
   teamId: string | null;
   projectId: string | null;
+  kanbanBorderTag: KanbanBorderColor | null;
   workflowStateId: string | null;
   workflowStateName: string | null;
   workflowStateIcon: string | null;
@@ -164,6 +184,7 @@ export function IssuesKanban({
   onAssigneesChange,
   onTeamChange,
   onProjectChange,
+  onKanbanBorderColorChange,
   onDelete,
   deletePending = false,
   createDefaults,
@@ -172,6 +193,10 @@ export function IssuesKanban({
   groupBy = 'status',
 }: IssuesKanbanProps) {
   const effectiveGroupBy = groupBy === 'none' ? 'status' : groupBy;
+  const kanbanBorderTags =
+    useCachedQuery(api.organizations.queries.listKanbanBorderTags, {
+      orgSlug,
+    }) ?? getDefaultKanbanBorderTags();
 
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -219,6 +244,17 @@ export function IssuesKanban({
           priorityName: row.priorityName ?? null,
           teamId: row.teamId ?? null,
           projectId: row.projectId ?? null,
+          kanbanBorderTag: normalizeKanbanBorderColor(
+            ((
+              row as IssueRowData & {
+                kanbanBorderTag?: string | null;
+                kanbanBorderColor?: string | null;
+              }
+            ).kanbanBorderTag ?? row.kanbanBorderColor) as
+              | string
+              | null
+              | undefined,
+          ),
           workflowStateId: row.workflowStateId ?? null,
           workflowStateName: row.workflowStateName ?? null,
           workflowStateIcon: row.workflowStateIcon ?? null,
@@ -474,6 +510,7 @@ export function IssuesKanban({
               priorities={priorities}
               teams={teams}
               projects={projects}
+              kanbanBorderTags={kanbanBorderTags}
               currentUserId={currentUserId}
               canManageAssignees={canManageAssignees}
               canUpdateAssignmentStates={canUpdateAssignmentStates}
@@ -486,6 +523,7 @@ export function IssuesKanban({
               onAssigneesChange={onAssigneesChange}
               onTeamChange={onTeamChange}
               onProjectChange={onProjectChange}
+              onKanbanBorderColorChange={onKanbanBorderColorChange}
               onDelete={onDelete}
               deletePending={deletePending}
               createDefaults={
@@ -509,6 +547,7 @@ export function IssuesKanban({
               issue={activeIssue}
               orgSlug={orgSlug}
               isDragging
+              kanbanBorderTags={kanbanBorderTags}
             />
           </div>
         ) : null}
@@ -527,6 +566,7 @@ function KanbanColumn({
   priorities,
   teams,
   projects,
+  kanbanBorderTags,
   currentUserId,
   canManageAssignees,
   canUpdateAssignmentStates,
@@ -537,6 +577,7 @@ function KanbanColumn({
   onAssigneesChange,
   onTeamChange,
   onProjectChange,
+  onKanbanBorderColorChange,
   onDelete,
   deletePending,
   createDefaults,
@@ -550,6 +591,7 @@ function KanbanColumn({
   priorities: ReadonlyArray<Priority>;
   teams?: ReadonlyArray<Team>;
   projects?: ReadonlyArray<Project>;
+  kanbanBorderTags: ReadonlyArray<KanbanBorderTagSetting>;
   currentUserId: string;
   canManageAssignees?: boolean;
   canUpdateAssignmentStates?: boolean;
@@ -564,6 +606,10 @@ function KanbanColumn({
   onAssigneesChange?: (issueId: string, assigneeIds: string[]) => void;
   onTeamChange?: (issueId: string, teamId: string) => void;
   onProjectChange?: (issueId: string, projectId: string) => void;
+  onKanbanBorderColorChange?: (
+    issueId: string,
+    borderColor: KanbanBorderColor | '',
+  ) => void;
   onDelete?: (issueId: string) => void;
   deletePending?: boolean;
   createDefaults?: Record<string, unknown>;
@@ -633,6 +679,7 @@ function KanbanColumn({
                 priorities={priorities}
                 teams={teams}
                 projects={projects}
+                kanbanBorderTags={kanbanBorderTags}
                 currentUserId={currentUserId}
                 canManageAssignees={canManageAssignees}
                 canUpdateAssignmentStates={canUpdateAssignmentStates}
@@ -641,6 +688,7 @@ function KanbanColumn({
                 onAssigneesChange={onAssigneesChange}
                 onTeamChange={onTeamChange}
                 onProjectChange={onProjectChange}
+                onKanbanBorderColorChange={onKanbanBorderColorChange}
                 onDelete={onDelete}
                 deletePending={deletePending}
               />
@@ -668,6 +716,7 @@ function KanbanCard({
   priorities,
   teams,
   projects,
+  kanbanBorderTags,
   currentUserId,
   canManageAssignees = false,
   canUpdateAssignmentStates = false,
@@ -676,6 +725,7 @@ function KanbanCard({
   onAssigneesChange,
   onTeamChange,
   onProjectChange,
+  onKanbanBorderColorChange,
   onDelete,
   deletePending,
 }: {
@@ -686,6 +736,7 @@ function KanbanCard({
   priorities: ReadonlyArray<Priority>;
   teams?: ReadonlyArray<Team>;
   projects?: ReadonlyArray<Project>;
+  kanbanBorderTags: ReadonlyArray<KanbanBorderTagSetting>;
   currentUserId: string;
   canManageAssignees?: boolean;
   canUpdateAssignmentStates?: boolean;
@@ -698,6 +749,10 @@ function KanbanCard({
   onAssigneesChange?: (issueId: string, assigneeIds: string[]) => void;
   onTeamChange?: (issueId: string, teamId: string) => void;
   onProjectChange?: (issueId: string, projectId: string) => void;
+  onKanbanBorderColorChange?: (
+    issueId: string,
+    borderColor: KanbanBorderColor | '',
+  ) => void;
   onDelete?: (issueId: string) => void;
   deletePending?: boolean;
 }) {
@@ -716,14 +771,80 @@ function KanbanCard({
       stateId: issue.stateId,
     },
   });
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  const currentKanbanBorderColor: KanbanBorderColor | '' =
+    normalizeKanbanBorderColor(issue.kanbanBorderTag) ?? '';
+  const [displayKanbanBorderColor, setOptimisticKanbanBorderColor] =
+    useOptimisticValue<KanbanBorderColor | ''>(currentKanbanBorderColor);
+  const [isBorderPickerOpen, setIsBorderPickerOpen] = useState(false);
+
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      cardRef.current = node;
+      setNodeRef(node);
+    },
+    [setNodeRef],
+  );
+
+  const handleKanbanBorderColorChange = React.useCallback(
+    (nextBorderColor: KanbanBorderColor | '') => {
+      if (!onKanbanBorderColorChange) return;
+      setOptimisticKanbanBorderColor(nextBorderColor);
+      onKanbanBorderColorChange(issue.id, nextBorderColor);
+      setIsBorderPickerOpen(false);
+    },
+    [issue.id, onKanbanBorderColorChange, setOptimisticKanbanBorderColor],
+  );
+
+  const handleDoubleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!onKanbanBorderColorChange) return;
+      const target = event.target as HTMLElement;
+      if (
+        target.closest(
+          'a,button,input,textarea,[role="button"],[data-kanban-border-ignore]',
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setIsBorderPickerOpen(open => !open);
+    },
+    [onKanbanBorderColorChange],
+  );
+
+  React.useEffect(() => {
+    if (!isBorderPickerOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!cardRef.current?.contains(event.target as Node)) {
+        setIsBorderPickerOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsBorderPickerOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isBorderPickerOpen]);
 
   return (
     <ContextMenu>
       <ContextMenuTrigger
-        ref={setNodeRef}
+        ref={setRefs}
         {...listeners}
         {...attributes}
         className={cn('block', isHidden && 'scale-95 opacity-30')}
+        onDoubleClick={handleDoubleClick}
       >
         <KanbanCardContent
           issue={issue}
@@ -734,6 +855,11 @@ function KanbanCard({
           canManageAssignees={canManageAssignees}
           onPriorityChange={onPriorityChange}
           onAssigneesChange={onAssigneesChange}
+          kanbanBorderTags={kanbanBorderTags}
+          kanbanBorderColor={displayKanbanBorderColor}
+          isBorderPickerOpen={isBorderPickerOpen}
+          onBorderPickerOpenChange={setIsBorderPickerOpen}
+          onKanbanBorderColorChange={handleKanbanBorderColorChange}
         />
       </ContextMenuTrigger>
       <KanbanCardMenu
@@ -749,6 +875,9 @@ function KanbanCard({
         onPriorityChange={onPriorityChange}
         onTeamChange={onTeamChange}
         onProjectChange={onProjectChange}
+        kanbanBorderTags={kanbanBorderTags}
+        kanbanBorderColor={displayKanbanBorderColor}
+        onKanbanBorderColorChange={handleKanbanBorderColorChange}
         onDelete={onDelete}
         deletePending={deletePending}
       />
@@ -769,6 +898,9 @@ function KanbanCardMenu({
   onPriorityChange,
   onTeamChange,
   onProjectChange,
+  kanbanBorderTags,
+  kanbanBorderColor,
+  onKanbanBorderColorChange,
   onDelete,
   deletePending,
 }: {
@@ -788,9 +920,69 @@ function KanbanCardMenu({
   onPriorityChange?: (issueId: string, priorityId: string) => void;
   onTeamChange?: (issueId: string, teamId: string) => void;
   onProjectChange?: (issueId: string, projectId: string) => void;
+  kanbanBorderTags: ReadonlyArray<KanbanBorderTagSetting>;
+  kanbanBorderColor: KanbanBorderColor | '';
+  onKanbanBorderColorChange?: (borderColor: KanbanBorderColor | '') => void;
   onDelete?: (issueId: string) => void;
   deletePending?: boolean;
 }) {
+  const updateKanbanBorderTagMutation = useMutation(
+    api.organizations.mutations.updateKanbanBorderTag,
+  );
+  const definedKanbanBorderTags = React.useMemo(
+    () => getDefinedKanbanBorderTags(kanbanBorderTags),
+    [kanbanBorderTags],
+  );
+  const availableKanbanBorderTags = React.useMemo(
+    () => kanbanBorderTags.filter(tag => !tag.name.trim()),
+    [kanbanBorderTags],
+  );
+  const [newKanbanBorderTagName, setNewKanbanBorderTagName] = useState('');
+  const [newKanbanBorderTagColor, setNewKanbanBorderTagColor] = useState(
+    availableKanbanBorderTags[0]?.color ?? kanbanBorderTags[0]?.color ?? '',
+  );
+
+  React.useEffect(() => {
+    if (!newKanbanBorderTagName.trim()) {
+      setNewKanbanBorderTagName('');
+      setNewKanbanBorderTagColor(
+        availableKanbanBorderTags[0]?.color ?? kanbanBorderTags[0]?.color ?? '',
+      );
+    }
+  }, [availableKanbanBorderTags, kanbanBorderTags, newKanbanBorderTagName]);
+
+  const handleCreateKanbanBorderTag = React.useCallback(async () => {
+    const nextAvailableTag = availableKanbanBorderTags[0];
+    const trimmedName = newKanbanBorderTagName.trim();
+
+    if (!nextAvailableTag || !trimmedName) {
+      return;
+    }
+
+    await updateKanbanBorderTagMutation({
+      orgSlug,
+      tagId: nextAvailableTag.id,
+      name: trimmedName,
+      color: newKanbanBorderTagColor || nextAvailableTag.color,
+    });
+    onKanbanBorderColorChange?.(nextAvailableTag.id);
+    setNewKanbanBorderTagName('');
+    setNewKanbanBorderTagColor(
+      availableKanbanBorderTags[1]?.color ??
+        availableKanbanBorderTags[0]?.color ??
+        kanbanBorderTags[0]?.color ??
+        '',
+    );
+  }, [
+    availableKanbanBorderTags,
+    kanbanBorderTags,
+    newKanbanBorderTagColor,
+    newKanbanBorderTagName,
+    onKanbanBorderColorChange,
+    orgSlug,
+    updateKanbanBorderTagMutation,
+  ]);
+
   const canMoveIssue = Boolean(
     onStateChange &&
       issue.assignmentId &&
@@ -955,6 +1147,137 @@ function KanbanCardMenu({
         </ContextMenuSub>
       ) : null}
 
+      {onKanbanBorderColorChange ? (
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Circle className='size-4' />
+            Border tag
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem onClick={() => onKanbanBorderColorChange('')}>
+              <span className='flex size-4 items-center justify-center'>
+                {kanbanBorderColor === '' ? (
+                  <Check className='size-3.5' />
+                ) : null}
+              </span>
+              <span className='min-w-0 flex-1 truncate'>None</span>
+            </ContextMenuItem>
+            {definedKanbanBorderTags.length === 0 ? (
+              <div className='text-muted-foreground px-2 pb-2 text-xs'>
+                No tags yet
+              </div>
+            ) : null}
+            {definedKanbanBorderTags.map(tag => (
+              <ContextMenuItem
+                key={tag.id}
+                onClick={() => onKanbanBorderColorChange(tag.id)}
+              >
+                <span className='flex size-4 items-center justify-center'>
+                  {kanbanBorderColor === tag.id ? (
+                    <Check className='size-3.5' />
+                  ) : null}
+                </span>
+                <span
+                  className='size-3 rounded-full border'
+                  style={{
+                    backgroundColor: tag.color,
+                    borderColor: tag.color,
+                  }}
+                />
+                <span className='min-w-0 flex-1 truncate'>
+                  {getKanbanBorderTagDisplayName(tag)}
+                </span>
+              </ContextMenuItem>
+            ))}
+            {availableKanbanBorderTags.length > 0 ? (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>
+                  <Plus className='size-4' />
+                  Make tag
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent className='w-56'>
+                  <div
+                    className='space-y-2 p-2'
+                    onClick={event => event.stopPropagation()}
+                    onPointerDown={event => event.stopPropagation()}
+                  >
+                    <Input
+                      value={newKanbanBorderTagName}
+                      onChange={event =>
+                        setNewKanbanBorderTagName(event.target.value)
+                      }
+                      onKeyDown={event => event.stopPropagation()}
+                      placeholder='Tag name'
+                      className='h-8 text-xs'
+                      autoFocus
+                    />
+                    <div className='grid grid-cols-5 gap-1'>
+                      {kanbanBorderTags.map(tag => (
+                        <button
+                          key={tag.id}
+                          type='button'
+                          className={cn(
+                            'flex h-7 items-center justify-center rounded-md border',
+                            newKanbanBorderTagColor === tag.color &&
+                              'ring-primary ring-2',
+                          )}
+                          style={{
+                            backgroundColor: tag.color,
+                            borderColor: tag.color,
+                          }}
+                          onClick={event => {
+                            event.stopPropagation();
+                            setNewKanbanBorderTagColor(tag.color);
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className='flex items-center justify-end gap-2'>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='sm'
+                        className='h-7 px-2 text-xs'
+                        onClick={event => {
+                          event.stopPropagation();
+                          setNewKanbanBorderTagName('');
+                          setNewKanbanBorderTagColor(
+                            availableKanbanBorderTags[0]?.color ??
+                              kanbanBorderTags[0]?.color ??
+                              '',
+                          );
+                        }}
+                      >
+                        Reset
+                      </Button>
+                      <Button
+                        type='button'
+                        size='sm'
+                        className='h-7 px-2 text-xs'
+                        disabled={!newKanbanBorderTagName.trim()}
+                        onClick={event => {
+                          event.stopPropagation();
+                          void handleCreateKanbanBorderTag();
+                        }}
+                      >
+                        Create
+                      </Button>
+                    </div>
+                  </div>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            ) : (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem disabled inset>
+                  All tag slots used
+                </ContextMenuItem>
+              </>
+            )}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      ) : null}
+
       {onDelete ? (
         <>
           <ContextMenuSeparator />
@@ -981,6 +1304,11 @@ function KanbanCardContent({
   canManageAssignees = false,
   onPriorityChange,
   onAssigneesChange,
+  kanbanBorderTags,
+  kanbanBorderColor,
+  isBorderPickerOpen = false,
+  onBorderPickerOpenChange,
+  onKanbanBorderColorChange,
 }: {
   issue: KanbanIssueCard;
   orgSlug: string;
@@ -990,7 +1318,16 @@ function KanbanCardContent({
   canManageAssignees?: boolean;
   onPriorityChange?: (issueId: string, priorityId: string) => void;
   onAssigneesChange?: (issueId: string, assigneeIds: string[]) => void;
+  kanbanBorderTags: ReadonlyArray<KanbanBorderTagSetting>;
+  kanbanBorderColor?: KanbanBorderColor | '';
+  isBorderPickerOpen?: boolean;
+  onBorderPickerOpenChange?: (open: boolean) => void;
+  onKanbanBorderColorChange?: (borderColor: KanbanBorderColor | '') => void;
 }) {
+  const definedKanbanBorderTags = getDefinedKanbanBorderTags(kanbanBorderTags);
+  const borderTag = getKanbanBorderTag(kanbanBorderTags, kanbanBorderColor);
+  const borderColorHex =
+    borderTag?.color ?? getKanbanBorderColorHex(kanbanBorderColor);
   const assigneeLabel =
     issue.assigneeName || issue.assigneeEmail || 'Unassigned';
   const assigneeStateCluster = (
@@ -1023,16 +1360,92 @@ function KanbanCardContent({
   return (
     <div
       className={cn(
-        'bg-card block rounded-lg border p-3 shadow-xs transition-colors',
+        'bg-card border-border/70 relative block overflow-hidden rounded-lg border p-3 shadow-xs transition-[border-color,box-shadow,transform]',
         isDragging
           ? 'ring-primary/30 shadow-lg ring-2'
           : 'hover:border-border/80 hover:shadow-sm',
       )}
     >
+      {borderColorHex ? (
+        <div
+          className='pointer-events-none absolute top-3 bottom-3 left-1 w-1 rounded-full opacity-90'
+          style={{ backgroundColor: borderColorHex }}
+        />
+      ) : null}
+
+      {isBorderPickerOpen && onKanbanBorderColorChange ? (
+        <div
+          className='bg-popover absolute top-2 right-2 z-20 w-36 rounded-md border p-2 shadow-lg'
+          data-kanban-border-ignore
+        >
+          <div className='mb-2 flex items-center justify-between'>
+            <span className='text-muted-foreground text-[11px] font-medium'>
+              Border tag
+            </span>
+            <button
+              type='button'
+              className='text-muted-foreground hover:text-foreground text-[11px]'
+              onClick={event => {
+                event.stopPropagation();
+                onBorderPickerOpenChange?.(false);
+              }}
+            >
+              Close
+            </button>
+          </div>
+          {definedKanbanBorderTags.length === 0 ? (
+            <div className='text-muted-foreground px-1 py-2 text-[11px]'>
+              No tags yet. Create one from the menu.
+            </div>
+          ) : (
+            <div className='grid grid-cols-5 gap-1'>
+              <button
+                type='button'
+                className={cn(
+                  'text-muted-foreground hover:text-foreground col-span-2 flex h-7 items-center justify-center rounded-md border text-[11px]',
+                  kanbanBorderColor === '' &&
+                    'border-foreground text-foreground',
+                )}
+                onClick={event => {
+                  event.stopPropagation();
+                  onKanbanBorderColorChange('');
+                }}
+              >
+                None
+              </button>
+              {definedKanbanBorderTags.map(tag => (
+                <button
+                  key={tag.id}
+                  type='button'
+                  aria-label={getKanbanBorderTagDisplayName(tag)}
+                  title={getKanbanBorderTagDisplayName(tag)}
+                  className={cn(
+                    'flex h-7 items-center justify-center rounded-md border',
+                    kanbanBorderColor === tag.id && 'ring-primary ring-2',
+                  )}
+                  style={{
+                    backgroundColor: tag.color,
+                    borderColor: tag.color,
+                  }}
+                  onClick={event => {
+                    event.stopPropagation();
+                    onKanbanBorderColorChange(tag.id);
+                  }}
+                >
+                  {kanbanBorderColor === tag.id ? (
+                    <Check className='size-3.5 text-white drop-shadow-sm' />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {/* Issue key + priority + PR link */}
       <div className='mb-1.5 flex items-center gap-2'>
         {onPriorityChange && priorities ? (
-          <div onClick={e => e.stopPropagation()}>
+          <div onClick={e => e.stopPropagation()} data-kanban-border-ignore>
             <PrioritySelector
               priorities={priorities as Priority[]}
               selectedPriority={issue.priorityId || ''}
@@ -1107,7 +1520,11 @@ function KanbanCardContent({
       {/* Bottom row: assignees + date */}
       <div className='mt-2 flex min-w-0 flex-wrap items-center justify-between gap-y-1'>
         {onAssigneesChange && currentUserId ? (
-          <div className='min-w-0' onClick={e => e.stopPropagation()}>
+          <div
+            className='min-w-0'
+            onClick={e => e.stopPropagation()}
+            data-kanban-border-ignore
+          >
             <MultiAssigneeSelector
               orgSlug={orgSlug}
               selectedAssigneeIds={issue.assigneeIds}

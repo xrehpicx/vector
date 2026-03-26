@@ -5,6 +5,7 @@ import { getAuthUserId } from '../authUtils';
 import { canViewIssue, canViewTeam, canViewProject } from '../access';
 import { requireOrgPermission } from '../authz';
 import { PERMISSIONS } from '../_shared/permissions';
+import { normalizeKanbanBorderTags } from '../../src/lib/kanban-border-tags';
 
 async function requireOrganizationMembership(ctx: QueryCtx, orgSlug: string) {
   const userId = await getAuthUserId(ctx);
@@ -718,6 +719,16 @@ export const listIssuePriorities = query({
       .collect();
 
     return priorities;
+  },
+});
+
+export const listKanbanBorderTags = query({
+  args: {
+    orgSlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { org } = await requireOrganizationMembership(ctx, args.orgSlug);
+    return normalizeKanbanBorderTags(org.kanbanBorderTags);
   },
 });
 

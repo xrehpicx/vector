@@ -34,6 +34,10 @@ import { UserAvatar } from '@/components/user-avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { IssuesKanban } from '@/components/issues/issues-kanban';
+import {
+  normalizeKanbanBorderColor,
+  type KanbanBorderColor,
+} from '@/components/issues/kanban-border-colors';
 import { ProjectsTable } from '@/components/projects/projects-table';
 import { TeamActivityFeed } from '@/components/activity/team-activity-feed';
 import { LinkedDocuments } from '@/components/documents/linked-documents';
@@ -533,6 +537,23 @@ export default function TeamViewClient({
         })),
     );
   });
+  const changeKanbanBorderColorMutation = useMutation(
+    api.issues.mutations.changeKanbanBorderColor,
+  ).withOptimisticUpdate((store, args) => {
+    if (!teamIssuesQueryArgs) return;
+    updateQuery(
+      store,
+      api.issues.queries.listIssues,
+      teamIssuesQueryArgs,
+      current =>
+        updateIssueRows(current, String(args.issueId), row => ({
+          ...row,
+          kanbanBorderTag:
+            normalizeKanbanBorderColor(args.borderColor) ?? undefined,
+          kanbanBorderColor: undefined,
+        })),
+    );
+  });
   const updateAssigneesMutation = useMutation(
     api.issues.mutations.updateAssignees,
   ).withOptimisticUpdate((store, args) => {
@@ -1013,6 +1034,19 @@ export default function TeamViewClient({
     await changeProjectMutation({
       issueId: issueId as Id<'issues'>,
       projectId: (projectId as Id<'projects'>) || null,
+    });
+    setIsUpdatingIssues(false);
+  };
+
+  const handleKanbanBorderColorChange = async (
+    issueId: string,
+    borderColor: KanbanBorderColor | '',
+  ) => {
+    if (!user?._id) return;
+    setIsUpdatingIssues(true);
+    await changeKanbanBorderColorMutation({
+      issueId: issueId as Id<'issues'>,
+      borderColor: borderColor || null,
     });
     setIsUpdatingIssues(false);
   };
@@ -1698,6 +1732,9 @@ export default function TeamViewClient({
                           }}
                           onTeamChange={handleIssueTeamChange}
                           onProjectChange={handleIssueProjectChange}
+                          onKanbanBorderColorChange={
+                            handleKanbanBorderColorChange
+                          }
                           onDelete={handleIssueDelete}
                           deletePending={isUpdatingIssues}
                         />
