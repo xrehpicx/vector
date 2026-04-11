@@ -193,7 +193,7 @@ function UserMessage({ message }: { message: UIMessage }) {
       <div className='bg-muted text-foreground inline-block w-fit rounded-3xl px-4 py-2'>
         <div className='space-y-2'>
           {text ? (
-            <AssistantResponse className='text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0'>
+            <AssistantResponse className='text-sm [&_p]:my-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0'>
               {text}
             </AssistantResponse>
           ) : null}

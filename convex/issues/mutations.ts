@@ -129,6 +129,8 @@ export const create = mutation({
           v.literal('public'),
         ),
       ),
+      startDate: v.optional(v.string()),
+      dueDate: v.optional(v.string()),
     }),
   },
   handler: async (ctx, args) => {
@@ -234,6 +236,8 @@ export const create = mutation({
         args.data.visibility ?? parentIssue?.visibility ?? 'organization',
       createdBy: userId,
       parentIssueId: args.data.parentIssueId,
+      startDate: args.data.startDate?.trim() || undefined,
+      dueDate: args.data.dueDate?.trim() || undefined,
       updatedAt: Date.now(),
       lastActivityEventType: 'issue_created',
     });
@@ -469,6 +473,9 @@ export const update = mutation({
       description: v.optional(v.string()),
       priorityId: v.optional(v.id('issuePriorities')),
       parentIssueId: v.optional(v.id('issues')),
+      // Pass an empty string or null to clear a date.
+      startDate: v.optional(v.union(v.string(), v.null())),
+      dueDate: v.optional(v.union(v.string(), v.null())),
     }),
   },
   handler: async (ctx, args) => {
@@ -502,13 +509,25 @@ export const update = mutation({
       }
     }
 
+    const normalizeDate = (value: string | null | undefined) => {
+      if (value === undefined) return undefined;
+      if (value === null) return undefined;
+      const trimmed = value.trim();
+      return trimmed === '' ? undefined : trimmed;
+    };
+
     const previousPriority = issue.priorityId
       ? await ctx.db.get('issuePriorities', issue.priorityId)
       : null;
     const nextTitle = args.data.title ?? issue.title;
     const nextDescription = args.data.description ?? issue.description;
+    const { startDate, dueDate, ...restData } = args.data;
     await ctx.db.patch('issues', issue._id, {
-      ...args.data,
+      ...restData,
+      ...(startDate !== undefined
+        ? { startDate: normalizeDate(startDate) }
+        : {}),
+      ...(dueDate !== undefined ? { dueDate: normalizeDate(dueDate) } : {}),
       searchText: buildIssueSearchText({
         key: issue.key,
         title: nextTitle,

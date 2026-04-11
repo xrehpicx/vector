@@ -19,6 +19,8 @@ import {
   AlertTriangle,
   WandSparkles,
   Bell,
+  CalendarRange,
+  CalendarClock,
 } from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
 import { useCachedQuery, useMutation, useAction } from '@/lib/convex';
@@ -38,6 +40,7 @@ import {
   PrioritySelector,
   IssueSelector,
   MultiAssignmentStateSelector,
+  DateSelector,
   type AssignmentInfo,
 } from '@/components/issues/issue-selectors';
 import { getDynamicIcon } from '@/lib/dynamic-icons';
@@ -413,6 +416,22 @@ export default function IssueViewClient({
         : current,
     );
   });
+  const updateIssueDatesMutation = useMutation(
+    api.issues.mutations.update,
+  ).withOptimisticUpdate((store, args) => {
+    if (!issueQueryArgs) return;
+    updateQuery(store, api.issues.queries.getByKey, issueQueryArgs, current => {
+      if (!current) return current;
+      const next = { ...current };
+      if (args.data.startDate !== undefined) {
+        next.startDate = args.data.startDate || undefined;
+      }
+      if (args.data.dueDate !== undefined) {
+        next.dueDate = args.data.dueDate || undefined;
+      }
+      return next;
+    });
+  });
 
   const { permissions: issuePermissions } = useScopedPermissions(
     { orgSlug: params.orgSlug },
@@ -629,6 +648,34 @@ export default function IssueViewClient({
           ? (parentIssueId as Id<'issues'>)
           : undefined,
       },
+    });
+  };
+
+  const handleStartDateChange = (date: string) => {
+    if (!issue || !user) return;
+    void updateIssueDatesMutation({
+      issueId: issue._id,
+      data: {
+        startDate: date || null,
+      },
+    }).catch(error => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to update start date',
+      );
+    });
+  };
+
+  const handleDueDateChange = (date: string) => {
+    if (!issue || !user) return;
+    void updateIssueDatesMutation({
+      issueId: issue._id,
+      data: {
+        dueDate: date || null,
+      },
+    }).catch(error => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to update due date',
+      );
     });
   };
 
@@ -1163,34 +1210,75 @@ export default function IssueViewClient({
               )}
             </div>
 
-            {/* Schedule Info */}
-            <div className='flex items-center gap-4'>
-              {(issue.startDate || issue.dueDate) && (
-                <div className='text-muted-foreground flex items-center gap-2 text-sm'>
-                  <span>Schedule:</span>
-                  {issue.startDate && (
-                    <span>From {formatDateHuman(issue.startDate)}</span>
-                  )}
-                  {issue.startDate && issue.dueDate && <span>→</span>}
-                  {issue.dueDate && (
-                    <span
-                      className={cn(
-                        'font-medium',
+            {/* Schedule (start + due date) — inline editable when the user
+                has issue-edit permission, view-only otherwise. */}
+            <div className='flex flex-wrap items-center gap-1'>
+              {canEditIssue ? (
+                <PermissionAwareSelector
+                  orgSlug={params.orgSlug}
+                  permission={PERMISSIONS.ISSUE_EDIT}
+                  fallbackMessage="You don't have permission to change the start date"
+                >
+                  <DateSelector
+                    selectedDate={issue.startDate ?? ''}
+                    onDateSelect={handleStartDateChange}
+                    icon={CalendarRange}
+                    placeholder='Start date'
+                    title='Start date'
+                    tooltipText='Set start date'
+                    displayMode='iconWhenUnselected'
+                    className='hover:bg-muted/40 border-none bg-transparent shadow-none dark:bg-transparent'
+                  />
+                </PermissionAwareSelector>
+              ) : issue.startDate ? (
+                <span className='text-muted-foreground text-sm'>
+                  From {formatDateHuman(issue.startDate)}
+                </span>
+              ) : null}
+              {canEditIssue ? (
+                <PermissionAwareSelector
+                  orgSlug={params.orgSlug}
+                  permission={PERMISSIONS.ISSUE_EDIT}
+                  fallbackMessage="You don't have permission to change the due date"
+                >
+                  <DateSelector
+                    selectedDate={issue.dueDate ?? ''}
+                    onDateSelect={handleDueDateChange}
+                    icon={CalendarClock}
+                    placeholder='Due date'
+                    title='Due date'
+                    tooltipText='Set due date'
+                    displayMode='iconWhenUnselected'
+                    className={cn(
+                      'hover:bg-muted/40 border-none bg-transparent shadow-none dark:bg-transparent',
+                      issue.dueDate &&
                         new Date(issue.dueDate) < new Date() &&
-                          states &&
-                          !['done'].includes(
-                            states.find(s => s._id === displayedStateId)
-                              ?.type || '',
-                          )
-                          ? 'text-red-500 dark:text-red-400'
-                          : '',
-                      )}
-                    >
-                      Due {formatDateHuman(issue.dueDate)}
-                    </span>
+                        states &&
+                        !['done'].includes(
+                          states.find(s => s._id === displayedStateId)?.type ||
+                            '',
+                        ) &&
+                        'text-red-500 dark:text-red-400',
+                    )}
+                  />
+                </PermissionAwareSelector>
+              ) : issue.dueDate ? (
+                <span
+                  className={cn(
+                    'text-sm font-medium',
+                    new Date(issue.dueDate) < new Date() &&
+                      states &&
+                      !['done'].includes(
+                        states.find(s => s._id === displayedStateId)?.type ||
+                          '',
+                      )
+                      ? 'text-red-500 dark:text-red-400'
+                      : 'text-muted-foreground',
                   )}
-                </div>
-              )}
+                >
+                  Due {formatDateHuman(issue.dueDate)}
+                </span>
+              ) : null}
             </div>
 
             {/* Description */}

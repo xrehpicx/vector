@@ -57,6 +57,13 @@ export type AssistantInputProps = {
 
 /**
  * Extract plain-text prompt and mention references from editor content.
+ *
+ * Uses `doc.textBetween` so paragraph breaks and hard breaks survive the
+ * trip out of ProseMirror. We emit `\n\n` for both (whether the user
+ * pressed Enter to split paragraphs or Shift-Enter for a hard break) so
+ * the downstream markdown renderer shows them as visible line breaks —
+ * CommonMark collapses single `\n` into a space, so a single newline would
+ * otherwise be lost.
  */
 function extractPromptAndMentions(
   editor: NonNullable<ReturnType<typeof useEditor>>,
@@ -105,7 +112,13 @@ function extractPromptAndMentions(
     }
   });
 
-  const text = editor.state.doc.textContent;
+  const doc = editor.state.doc;
+  // `blockSeparator: '\n\n'` puts a markdown paragraph break between
+  // top-level paragraphs. `leafText: '  \n'` emits a markdown line break
+  // (two trailing spaces + newline) for leaf nodes like `hardBreak`, so
+  // Shift-Enter shows up as a `<br>` within a paragraph instead of being
+  // collapsed into a space by CommonMark.
+  const text = doc.textBetween(0, doc.content.size, '\n\n', '  \n');
   return { text, bodyText: bodyTextParts.join(''), mentions };
 }
 
