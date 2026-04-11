@@ -174,6 +174,13 @@ export default defineSchema({
     kanbanBorderTags: v.optional(v.array(kanbanBorderTagSettingValidator)),
     agentContext: v.optional(v.string()),
     agentContextDocumentId: v.optional(v.id('documents')),
+    // Public issue submission: when enabled, anonymous visitors on the
+    // org's public landing page can submit an issue that lands in the
+    // configured project. The optional view is surfaced on the public
+    // page so visitors can browse existing public requests.
+    publicIssueSubmissionEnabled: v.optional(v.boolean()),
+    publicIssueProjectId: v.optional(v.id('projects')),
+    publicIssueViewId: v.optional(v.id('views')),
   }).index('by_slug', ['slug']),
 
   // Organization members (equivalent to Drizzle 'member' table)

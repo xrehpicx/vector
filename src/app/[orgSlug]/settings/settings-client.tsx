@@ -9,8 +9,10 @@ import {
   Check,
   ChevronsUpDown,
   FileText,
+  FolderKanban,
   Github,
   Globe,
+  Inbox,
   Instagram,
   Linkedin,
   Plus,
@@ -27,6 +29,7 @@ import {
   OrgSlugEditor,
 } from '@/components/organization';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Command,
   CommandEmpty,
@@ -136,6 +139,80 @@ function PublicViewSelector({
                   <span className='truncate'>{view.name}</span>
                   {value === view._id ? (
                     <Check className='text-muted-foreground ml-auto size-3.5' />
+                  ) : null}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function PublicIssueProjectSelector({
+  projects,
+  value,
+  disabled,
+  onChange,
+}: {
+  projects: Array<{ _id: Id<'projects'>; name: string; key: string }>;
+  value: Id<'projects'> | null;
+  disabled: boolean;
+  onChange: (value: Id<'projects'> | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedProject = projects.find(project => project._id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type='button'
+          variant='outline'
+          className='h-8 w-full justify-between px-2 text-sm'
+          disabled={disabled}
+        >
+          <span className='flex items-center gap-1.5 truncate'>
+            <FolderKanban className='text-muted-foreground size-3.5 shrink-0' />
+            {selectedProject ? (
+              <>
+                <span className='truncate'>{selectedProject.name}</span>
+                <span className='text-muted-foreground font-mono text-[10px]'>
+                  {selectedProject.key}
+                </span>
+              </>
+            ) : (
+              <span className='text-muted-foreground'>Select a project...</span>
+            )}
+          </span>
+          <ChevronsUpDown className='text-muted-foreground size-3.5 shrink-0' />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className='w-[320px] p-0' align='start'>
+        <Command>
+          <CommandInput placeholder='Search projects...' />
+          <CommandList>
+            <CommandEmpty>No projects found.</CommandEmpty>
+            <CommandGroup>
+              {projects.map(project => (
+                <CommandItem
+                  key={project._id}
+                  value={`${project.name} ${project.key}`}
+                  onSelect={() => {
+                    onChange(project._id);
+                    setOpen(false);
+                  }}
+                >
+                  <FolderKanban className='text-muted-foreground mr-1.5 size-3.5 shrink-0' />
+                  <span className='min-w-0 flex-1 truncate'>
+                    {project.name}
+                  </span>
+                  <span className='text-muted-foreground ml-2 font-mono text-[10px]'>
+                    {project.key}
+                  </span>
+                  {value === project._id ? (
+                    <Check className='text-muted-foreground ml-2 size-3.5 shrink-0' />
                   ) : null}
                 </CommandItem>
               ))}
@@ -305,6 +382,10 @@ export default function OrgSettingsPageClient({
     api.documents.queries.list,
     user?._id ? { orgSlug } : 'skip',
   );
+  const projects = useCachedQuery(
+    api.projects.queries.list,
+    user?._id ? { orgSlug } : 'skip',
+  );
   const updateOrganization = useMutation(
     api.organizations.mutations.update,
   ).withOptimisticUpdate((store, args) => {
@@ -375,6 +456,8 @@ export default function OrgSettingsPageClient({
   const [hasPublicEdits, setHasPublicEdits] = useState(false);
   const [isSavingPublicSettings, setIsSavingPublicSettings] = useState(false);
   const [isSavingAgentDoc, setIsSavingAgentDoc] = useState(false);
+  const [isSavingPublicSubmission, setIsSavingPublicSubmission] =
+    useState(false);
 
   useEffect(() => {
     if (!org || hasPublicEdits) {
@@ -393,6 +476,38 @@ export default function OrgSettingsPageClient({
   const publicViews = (views ?? [])
     .filter(view => view.visibility === 'public')
     .map(view => ({ _id: view._id, name: view.name }));
+  const projectOptions = (projects ?? []).map(project => ({
+    _id: project._id,
+    name: project.name,
+    key: project.key,
+  }));
+
+  const publicIssueSubmissionEnabled =
+    org?.publicIssueSubmissionEnabled ?? false;
+  const publicIssueProjectId = (org?.publicIssueProjectId ??
+    null) as Id<'projects'> | null;
+  const publicIssueViewId = (org?.publicIssueViewId ??
+    null) as Id<'views'> | null;
+
+  const savePublicSubmission = async (data: {
+    publicIssueSubmissionEnabled?: boolean;
+    publicIssueProjectId?: Id<'projects'> | null;
+    publicIssueViewId?: Id<'views'> | null;
+  }) => {
+    setIsSavingPublicSubmission(true);
+    try {
+      await updateOrganization({ orgSlug, data });
+      toast.success('Public submissions updated');
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to update public submissions',
+      );
+    } finally {
+      setIsSavingPublicSubmission(false);
+    }
+  };
 
   const originalSubtitle = org?.subtitle ?? '';
   const originalDescription = org?.publicDescription ?? '';
@@ -777,6 +892,119 @@ export default function OrgSettingsPageClient({
                 ) : null}
               </div>
             ) : null}
+          </div>
+        </div>
+
+        <div className='rounded-md border'>
+          <div className='border-b px-3 py-2'>
+            <div className='flex items-center gap-1.5 text-sm font-medium'>
+              <Inbox className='size-3.5' />
+              Public issue submissions
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              Let anyone on your public landing page submit a request. New
+              submissions land in the chosen project with visibility set to
+              public, and the configured view is linked on the landing page so
+              visitors can browse existing requests.
+            </p>
+          </div>
+
+          <div className='space-y-4 p-3'>
+            <label className='flex items-start gap-2'>
+              <Checkbox
+                checked={publicIssueSubmissionEnabled}
+                disabled={
+                  !isAdmin ||
+                  isSavingPublicSubmission ||
+                  (!publicIssueSubmissionEnabled &&
+                    publicIssueProjectId === null)
+                }
+                onCheckedChange={checked => {
+                  if (!isAdmin) return;
+                  void savePublicSubmission({
+                    publicIssueSubmissionEnabled: checked === true,
+                  });
+                }}
+                className='mt-0.5'
+              />
+              <div className='min-w-0 flex-1'>
+                <div className='text-sm font-medium'>Enable public form</div>
+                <p className='text-muted-foreground text-xs'>
+                  Anyone visiting <span className='font-mono'>/{orgSlug}</span>{' '}
+                  can submit an issue without signing in. Pick a project below
+                  first, then flip this on.
+                </p>
+              </div>
+            </label>
+
+            <div className='space-y-2'>
+              <label className='text-sm font-medium'>Target project</label>
+              {isAdmin ? (
+                <PublicIssueProjectSelector
+                  projects={projectOptions}
+                  value={publicIssueProjectId}
+                  disabled={
+                    isSavingPublicSubmission || projectOptions.length === 0
+                  }
+                  onChange={value => {
+                    void savePublicSubmission({
+                      publicIssueProjectId: value,
+                    });
+                  }}
+                />
+              ) : (
+                <div className='rounded-md border px-3 py-2 text-sm'>
+                  {projectOptions.find(
+                    project => project._id === publicIssueProjectId,
+                  )?.name ?? 'No target project'}
+                </div>
+              )}
+              <p className='text-muted-foreground text-xs'>
+                Submitted issues inherit this project&apos;s team and key
+                prefix. Only the admins managing this project will be notified
+                on creation.
+              </p>
+              {isAdmin && projectOptions.length === 0 ? (
+                <p className='text-muted-foreground text-xs'>
+                  Create a project first, then select it here.
+                </p>
+              ) : null}
+            </div>
+
+            <div className='space-y-2'>
+              <label className='text-sm font-medium'>
+                Public requests view
+              </label>
+              {isAdmin ? (
+                <PublicViewSelector
+                  views={publicViews}
+                  value={publicIssueViewId}
+                  disabled={
+                    isSavingPublicSubmission || publicViews.length === 0
+                  }
+                  onChange={value => {
+                    void savePublicSubmission({
+                      publicIssueViewId: value,
+                    });
+                  }}
+                />
+              ) : (
+                <div className='rounded-md border px-3 py-2 text-sm'>
+                  {publicViews.find(view => view._id === publicIssueViewId)
+                    ?.name ?? 'No public requests view'}
+                </div>
+              )}
+              <p className='text-muted-foreground text-xs'>
+                Optional. Link a public view (filter it to the target project)
+                from the landing page so visitors can see what has already been
+                requested. Must be a view with public visibility.
+              </p>
+              {isAdmin && publicViews.length === 0 ? (
+                <p className='text-muted-foreground text-xs'>
+                  Create a public view first, then select it here.
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
 

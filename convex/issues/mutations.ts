@@ -334,6 +334,133 @@ export const create = mutation({
   },
 });
 
+/**
+ * Public, unauthenticated issue submission.
+ *
+ * Visitors on an org's public landing page can post an issue request here
+ * when the org admin has enabled it in settings. We intentionally skip the
+ * auth / ISSUE_CREATE permission checks — the rate-limit is the existence of
+ * the feature flag and a configured project. The submitted issue always
+ * lands in the admin-configured project, gets visibility=public so it shows
+ * up in public views, and captures any submitter-provided contact info in
+ * the description so the team can follow up.
+ */
+export const createPublicSubmission = mutation({
+  args: {
+    orgSlug: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    submitterName: v.optional(v.string()),
+    submitterEmail: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const org = await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', q => q.eq('slug', args.orgSlug))
+      .first();
+
+    if (!org) {
+      throw new ConvexError('ORGANIZATION_NOT_FOUND');
+    }
+    if (
+      org.publicIssueSubmissionEnabled !== true ||
+      !org.publicIssueProjectId
+    ) {
+      throw new ConvexError('PUBLIC_SUBMISSION_DISABLED');
+    }
+
+    const project = await ctx.db.get('projects', org.publicIssueProjectId);
+    if (!project || project.organizationId !== org._id) {
+      throw new ConvexError('PUBLIC_SUBMISSION_PROJECT_MISSING');
+    }
+
+    const title = args.title.trim();
+    if (!title) {
+      throw new ConvexError('INVALID_INPUT');
+    }
+    if (title.length > 200) {
+      throw new ConvexError('INVALID_INPUT');
+    }
+
+    const trimmedDescription = args.description?.trim() ?? '';
+    if (trimmedDescription.length > 10_000) {
+      throw new ConvexError('INVALID_INPUT');
+    }
+    const submitterName = args.submitterName?.trim() ?? '';
+    const submitterEmail = args.submitterEmail?.trim() ?? '';
+    if (submitterName.length > 120 || submitterEmail.length > 200) {
+      throw new ConvexError('INVALID_INPUT');
+    }
+    if (submitterEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submitterEmail)) {
+      throw new ConvexError('INVALID_EMAIL');
+    }
+
+    // Fold any submitter-provided contact info into the description so the
+    // team can reach out without needing a separate submissions table.
+    const contactLines: string[] = [];
+    if (submitterName) contactLines.push(`Submitted by: ${submitterName}`);
+    if (submitterEmail) contactLines.push(`Contact: ${submitterEmail}`);
+    const description =
+      contactLines.length > 0
+        ? [
+            trimmedDescription,
+            trimmedDescription ? '' : null,
+            '---',
+            ...contactLines,
+          ]
+            .filter((line): line is string => line !== null)
+            .join('\n')
+        : trimmedDescription;
+
+    const existingIssues = await ctx.db
+      .query('issues')
+      .withIndex('by_project', q => q.eq('projectId', project._id))
+      .collect();
+
+    const nextIssueKey = await getNextAvailableIssueKey(ctx, {
+      organizationId: org._id,
+      prefix: project.key,
+      startingSequenceNumber: existingIssues.length + 1,
+    });
+
+    const workflowStateId = await resolveDefaultWorkflowStateId(ctx, org._id);
+
+    const issueId = await ctx.db.insert('issues', {
+      organizationId: org._id,
+      projectId: project._id,
+      teamId: project.teamId,
+      key: nextIssueKey.key,
+      sequenceNumber: nextIssueKey.sequenceNumber,
+      title,
+      description: description || undefined,
+      searchText: buildIssueSearchText({
+        key: nextIssueKey.key,
+        title,
+        description: description || undefined,
+      }),
+      workflowStateId,
+      visibility: 'public',
+      updatedAt: Date.now(),
+      lastActivityEventType: 'issue_created',
+    });
+
+    if (workflowStateId) {
+      await ctx.db.insert('issueAssignees', {
+        issueId,
+        assigneeId: undefined,
+        stateId: workflowStateId,
+      });
+    }
+
+    // We intentionally skip `recordActivity` here — anonymous public
+    // submissions have no actorId and the activityEvents schema requires
+    // one. The issue itself is the record of the submission; the team
+    // discovers it through the configured public view.
+
+    return { issueId, key: nextIssueKey.key } as const;
+  },
+});
+
 export const update = mutation({
   args: {
     issueId: v.id('issues'),

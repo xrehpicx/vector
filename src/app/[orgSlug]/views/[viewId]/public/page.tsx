@@ -1,6 +1,7 @@
 'use client';
 
 import { use } from 'react';
+import { PublicLayout } from '@/components/views/public-layout';
 import { PublicViewPage } from '@/components/views/public-view-page';
 
 export default function PublicViewRoute({
@@ -10,5 +11,9 @@ export default function PublicViewRoute({
 }) {
   const { orgSlug, viewId } = use(params);
 
-  return <PublicViewPage orgSlug={orgSlug} viewId={viewId} />;
+  return (
+    <PublicLayout orgSlug={orgSlug}>
+      <PublicViewPage orgSlug={orgSlug} viewId={viewId} />
+    </PublicLayout>
+  );
 }

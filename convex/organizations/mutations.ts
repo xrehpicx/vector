@@ -445,6 +445,9 @@ export const update = mutation({
       ),
       agentContext: v.optional(v.union(v.string(), v.null())),
       agentContextDocumentId: v.optional(v.union(v.id('documents'), v.null())),
+      publicIssueSubmissionEnabled: v.optional(v.boolean()),
+      publicIssueProjectId: v.optional(v.union(v.id('projects'), v.null())),
+      publicIssueViewId: v.optional(v.union(v.id('views'), v.null())),
     }),
   },
   handler: async (ctx, args) => {
@@ -502,6 +505,32 @@ export const update = mutation({
       }
       if (landingView.visibility !== 'public') {
         throw new ConvexError('PUBLIC_LANDING_VIEW_MUST_BE_PUBLIC');
+      }
+    }
+
+    if (args.data.publicIssueProjectId) {
+      const publicIssueProject = await ctx.db.get(
+        'projects',
+        args.data.publicIssueProjectId,
+      );
+      if (
+        !publicIssueProject ||
+        publicIssueProject.organizationId !== org._id
+      ) {
+        throw new ConvexError('PUBLIC_ISSUE_PROJECT_NOT_FOUND');
+      }
+    }
+
+    if (args.data.publicIssueViewId) {
+      const publicIssueView = await ctx.db.get(
+        'views',
+        args.data.publicIssueViewId,
+      );
+      if (!publicIssueView || publicIssueView.organizationId !== org._id) {
+        throw new ConvexError('PUBLIC_ISSUE_VIEW_NOT_FOUND');
+      }
+      if (publicIssueView.visibility !== 'public') {
+        throw new ConvexError('PUBLIC_ISSUE_VIEW_MUST_BE_PUBLIC');
       }
     }
 
@@ -581,6 +610,17 @@ export const update = mutation({
       }
       updateData.agentContextDocumentId =
         args.data.agentContextDocumentId ?? undefined;
+    }
+    if (args.data.publicIssueSubmissionEnabled !== undefined) {
+      updateData.publicIssueSubmissionEnabled =
+        args.data.publicIssueSubmissionEnabled;
+    }
+    if (args.data.publicIssueProjectId !== undefined) {
+      updateData.publicIssueProjectId =
+        args.data.publicIssueProjectId ?? undefined;
+    }
+    if (args.data.publicIssueViewId !== undefined) {
+      updateData.publicIssueViewId = args.data.publicIssueViewId ?? undefined;
     }
 
     if (Object.keys(updateData).length > 0) {

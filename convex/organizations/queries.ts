@@ -179,6 +179,21 @@ export const getPublicProfileBySlug = query({
       : null;
     const logoUrl = org.logo ? await ctx.storage.getUrl(org.logo) : null;
 
+    // Resolve the configured public-issue view (may be different from the
+    // landing view — admins might want the landing page to show an
+    // overview and a separate view for public requests).
+    const publicIssueView = org.publicIssueViewId
+      ? await ctx.db.get('views', org.publicIssueViewId)
+      : null;
+    const publicIssueProject = org.publicIssueProjectId
+      ? await ctx.db.get('projects', org.publicIssueProjectId)
+      : null;
+
+    const submissionEnabled =
+      org.publicIssueSubmissionEnabled === true &&
+      !!publicIssueProject &&
+      publicIssueProject.organizationId === org._id;
+
     return {
       _id: org._id,
       name: org.name,
@@ -193,6 +208,17 @@ export const getPublicProfileBySlug = query({
           ? (publicLandingView._id as string)
           : null,
       publicSocialLinks: org.publicSocialLinks ?? [],
+      publicIssueSubmissionEnabled: submissionEnabled,
+      publicIssueProjectName: submissionEnabled
+        ? (publicIssueProject?.name ?? null)
+        : null,
+      publicIssueViewId:
+        submissionEnabled &&
+        publicIssueView &&
+        publicIssueView.organizationId === org._id &&
+        publicIssueView.visibility === 'public'
+          ? (publicIssueView._id as string)
+          : null,
     };
   },
 });
