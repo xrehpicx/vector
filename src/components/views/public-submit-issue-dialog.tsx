@@ -1,10 +1,18 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { api, useMutation } from '@/lib/convex';
 import { toast } from 'sonner';
-import { CheckCircle2, Loader2, Send } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  Send,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -19,12 +27,49 @@ import {
 interface PublicSubmitIssueDialogProps {
   orgSlug: string;
   orgName: string;
+  publicIssueViewId?: string | null;
   trigger?: React.ReactNode;
+}
+
+type FieldErrors = Partial<{
+  title: string;
+  description: string;
+  name: string;
+  email: string;
+  form: string;
+}>;
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Map raw Convex / server error tokens to friendlier field-scoped messages.
+function mapServerError(message: string): FieldErrors {
+  const lower = message.toLowerCase();
+  if (lower.includes('invalid_email')) {
+    return { email: 'Enter a valid email address.' };
+  }
+  if (lower.includes('public_submission_disabled')) {
+    return { form: 'Public submissions are no longer enabled here.' };
+  }
+  if (lower.includes('public_submission_project_missing')) {
+    return {
+      form: 'The configured destination project is missing. Please contact the workspace admin.',
+    };
+  }
+  if (lower.includes('organization_not_found')) {
+    return { form: 'Workspace not found.' };
+  }
+  if (lower.includes('invalid_input')) {
+    return {
+      form: 'One or more fields are invalid. Please double-check your input.',
+    };
+  }
+  return { form: 'Something went wrong. Please try again.' };
 }
 
 export function PublicSubmitIssueDialog({
   orgSlug,
   orgName,
+  publicIssueViewId,
   trigger,
 }: PublicSubmitIssueDialogProps) {
   const [open, setOpen] = useState(false);
@@ -34,6 +79,7 @@ export function PublicSubmitIssueDialog({
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedKey, setSubmittedKey] = useState<string | null>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
 
   const submit = useMutation(api.issues.mutations.createPublicSubmission);
 
@@ -43,6 +89,7 @@ export function PublicSubmitIssueDialog({
     setName('');
     setEmail('');
     setSubmittedKey(null);
+    setErrors({});
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -54,22 +101,43 @@ export function PublicSubmitIssueDialog({
     }
   };
 
-  const handleSubmit = async () => {
+  const validate = (): FieldErrors => {
+    const next: FieldErrors = {};
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
-      toast.error('Please enter a title');
+      next.title = 'Please enter a title.';
+    } else if (trimmedTitle.length > 200) {
+      next.title = 'Title is too long (200 characters max).';
+    }
+    if (description.trim().length > 10_000) {
+      next.description = 'Description is too long (10,000 characters max).';
+    }
+    if (name.trim().length > 120) {
+      next.name = 'Name is too long (120 characters max).';
+    }
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !EMAIL_REGEX.test(trimmedEmail)) {
+      next.email = 'Enter a valid email address.';
+    }
+    if (trimmedEmail.length > 200) {
+      next.email = 'Email is too long (200 characters max).';
+    }
+    return next;
+  };
+
+  const handleSubmit = async () => {
+    const localErrors = validate();
+    if (Object.keys(localErrors).length > 0) {
+      setErrors(localErrors);
       return;
     }
-    if (trimmedTitle.length > 200) {
-      toast.error('Title is too long (200 characters max)');
-      return;
-    }
+    setErrors({});
 
     setIsSubmitting(true);
     try {
       const result = await submit({
         orgSlug,
-        title: trimmedTitle,
+        title: title.trim(),
         description: description.trim() || undefined,
         submitterName: name.trim() || undefined,
         submitterEmail: email.trim() || undefined,
@@ -77,9 +145,9 @@ export function PublicSubmitIssueDialog({
       setSubmittedKey(result.key);
       toast.success('Request submitted');
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Failed to submit request',
-      );
+      const message =
+        error instanceof Error ? error.message : 'Failed to submit request';
+      setErrors(mapServerError(message));
     } finally {
       setIsSubmitting(false);
     }
@@ -115,44 +183,91 @@ export function PublicSubmitIssueDialog({
                 Tracking ID: <span className='font-mono'>{submittedKey}</span>
               </div>
             </div>
-            <Button
-              type='button'
-              size='sm'
-              variant='outline'
-              className='h-8'
-              onClick={() => {
-                resetForm();
-              }}
-            >
-              Submit another
-            </Button>
+            <div className='flex flex-wrap items-center justify-center gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                className='h-8'
+                onClick={() => {
+                  resetForm();
+                }}
+              >
+                Submit another
+              </Button>
+              {publicIssueViewId ? (
+                <Link
+                  href={`/${orgSlug}/views/${publicIssueViewId}/public`}
+                  className={cn(buttonVariants({ size: 'sm' }), 'h-8 gap-1.5')}
+                  onClick={() => handleOpenChange(false)}
+                >
+                  View all requests
+                  <ArrowRight className='size-3.5' />
+                </Link>
+              ) : null}
+            </div>
           </div>
         ) : (
           <div className='space-y-3 py-1'>
+            {errors.form ? (
+              <div className='flex items-start gap-2 rounded-md border border-[#cb706f]/30 bg-[#cb706f]/5 px-2.5 py-1.5 text-[11px] text-[#cb706f]'>
+                <AlertCircle className='mt-0.5 size-3.5 shrink-0' />
+                <span>{errors.form}</span>
+              </div>
+            ) : null}
+
             <div className='space-y-1.5'>
               <label className='text-xs font-medium'>
                 Title <span className='text-destructive'>*</span>
               </label>
               <Input
                 value={title}
-                onChange={event => setTitle(event.target.value)}
+                onChange={event => {
+                  setTitle(event.target.value);
+                  if (errors.title) {
+                    setErrors(prev => ({ ...prev, title: undefined }));
+                  }
+                }}
                 placeholder='Short summary of the request'
-                className='h-8 text-sm'
+                className={cn(
+                  'h-8 text-sm',
+                  errors.title &&
+                    'border-destructive focus-visible:ring-destructive/30',
+                )}
+                aria-invalid={errors.title ? true : undefined}
                 maxLength={200}
                 disabled={isSubmitting}
               />
+              {errors.title ? (
+                <p className='text-destructive text-[11px]'>{errors.title}</p>
+              ) : null}
             </div>
 
             <div className='space-y-1.5'>
               <label className='text-xs font-medium'>Description</label>
               <Textarea
                 value={description}
-                onChange={event => setDescription(event.target.value)}
+                onChange={event => {
+                  setDescription(event.target.value);
+                  if (errors.description) {
+                    setErrors(prev => ({ ...prev, description: undefined }));
+                  }
+                }}
                 placeholder='Context, steps, screenshots...'
-                className='min-h-[120px] resize-none text-sm'
+                className={cn(
+                  'min-h-[120px] resize-none text-sm',
+                  errors.description &&
+                    'border-destructive focus-visible:ring-destructive/30',
+                )}
+                aria-invalid={errors.description ? true : undefined}
                 maxLength={10_000}
                 disabled={isSubmitting}
               />
+              {errors.description ? (
+                <p className='text-destructive text-[11px]'>
+                  {errors.description}
+                </p>
+              ) : null}
             </div>
 
             <div className='grid gap-3 sm:grid-cols-2'>
@@ -165,12 +280,25 @@ export function PublicSubmitIssueDialog({
                 </label>
                 <Input
                   value={name}
-                  onChange={event => setName(event.target.value)}
+                  onChange={event => {
+                    setName(event.target.value);
+                    if (errors.name) {
+                      setErrors(prev => ({ ...prev, name: undefined }));
+                    }
+                  }}
                   placeholder='Jane Doe'
-                  className='h-8 text-sm'
+                  className={cn(
+                    'h-8 text-sm',
+                    errors.name &&
+                      'border-destructive focus-visible:ring-destructive/30',
+                  )}
+                  aria-invalid={errors.name ? true : undefined}
                   maxLength={120}
                   disabled={isSubmitting}
                 />
+                {errors.name ? (
+                  <p className='text-destructive text-[11px]'>{errors.name}</p>
+                ) : null}
               </div>
               <div className='space-y-1.5'>
                 <label className='text-xs font-medium'>
@@ -182,12 +310,25 @@ export function PublicSubmitIssueDialog({
                 <Input
                   type='email'
                   value={email}
-                  onChange={event => setEmail(event.target.value)}
+                  onChange={event => {
+                    setEmail(event.target.value);
+                    if (errors.email) {
+                      setErrors(prev => ({ ...prev, email: undefined }));
+                    }
+                  }}
                   placeholder='you@example.com'
-                  className='h-8 text-sm'
+                  className={cn(
+                    'h-8 text-sm',
+                    errors.email &&
+                      'border-destructive focus-visible:ring-destructive/30',
+                  )}
+                  aria-invalid={errors.email ? true : undefined}
                   maxLength={200}
                   disabled={isSubmitting}
                 />
+                {errors.email ? (
+                  <p className='text-destructive text-[11px]'>{errors.email}</p>
+                ) : null}
               </div>
             </div>
 

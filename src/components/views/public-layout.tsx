@@ -65,7 +65,7 @@ export function PublicLayout({
     <div className='bg-background flex min-h-screen flex-col'>
       {submissionsEnabled ? (
         <div className='bg-background/80 sticky top-0 z-20 border-b backdrop-blur'>
-          <div className='mx-auto flex w-full max-w-5xl items-center justify-between gap-2 px-4 py-2 sm:px-6'>
+          <div className='flex w-full items-center justify-between gap-2 px-4 py-2 sm:px-6'>
             <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
               <Inbox className='size-3.5' />
               <span className='hidden sm:inline'>
@@ -87,7 +87,11 @@ export function PublicLayout({
                   <span className='sm:hidden'>Requests</span>
                 </Link>
               ) : null}
-              <PublicSubmitIssueDialog orgSlug={orgSlug} orgName={orgName} />
+              <PublicSubmitIssueDialog
+                orgSlug={orgSlug}
+                orgName={orgName}
+                publicIssueViewId={publicIssueViewId}
+              />
             </div>
           </div>
         </div>

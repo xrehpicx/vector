@@ -19,6 +19,7 @@ import {
   Circle,
   ArrowUp,
   EyeOff,
+  CalendarClock,
 } from 'lucide-react';
 import React from 'react';
 
@@ -491,6 +492,22 @@ function IssueTableRow({
             <GitPullRequest className='size-3' />
             <span className='font-mono'>#{issue.linkedPrs[0].number}</span>
           </Link>
+        ) : null}
+        {issue.dueDate ? (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 text-xs',
+              new Date(issue.dueDate) < new Date() &&
+                issue.workflowStateType !== 'done' &&
+                issue.workflowStateType !== 'canceled'
+                ? 'text-red-500 dark:text-red-400'
+                : 'text-muted-foreground',
+            )}
+            title={`Due ${formatDateHuman(new Date(issue.dueDate))}`}
+          >
+            <CalendarClock className='size-3' />
+            {formatDateHuman(new Date(issue.dueDate))}
+          </span>
         ) : null}
         <span className='text-muted-foreground text-xs'>
           {formatDateHuman(new Date(issue.updatedAt))}

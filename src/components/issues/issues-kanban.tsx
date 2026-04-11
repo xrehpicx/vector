@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import {
+  CalendarClock,
   Check,
   Circle,
   ExternalLink,
@@ -132,6 +133,8 @@ interface GroupedIssue {
     stateType: string | null;
   }>;
   updatedAt: number;
+  dueDate: string | null;
+  startDate: string | null;
   linkedPrs: Array<{ number: number; state: string; url: string }>;
   activeLiveActivities?: Array<{
     _id: string;
@@ -273,6 +276,8 @@ export function IssuesKanban({
           assigneeIds: row.assigneeId ? [row.assigneeId] : [],
           assignments: [assignment],
           updatedAt: row.updatedAt ?? 0,
+          dueDate: row.dueDate ?? null,
+          startDate: row.startDate ?? null,
           linkedPrs: row.linkedPrs ?? [],
           activeLiveActivities: row.activeLiveActivities,
         });
@@ -1544,9 +1549,27 @@ function KanbanCardContent({
           assigneeStateCluster
         )}
 
-        <span className='text-muted-foreground shrink-0 text-[11px]'>
-          {formatDateHuman(new Date(issue.updatedAt))}
-        </span>
+        <div className='flex shrink-0 items-center gap-1.5'>
+          {issue.dueDate ? (
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 text-[11px]',
+                new Date(issue.dueDate) < new Date() &&
+                  issue.workflowStateType !== 'done' &&
+                  issue.workflowStateType !== 'canceled'
+                  ? 'text-red-500 dark:text-red-400'
+                  : 'text-muted-foreground',
+              )}
+              title={`Due ${formatDateHuman(new Date(issue.dueDate))}`}
+            >
+              <CalendarClock className='size-3' />
+              {formatDateHuman(new Date(issue.dueDate))}
+            </span>
+          ) : null}
+          <span className='text-muted-foreground text-[11px]'>
+            {formatDateHuman(new Date(issue.updatedAt))}
+          </span>
+        </div>
       </div>
     </div>
   );

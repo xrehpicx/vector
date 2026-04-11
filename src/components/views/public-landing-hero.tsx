@@ -39,7 +39,11 @@ export function PublicLandingHero({
       ) : null}
 
       <div className='flex flex-wrap items-center justify-center gap-2'>
-        <PublicSubmitIssueDialog orgSlug={orgSlug} orgName={orgName} />
+        <PublicSubmitIssueDialog
+          orgSlug={orgSlug}
+          orgName={orgName}
+          publicIssueViewId={publicIssueViewId}
+        />
         {publicIssueViewId ? (
           <Link
             href={`/${orgSlug}/views/${publicIssueViewId}/public`}

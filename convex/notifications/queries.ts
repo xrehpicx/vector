@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from 'convex/server';
-import { query, internalQuery } from '../_generated/server';
+import { query, internalQuery, type QueryCtx } from '../_generated/server';
 import { ConvexError, v } from 'convex/values';
+import type { Doc } from '../_generated/dataModel';
 import { getAuthUserId } from '../authUtils';
 import { getDefaultPreference } from './lib';
 import {
@@ -25,22 +26,67 @@ export const listInbox = query({
       .order('desc')
       .paginate(args.paginationOpts);
 
-    const results = page.page.filter(item => {
-      if (item.isArchived) {
-        return false;
-      }
-      if (args.filter === 'unread') {
-        return !item.isRead;
-      }
+    const visible = page.page.filter(item => {
+      if (item.isArchived) return false;
+      if (args.filter === 'unread') return !item.isRead;
       return true;
     });
 
+    // Resolve a fresh deep link for each notification. Stored hrefs from
+    // older recipients can be stale or missing — recompute from the parent
+    // event so clicking always lands the user on the right surface.
+    const enriched = await Promise.all(
+      visible.map(async recipient => {
+        const href = await resolveNotificationHref(ctx, recipient);
+        return { ...recipient, href };
+      }),
+    );
+
     return {
       ...page,
-      page: results,
+      page: enriched,
     };
   },
 });
+
+async function resolveNotificationHref(
+  ctx: QueryCtx,
+  recipient: Doc<'notificationRecipients'>,
+): Promise<string | undefined> {
+  const event = await ctx.db.get('notificationEvents', recipient.eventId);
+  if (!event) return recipient.href;
+
+  const org = event.organizationId
+    ? await ctx.db.get('organizations', event.organizationId)
+    : null;
+  const orgSlug = org?.slug;
+
+  if (event.issueId && orgSlug) {
+    const issue = await ctx.db.get('issues', event.issueId);
+    if (issue?.key) return `/${orgSlug}/issues/${issue.key}`;
+  }
+
+  if (event.projectId && orgSlug) {
+    const project = await ctx.db.get('projects', event.projectId);
+    if (project?.key) return `/${orgSlug}/projects/${project.key}`;
+  }
+
+  if (event.teamId && orgSlug) {
+    const team = await ctx.db.get('teams', event.teamId);
+    if (team?.key) return `/${orgSlug}/teams/${team.key}`;
+  }
+
+  // Fall back to a payload-supplied href (e.g. invitation links to
+  // /settings/invites or /auth/signup) before giving up.
+  const payloadHref =
+    event.payload &&
+    typeof event.payload === 'object' &&
+    'href' in event.payload
+      ? ((event.payload as { href?: unknown }).href as string | undefined)
+      : undefined;
+  if (payloadHref) return payloadHref;
+  return recipient.href;
+}
 
 export const unreadCount = query({
   args: {},

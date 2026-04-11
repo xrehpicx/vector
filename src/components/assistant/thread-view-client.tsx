@@ -100,6 +100,57 @@ function ThreadLoadingSkeleton() {
   );
 }
 
+type ChatLoadStatus =
+  | 'LoadingFirstPage'
+  | 'LoadingMore'
+  | 'CanLoadMore'
+  | 'Exhausted';
+
+function ChatLoadMoreSentinel({
+  status,
+  loadMore,
+}: {
+  status: ChatLoadStatus;
+  loadMore: (numItems: number) => void;
+}) {
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (status !== 'CanLoadMore') return;
+    const node = sentinelRef.current;
+    if (!node) return;
+
+    let requested = false;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (!entries.some(entry => entry.isIntersecting) || requested) return;
+        requested = true;
+        loadMore(40);
+      },
+      { rootMargin: '320px 0px' },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [status, loadMore]);
+
+  if (status !== 'CanLoadMore' && status !== 'LoadingMore') return null;
+
+  return (
+    <div
+      ref={sentinelRef}
+      className='flex items-center justify-center py-2'
+      aria-hidden='true'
+    >
+      {status === 'LoadingMore' ? (
+        <Loader2 className='text-muted-foreground size-3.5 animate-spin' />
+      ) : (
+        <div className='h-3.5 w-full' />
+      )}
+    </div>
+  );
+}
+
 export function ThreadViewClient() {
   const { orgSlug, threadId: threadIdParam } = useParams<{
     orgSlug: string;
@@ -643,24 +694,15 @@ export function ThreadViewClient() {
       <ScrollArea className='h-full w-full flex-1' viewportRef={viewportRef}>
         <div ref={contentRef}>
           <div className='mx-auto max-w-[700px] space-y-3 px-4 pt-16 pb-36'>
-            {/* Load more trigger at top */}
-            {uiMessages.status === 'CanLoadMore' && (
-              <div className='flex justify-center py-2'>
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  className='text-muted-foreground h-7 text-xs'
-                  onClick={() => uiMessages.loadMore(40)}
-                >
-                  Load older messages
-                </Button>
-              </div>
-            )}
-            {uiMessages.status === 'LoadingMore' && (
-              <div className='flex justify-center py-2'>
-                <Loader2 className='text-muted-foreground size-4 animate-spin' />
-              </div>
-            )}
+            {/* Auto-load older messages: an invisible sentinel scrolls into
+                view as the user pulls up, the IntersectionObserver fires
+                loadMore, and we render a small spinner only while a page is
+                actually being fetched. No more "Load older messages" button
+                to click. */}
+            <ChatLoadMoreSentinel
+              status={uiMessages.status}
+              loadMore={uiMessages.loadMore}
+            />
             {!hasMessages && (
               <div className='text-muted-foreground flex flex-col items-center justify-center gap-2 py-32 text-sm'>
                 <svg

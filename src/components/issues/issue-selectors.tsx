@@ -26,12 +26,6 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 
 // Utils & helpers
 import { cn } from '@/lib/utils';
@@ -790,10 +784,20 @@ export function DateSelector({
     });
   };
 
+  // The tooltip hint is rendered via the native `title` attribute. Wrapping
+  // the Button in `<TooltipTrigger asChild>` and then in `<PopoverTrigger
+  // asChild>` confuses base-ui's `render` prop chain — the popover ends up
+  // attaching its open handler to the tooltip provider instead of the
+  // Button, so clicking the trigger does nothing. Going native sidesteps
+  // that whole composition headache and keeps the click handler intact.
+  const showHint =
+    displayMode === 'iconWhenUnselected' && !hasSelection && !!tooltipText;
   const buttonContent = (
     <Button
       variant='outline'
       size='sm'
+      title={showHint ? tooltipText : undefined}
+      aria-label={showHint ? tooltipText : undefined}
       className={cn(
         'h-8 gap-2',
         !className?.includes('bg-transparent') &&
@@ -806,23 +810,9 @@ export function DateSelector({
     </Button>
   );
 
-  const DefaultBtn =
-    displayMode === 'iconWhenUnselected' && !hasSelection && tooltipText ? (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
-          <TooltipContent>
-            <p>{tooltipText}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    ) : (
-      buttonContent
-    );
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{trigger ?? DefaultBtn}</PopoverTrigger>
+      <PopoverTrigger asChild>{trigger ?? buttonContent}</PopoverTrigger>
       <PopoverContent align={align} className='w-auto p-3'>
         <div className='space-y-3'>
           {title && (

@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'nextjs-toploader/app';
 import { format, isToday, isYesterday, isThisWeek, isThisYear } from 'date-fns';
-import { Circle, MoreHorizontal, Trash2 } from 'lucide-react';
+import { CalendarClock, Circle, MoreHorizontal, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getDynamicIcon, DynamicIcon } from '@/lib/dynamic-icons';
@@ -465,6 +465,24 @@ export function IssuesTimeline({
               </div>
             )}
           </div>
+
+          {/* Due date — flagged red when overdue and not done/canceled */}
+          {issue.dueDate ? (
+            <span
+              className={cn(
+                'hidden shrink-0 items-center gap-0.5 text-xs sm:inline-flex',
+                new Date(issue.dueDate) < new Date() &&
+                  issue.workflowStateType !== 'done' &&
+                  issue.workflowStateType !== 'canceled'
+                  ? 'text-red-500 dark:text-red-400'
+                  : 'text-muted-foreground',
+              )}
+              title={`Due ${formatDateHuman(new Date(issue.dueDate))}`}
+            >
+              <CalendarClock className='size-3' />
+              {formatDateHuman(new Date(issue.dueDate))}
+            </span>
+          ) : null}
 
           {/* Last updated time */}
           <span className='text-muted-foreground hidden shrink-0 text-xs sm:inline'>

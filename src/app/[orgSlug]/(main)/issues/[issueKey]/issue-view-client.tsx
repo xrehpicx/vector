@@ -19,7 +19,6 @@ import {
   AlertTriangle,
   WandSparkles,
   Bell,
-  CalendarRange,
   CalendarClock,
 } from 'lucide-react';
 import { MobileNavTrigger } from '../../layout';
@@ -1211,7 +1210,9 @@ export default function IssueViewClient({
             </div>
 
             {/* Schedule (start + due date) — inline editable when the user
-                has issue-edit permission, view-only otherwise. */}
+                has issue-edit permission, view-only otherwise. The first
+                selector overrides the Button's `px-2.5` left padding so
+                the row lines up with the title/description left edge. */}
             <div className='flex flex-wrap items-center gap-1'>
               {canEditIssue ? (
                 <PermissionAwareSelector
@@ -1222,17 +1223,18 @@ export default function IssueViewClient({
                   <DateSelector
                     selectedDate={issue.startDate ?? ''}
                     onDateSelect={handleStartDateChange}
-                    icon={CalendarRange}
+                    icon={Play}
                     placeholder='Start date'
                     title='Start date'
                     tooltipText='Set start date'
                     displayMode='iconWhenUnselected'
-                    className='hover:bg-muted/40 border-none bg-transparent shadow-none dark:bg-transparent'
+                    className='hover:bg-muted/40 border-none bg-transparent pl-0 shadow-none dark:bg-transparent'
                   />
                 </PermissionAwareSelector>
               ) : issue.startDate ? (
-                <span className='text-muted-foreground text-sm'>
-                  From {formatDateHuman(issue.startDate)}
+                <span className='text-muted-foreground inline-flex items-center gap-1.5 text-sm'>
+                  <Play className='size-3' />
+                  {formatDateHuman(issue.startDate)}
                 </span>
               ) : null}
               {canEditIssue ? (
@@ -1265,7 +1267,7 @@ export default function IssueViewClient({
               ) : issue.dueDate ? (
                 <span
                   className={cn(
-                    'text-sm font-medium',
+                    'inline-flex items-center gap-1.5 px-2.5 text-sm font-medium',
                     new Date(issue.dueDate) < new Date() &&
                       states &&
                       !['done'].includes(
@@ -1276,7 +1278,8 @@ export default function IssueViewClient({
                       : 'text-muted-foreground',
                   )}
                 >
-                  Due {formatDateHuman(issue.dueDate)}
+                  <CalendarClock className='size-3' />
+                  {formatDateHuman(issue.dueDate)}
                 </span>
               ) : null}
             </div>

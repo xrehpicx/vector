@@ -4,7 +4,8 @@ import { type UIMessage, useSmoothText } from '@convex-dev/agent/react';
 import { useDeferredValue, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { BarsSpinner } from '@/components/bars-spinner';
-import { Brain } from 'lucide-react';
+import { Brain, FileText } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { AssistantToolRenderer } from './assistant-tool-renderers';
 import { AssistantResponse } from './assistant-response';
 
@@ -190,32 +191,68 @@ function UserMessage({ message }: { message: UIMessage }) {
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
       className='sticky top-0 z-10 mt-4 ml-auto w-fit max-w-[85%]'
     >
-      <div className='bg-muted text-foreground inline-block w-fit rounded-3xl px-4 py-2'>
+      <div
+        className={cn(
+          'bg-muted text-foreground inline-block w-fit overflow-hidden rounded-3xl',
+          // When the only content is attachments, drop the text padding
+          // entirely so the previews can sit flush against the bubble.
+          fileParts.length > 0 && !text ? 'p-1' : 'px-4 py-2',
+        )}
+      >
         <div className='space-y-2'>
+          {fileParts.length > 0 ? (
+            <div
+              className={cn(
+                'flex flex-wrap gap-1.5',
+                // Pull the previews to the bubble edge when text follows.
+                text && '-mx-2 -mt-1',
+              )}
+            >
+              {fileParts.map((part, index) => {
+                const isImage = part.mediaType.startsWith('image/');
+                const filename = part.filename ?? 'attachment';
+                if (isImage && part.url) {
+                  return (
+                    <a
+                      key={`${message.id}-file-${index}`}
+                      href={part.url}
+                      target='_blank'
+                      rel='noreferrer'
+                      className='block overflow-hidden rounded-2xl border'
+                      title={filename}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={part.url}
+                        alt={filename}
+                        className='block max-h-64 max-w-[260px] object-cover'
+                        loading='lazy'
+                      />
+                    </a>
+                  );
+                }
+                return (
+                  <a
+                    key={`${message.id}-file-${index}`}
+                    href={part.url}
+                    target='_blank'
+                    rel='noreferrer'
+                    className='bg-background/80 hover:bg-background inline-flex max-w-[260px] items-center gap-2 rounded-2xl border px-3 py-2 text-xs transition-colors'
+                    title={filename}
+                  >
+                    <FileText className='text-muted-foreground size-3.5 shrink-0' />
+                    <span className='min-w-0 flex-1 truncate font-medium'>
+                      {filename}
+                    </span>
+                  </a>
+                );
+              })}
+            </div>
+          ) : null}
           {text ? (
             <AssistantResponse className='text-sm [&_p]:my-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0'>
               {text}
             </AssistantResponse>
-          ) : null}
-          {fileParts.length > 0 ? (
-            <div className='flex flex-wrap gap-1.5'>
-              {fileParts.map((part, index) => (
-                <a
-                  key={`${message.id}-file-${index}`}
-                  href={part.url}
-                  target='_blank'
-                  rel='noreferrer'
-                  className='bg-background/80 hover:bg-background flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors'
-                >
-                  <span>
-                    {part.mediaType.startsWith('image/') ? 'Image' : 'File'}
-                  </span>
-                  <span className='max-w-[180px] truncate'>
-                    {part.filename ?? 'attachment'}
-                  </span>
-                </a>
-              ))}
-            </div>
           ) : null}
         </div>
       </div>

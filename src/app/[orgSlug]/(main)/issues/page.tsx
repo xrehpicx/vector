@@ -13,8 +13,22 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { useCallback, useDeferredValue, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { LayoutList, Columns3, Clock, Search, Loader2 } from 'lucide-react';
+import {
+  LayoutList,
+  Columns3,
+  Clock,
+  Search,
+  Loader2,
+  CalendarClock,
+  X as XIcon,
+} from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { IssuesKanban } from '@/components/issues/issues-kanban';
 import { IssuesTimeline } from '@/components/issues/issues-timeline';
@@ -91,6 +105,167 @@ function getInitialGroupBy(
   return defaultValue;
 }
 
+// Format a Date as a YYYY-MM-DD string in the user's local timezone. The
+// issue.dueDate field is stored as a calendar date with no timezone, so we
+// match it locally rather than via toISOString() which would shift the
+// boundary by the user's UTC offset.
+function localDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(base: Date, days: number) {
+  const next = new Date(base);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+const DUE_FILTER_PRESETS = [
+  { key: 'today', label: 'Today', days: 0 },
+  { key: '4d', label: 'Within 4 days', days: 4 },
+  { key: 'week', label: 'This week', days: 7 },
+] as const;
+
+type DueFilterPreset = (typeof DUE_FILTER_PRESETS)[number]['key'] | 'custom';
+
+type DueFilterValue = {
+  preset: DueFilterPreset;
+  dueBefore: string;
+};
+
+function DueDateFilterButton({
+  dueFilter,
+  setDueFilter,
+}: {
+  dueFilter: DueFilterValue | null;
+  setDueFilter: (value: DueFilterValue | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const activeLabel = (() => {
+    if (!dueFilter) return null;
+    if (dueFilter.preset === 'custom') {
+      const date = new Date(`${dueFilter.dueBefore}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return 'Custom';
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+    return DUE_FILTER_PRESETS.find(preset => preset.key === dueFilter.preset)
+      ?.label;
+  })();
+
+  const isActive = dueFilter !== null;
+
+  const applyPreset = (preset: (typeof DUE_FILTER_PRESETS)[number]) => {
+    const target = addDays(new Date(), preset.days);
+    setDueFilter({
+      preset: preset.key,
+      dueBefore: localDateString(target),
+    });
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant={isActive ? 'secondary' : 'ghost'}
+          size='sm'
+          className={cn(
+            'h-6 gap-1.5 px-2 text-xs',
+            isActive && 'bg-secondary text-secondary-foreground',
+          )}
+          title='Filter by due date'
+        >
+          <CalendarClock className='size-3.5' />
+          {isActive ? <span>Due {activeLabel}</span> : null}
+          {isActive ? (
+            <span
+              role='button'
+              tabIndex={0}
+              aria-label='Clear due date filter'
+              onClick={event => {
+                event.stopPropagation();
+                setDueFilter(null);
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setDueFilter(null);
+                }
+              }}
+              className='hover:text-foreground -mr-0.5 ml-0.5 inline-flex items-center'
+            >
+              <XIcon className='size-3' />
+            </span>
+          ) : null}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align='end' className='w-auto p-2'>
+        <div className='flex flex-col gap-1'>
+          <div className='text-muted-foreground px-1 pt-0.5 pb-1 text-[10px] tracking-[0.12em] uppercase'>
+            Due before
+          </div>
+          {DUE_FILTER_PRESETS.map(preset => {
+            const isSelected = dueFilter?.preset === preset.key;
+            return (
+              <Button
+                key={preset.key}
+                type='button'
+                variant={isSelected ? 'secondary' : 'ghost'}
+                size='sm'
+                className='h-7 justify-start gap-2 px-2 text-xs'
+                onClick={() => applyPreset(preset)}
+              >
+                <CalendarClock className='size-3' />
+                <span>{preset.label}</span>
+              </Button>
+            );
+          })}
+          <div className='bg-border my-1 h-px' />
+          <CalendarComponent
+            mode='single'
+            selected={
+              dueFilter?.preset === 'custom'
+                ? new Date(`${dueFilter.dueBefore}T00:00:00`)
+                : undefined
+            }
+            onSelect={date => {
+              if (!date) return;
+              setDueFilter({
+                preset: 'custom',
+                dueBefore: localDateString(date),
+              });
+              setOpen(false);
+            }}
+            initialFocus={false}
+            className='[--cell-size:--spacing(7)]'
+          />
+          {isActive ? (
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              className='h-7 justify-center px-2 text-xs'
+              onClick={() => {
+                setDueFilter(null);
+                setOpen(false);
+              }}
+            >
+              Clear filter
+            </Button>
+          ) : null}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function IssuesPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -161,6 +336,13 @@ export default function IssuesPage() {
   const [searchText, setSearchText] = useState('');
   const deferredSearch = useDeferredValue(searchText);
 
+  // Due-date filter — `null` is "no filter", otherwise an inclusive
+  // YYYY-MM-DD upper bound that gets passed to the issues query.
+  const [dueFilter, setDueFilter] = useState<{
+    preset: 'today' | '4d' | 'week' | 'custom';
+    dueBefore: string;
+  } | null>(null);
+
   const user = useCachedQuery(api.users.currentUser);
   const currentUserId = user?._id || '';
 
@@ -215,6 +397,7 @@ export default function IssuesPage() {
     projectId: selectedProject || undefined,
     teamId: selectedTeam || undefined,
     searchQuery: deferredSearch || undefined,
+    dueBefore: dueFilter?.dueBefore,
   };
 
   const summary = useCachedQuery(api.issues.queries.getIssueListSummary, {
@@ -502,6 +685,12 @@ export default function IssuesPage() {
               value={viewMode === 'table' ? tableGroupBy : kanbanGroupBy}
               onChange={val => setGroupBy(val, viewMode)}
               className='h-6 text-xs'
+            />
+
+            {/* Due date filter — compact popover with one-click presets */}
+            <DueDateFilterButton
+              dueFilter={dueFilter}
+              setDueFilter={setDueFilter}
             />
 
             {/* Team filter */}

@@ -623,6 +623,19 @@ function matchesIssueSearch(issue: Doc<'issues'>, searchQuery?: string) {
   );
 }
 
+/**
+ * Inclusive `dueDate <= dueBefore` filter. Issues with no due date are
+ * dropped — when the user filters "due this week" they explicitly want
+ * dated work, so undated issues are never a match. Both sides are
+ * compared as YYYY-MM-DD strings, which sorts lexicographically the same
+ * way as the underlying date order.
+ */
+function matchesDueBefore(issue: Doc<'issues'>, dueBefore?: string) {
+  if (!dueBefore) return true;
+  if (!issue.dueDate) return false;
+  return issue.dueDate <= dueBefore;
+}
+
 function dedupeIssues(issues: readonly Doc<'issues'>[]) {
   return Array.from(new Map(issues.map(issue => [issue._id, issue])).values());
 }
@@ -1131,6 +1144,9 @@ export const getIssueListSummary = query({
     teamId: v.optional(v.string()),
     searchQuery: v.optional(v.string()),
     scope: v.union(v.literal('mine'), v.literal('related'), v.literal('all')),
+    // Inclusive YYYY-MM-DD upper bound for the issue's `dueDate`. When set,
+    // filters out issues with no due date or with a due date past it.
+    dueBefore: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -1181,16 +1197,18 @@ export const getIssueListSummary = query({
       args.searchQuery,
     );
 
-    const visibleIssues = candidateIssues.filter(issue =>
-      canUserViewIssueFromAccess(access, issue, {
-        scopedProjectId: scopedProjectVisible
-          ? (projectId ?? undefined)
-          : undefined,
-        scopedProjectVisible,
-        scopedTeamId: scopedTeamVisible ? (teamId ?? undefined) : undefined,
-        scopedTeamVisible,
-      }),
-    );
+    const visibleIssues = candidateIssues
+      .filter(issue =>
+        canUserViewIssueFromAccess(access, issue, {
+          scopedProjectId: scopedProjectVisible
+            ? (projectId ?? undefined)
+            : undefined,
+          scopedProjectVisible,
+          scopedTeamId: scopedTeamVisible ? (teamId ?? undefined) : undefined,
+          scopedTeamVisible,
+        }),
+      )
+      .filter(issue => matchesDueBefore(issue, args.dueBefore));
 
     const mineIssues = visibleIssues.filter(issue =>
       matchesIssueListScope(access, issue, 'mine'),
@@ -1225,6 +1243,7 @@ export const listIssuesPage = query({
     searchQuery: v.optional(v.string()),
     workflowStateType: v.optional(v.string()),
     scope: v.union(v.literal('mine'), v.literal('related'), v.literal('all')),
+    dueBefore: v.optional(v.string()),
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
@@ -1302,6 +1321,10 @@ export const listIssuesPage = query({
               scopedTeamVisible,
             })
           ) {
+            return false;
+          }
+
+          if (!matchesDueBefore(issue, args.dueBefore)) {
             return false;
           }
 
@@ -1799,6 +1822,7 @@ export const listIssues = query({
     page: v.optional(v.number()),
     pageSize: v.optional(v.number()),
     includeCounts: v.optional(v.boolean()),
+    dueBefore: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -1890,7 +1914,8 @@ export const listIssues = query({
           ? access.projectIds.has(issue.projectId)
           : false;
         return inMyTeam || inMyProject;
-      });
+      })
+      .filter(issue => matchesDueBefore(issue, args.dueBefore));
 
     const pageSize =
       args.pageSize && args.pageSize > 0

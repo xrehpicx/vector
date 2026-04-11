@@ -239,49 +239,53 @@ function AgentContextDocumentSelector({
   const selectedDoc = documents.find(doc => doc._id === value);
 
   return (
-    <div className='flex items-center gap-2'>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type='button'
-            variant='outline'
-            className='h-8 w-full justify-between px-2 text-sm'
-            disabled={disabled}
-          >
-            <span className='flex items-center gap-1.5 truncate'>
-              <FileText className='text-muted-foreground size-3.5 shrink-0' />
-              {selectedDoc?.title ?? 'No context document'}
-            </span>
-            <ChevronsUpDown className='text-muted-foreground size-3.5 shrink-0' />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className='w-[320px] p-0' align='start'>
-          <Command>
-            <CommandInput placeholder='Search documents...' />
-            <CommandList>
-              <CommandEmpty>No documents found.</CommandEmpty>
-              <CommandGroup>
-                {documents.map(doc => (
-                  <CommandItem
-                    key={doc._id}
-                    value={doc.title}
-                    onSelect={() => {
-                      onChange(doc._id);
-                      setOpen(false);
-                    }}
-                  >
-                    <FileText className='text-muted-foreground mr-1.5 size-3.5 shrink-0' />
-                    <span className='truncate'>{doc.title}</span>
-                    {value === doc._id ? (
-                      <Check className='text-muted-foreground ml-auto size-3.5 shrink-0' />
-                    ) : null}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+    <div className='flex w-full min-w-0 items-center gap-2'>
+      <div className='min-w-0 flex-1'>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type='button'
+              variant='outline'
+              className='h-8 w-full justify-between px-2 text-sm'
+              disabled={disabled}
+            >
+              <span className='flex min-w-0 items-center gap-1.5 truncate'>
+                <FileText className='text-muted-foreground size-3.5 shrink-0' />
+                <span className='truncate'>
+                  {selectedDoc?.title ?? 'No context document'}
+                </span>
+              </span>
+              <ChevronsUpDown className='text-muted-foreground size-3.5 shrink-0' />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className='w-[320px] p-0' align='start'>
+            <Command>
+              <CommandInput placeholder='Search documents...' />
+              <CommandList>
+                <CommandEmpty>No documents found.</CommandEmpty>
+                <CommandGroup>
+                  {documents.map(doc => (
+                    <CommandItem
+                      key={doc._id}
+                      value={doc.title}
+                      onSelect={() => {
+                        onChange(doc._id);
+                        setOpen(false);
+                      }}
+                    >
+                      <FileText className='text-muted-foreground mr-1.5 size-3.5 shrink-0' />
+                      <span className='truncate'>{doc.title}</span>
+                      {value === doc._id ? (
+                        <Check className='text-muted-foreground ml-auto size-3.5 shrink-0' />
+                      ) : null}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
       {value ? (
         <Button
           type='button'
