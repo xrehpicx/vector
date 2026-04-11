@@ -738,8 +738,7 @@ export function ThreadViewClient() {
             ref={inputRef}
             orgSlug={orgSlug}
             onSubmit={handleSend}
-            disabled={isSending || isAssistantActive}
-            busy={isSending || threadRow.threadStatus === 'pending'}
+            busy={isSending || isAssistantActive}
             variant='thread'
             placeholder='Ask anything...'
           />

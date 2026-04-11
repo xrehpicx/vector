@@ -763,8 +763,7 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
               orgSlug={orgSlug}
               onSubmit={handleSend}
               onFocus={() => setIsExpanded(true)}
-              disabled={isSending}
-              busy={isSending || threadRow?.threadStatus === 'pending'}
+              busy={isSending || isAssistantActive}
               variant='dock'
               placeholder='Ask anything...'
               auxiliaryActions={

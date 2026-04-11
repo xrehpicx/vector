@@ -15,6 +15,7 @@ import {
 import {
   Check,
   ChevronDown,
+  Clock,
   FileText,
   Loader2,
   Paperclip,
@@ -106,6 +107,12 @@ export type AssistantComposerSubmitOptions = {
   thinkingLevel?: 'low' | 'medium' | 'high';
 };
 
+type QueuedSubmission = {
+  text: string;
+  mentions: MentionRef[];
+  options: AssistantComposerSubmitOptions;
+};
+
 export type AssistantComposerHandle = {
   submit: () => Promise<void>;
   focus: () => void;
@@ -166,6 +173,13 @@ export const AssistantComposer = forwardRef<
   >('off');
   const [modelOpen, setModelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [queuedSubmission, setQueuedSubmission] =
+    useState<QueuedSubmission | null>(null);
+  const prevBusyRef = useRef(busy);
+  const onSubmitRef = useRef(onSubmit);
+  useEffect(() => {
+    onSubmitRef.current = onSubmit;
+  }, [onSubmit]);
   const attachmentIdPrefix = useId();
   const attachmentsRef = useRef<AssistantComposerAttachment[]>([]);
   const generateAttachmentUploadUrl = useMutation(
@@ -352,12 +366,33 @@ export const AssistantComposer = forwardRef<
 
   const handleSubmit = useCallback(
     async (text: string, mentions: MentionRef[]) => {
-      const shouldClear = await onSubmit(text, mentions, {
+      const options: AssistantComposerSubmitOptions = {
         attachments,
         model: model.trim() || undefined,
         skipConfirmations,
         thinkingLevel: thinkingLevel !== 'off' ? thinkingLevel : undefined,
-      });
+      };
+
+      // Queue the submission if the assistant is still working on the
+      // previous turn. The queued message auto-fires when busy flips to
+      // false (see effect below). Attachments are transferred to the queue
+      // slot so the user can keep attaching new files to their next turn.
+      if (busy) {
+        setQueuedSubmission(prev => {
+          if (prev) {
+            for (const attachment of prev.options.attachments) {
+              if (attachment.previewUrl?.startsWith('blob:')) {
+                URL.revokeObjectURL(attachment.previewUrl);
+              }
+            }
+          }
+          return { text, mentions, options };
+        });
+        setAttachments([]);
+        return true;
+      }
+
+      const shouldClear = await onSubmit(text, mentions, options);
 
       if (shouldClear !== false) {
         for (const attachment of attachments) {
@@ -370,10 +405,44 @@ export const AssistantComposer = forwardRef<
 
       return shouldClear;
     },
-    [attachments, model, onSubmit, skipConfirmations, thinkingLevel],
+    [attachments, busy, model, onSubmit, skipConfirmations, thinkingLevel],
   );
 
-  const canInteract = !disabled && !busy && !isUploadingAttachment;
+  // Auto-fire the queued submission when the assistant becomes idle again.
+  // We only trigger on the busy-true → busy-false transition so we don't
+  // race against the user manually clearing the queue while idle.
+  useEffect(() => {
+    const wasBusy = prevBusyRef.current;
+    prevBusyRef.current = busy;
+    if (!wasBusy || busy || !queuedSubmission || disabled) return;
+
+    const queued = queuedSubmission;
+    setQueuedSubmission(null);
+    void onSubmitRef.current(queued.text, queued.mentions, queued.options);
+  }, [busy, disabled, queuedSubmission]);
+
+  const handleCancelQueue = useCallback(() => {
+    setQueuedSubmission(prev => {
+      if (prev) {
+        for (const attachment of prev.options.attachments) {
+          if (attachment.previewUrl?.startsWith('blob:')) {
+            URL.revokeObjectURL(attachment.previewUrl);
+          }
+        }
+      }
+      return null;
+    });
+  }, []);
+
+  // `canType` gates the editor and send button. The send button stays
+  // enabled while busy so the user can queue a follow-up turn without
+  // waiting for the assistant to finish streaming.
+  const canType = !disabled && !isUploadingAttachment;
+  // `canConfigure` gates toolbar controls that should only change on a new
+  // turn (model picker, attach button). Keeping them frozen while busy
+  // avoids accidentally mutating the in-flight request's attachments.
+  const canConfigure = !disabled && !busy && !isUploadingAttachment;
+  const canInteract = canConfigure;
   const triggerLabel = useMemo(() => modelLabel(model), [model, modelOptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useImperativeHandle(
@@ -603,6 +672,31 @@ export const AssistantComposer = forwardRef<
         </div>
       ) : null}
 
+      {/* Queued message indicator — shown while the assistant is still
+          working on the previous turn and the user has queued a follow-up. */}
+      {queuedSubmission ? (
+        <div className='border-border/50 bg-muted/30 flex items-center gap-2 border-b px-3 py-1'>
+          <Clock className='text-muted-foreground size-3 shrink-0' />
+          <div className='min-w-0 flex-1 text-[11px] leading-4'>
+            <span className='text-muted-foreground'>Queued · </span>
+            <span className='truncate'>
+              {queuedSubmission.text.trim() ||
+                `${queuedSubmission.options.attachments.length} attachment${
+                  queuedSubmission.options.attachments.length === 1 ? '' : 's'
+                }`}
+            </span>
+          </div>
+          <button
+            type='button'
+            onClick={handleCancelQueue}
+            className='text-muted-foreground/60 hover:text-foreground shrink-0 transition-colors'
+            aria-label='Cancel queued message'
+          >
+            <X className='size-3' />
+          </button>
+        </div>
+      ) : null}
+
       {/* Input row */}
       <div className='flex items-center gap-1'>
         <AssistantInput
@@ -610,10 +704,14 @@ export const AssistantComposer = forwardRef<
           orgSlug={orgSlug}
           onSubmit={handleSubmit}
           onFocus={onFocus}
-          disabled={!canInteract}
+          disabled={!canType}
           hasExternalContent={attachments.length > 0}
           className={inputClass}
-          placeholder={placeholder}
+          placeholder={
+            busy && !queuedSubmission
+              ? 'Ask anything (will queue until the current turn finishes)'
+              : placeholder
+          }
         />
         <div className='flex shrink-0 items-center gap-0.5 pr-1'>
           {auxiliaryActions}
@@ -621,15 +719,13 @@ export const AssistantComposer = forwardRef<
             type='button'
             size='sm'
             className={sendButtonClass}
-            disabled={!canInteract}
+            disabled={!canType || !!queuedSubmission}
             onClick={() => inputRef.current?.submit()}
           >
-            {busy || isUploadingAttachment ? (
-              isUploadingAttachment ? (
-                <Loader2 className='size-3 animate-spin' />
-              ) : (
-                <BarsSpinner size={variant === 'dock' ? 10 : 12} />
-              )
+            {isUploadingAttachment ? (
+              <Loader2 className='size-3 animate-spin' />
+            ) : busy && !queuedSubmission ? (
+              <BarsSpinner size={variant === 'dock' ? 10 : 12} />
             ) : (
               <ArrowUp
                 className={cn(variant === 'dock' ? 'size-2.5' : 'size-3.5')}
