@@ -46,6 +46,7 @@ export type AssistantPendingAction =
       entityLabel: string;
       summary: string;
       createdAt: number;
+      executed?: boolean;
     }
   | {
       id: string;
@@ -54,6 +55,7 @@ export type AssistantPendingAction =
       entities: Array<{ entityId: string; entityLabel: string }>;
       summary: string;
       createdAt: number;
+      executed?: boolean;
     }
   | {
       id: string;
@@ -66,6 +68,7 @@ export type AssistantPendingAction =
       html: string;
       summary: string;
       createdAt: number;
+      executed?: boolean;
     };
 
 export const assistantPageContextValidator = v.any();
@@ -258,6 +261,26 @@ export async function requireAssistantThreadRow(
 ) {
   const row = await getAssistantThreadRow(ctx, organizationId, userId);
   if (!row) {
+    throw new ConvexError('THREAD_NOT_FOUND');
+  }
+  return row;
+}
+
+/**
+ * Resolve a specific assistant thread by id and verify it belongs to the
+ * given organization and user. Prefer this over `requireAssistantThreadRow`
+ * inside tool mutations: the latter returns the user's first thread via an
+ * index scan, which mismatches the agent's active thread when the user has
+ * more than one thread and causes spurious FORBIDDEN errors.
+ */
+export async function requireAssistantThreadById(
+  ctx: QueryCtx | MutationCtx,
+  assistantThreadId: Id<'assistantThreads'>,
+  organizationId: Id<'organizations'>,
+  userId: Id<'users'>,
+) {
+  const row = await ctx.db.get('assistantThreads', assistantThreadId);
+  if (!row || row.organizationId !== organizationId || row.userId !== userId) {
     throw new ConvexError('THREAD_NOT_FOUND');
   }
   return row;

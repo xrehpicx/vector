@@ -12,6 +12,7 @@ type AssistantToolCtx = ToolCtx & {
   userId: Id<'users'>;
   assistantThreadId: Id<'assistantThreads'>;
   currentPageContext: AssistantPageContext;
+  skipConfirmations: boolean;
 };
 
 type StartIssueDeviceWorkSessionInput = {
@@ -157,6 +158,7 @@ export const requestDeleteDocument: any = createTool({
       pageContext: ctx.currentPageContext,
       entityType: 'document',
       documentId: args.documentId,
+      autoConfirm: ctx.skipConfirmations,
     });
   },
 });
@@ -349,6 +351,7 @@ export const requestDeleteIssue: any = createTool({
       pageContext: ctx.currentPageContext,
       entityType: 'issue',
       issueKey: args.issueKey,
+      autoConfirm: ctx.skipConfirmations,
     });
   },
 });
@@ -383,6 +386,7 @@ export const requestBulkDelete: any = createTool({
         pageContext: ctx.currentPageContext,
         entityType: args.entityType,
         keys: args.keys,
+        autoConfirm: ctx.skipConfirmations,
       },
     );
   },
@@ -527,6 +531,7 @@ export const requestDeleteProject: any = createTool({
       pageContext: ctx.currentPageContext,
       entityType: 'project',
       projectKey: args.projectKey,
+      autoConfirm: ctx.skipConfirmations,
     });
   },
 });
@@ -975,6 +980,7 @@ export const requestDeleteFolder: any = createTool({
       userId: ctx.userId,
       assistantThreadId: ctx.assistantThreadId,
       ...args,
+      autoConfirm: ctx.skipConfirmations,
     });
   },
 });
@@ -1406,6 +1412,7 @@ export const requestDeleteTeam: any = createTool({
       pageContext: ctx.currentPageContext,
       entityType: 'team',
       teamKey: args.teamKey,
+      autoConfirm: ctx.skipConfirmations,
     });
   },
 });

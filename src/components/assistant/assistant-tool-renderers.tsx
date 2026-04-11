@@ -257,7 +257,10 @@ function PendingActionToolResult({ tool }: AssistantToolComponentProps) {
     }
   };
 
-  if (isDone) {
+  // When Skip confirmations is on, the server executes the delete inline and
+  // returns output.executed === true. Render the done state immediately so the
+  // user doesn't see a confirmation card for an action that has already run.
+  if (isDone || output?.executed) {
     return (
       <DenseToolShell
         icon={<CheckCircle2 className='size-3' />}

@@ -410,6 +410,7 @@ export const sendMessage = mutation({
     thinkingLevel: v.optional(
       v.union(v.literal('low'), v.literal('medium'), v.literal('high')),
     ),
+    skipConfirmations: v.optional(v.boolean()),
     attachments: v.optional(
       v.array(
         v.object({
@@ -556,6 +557,7 @@ export const sendMessage = mutation({
       promptText: prompt || undefined,
       model: args.model?.trim() || undefined,
       thinkingLevel: args.thinkingLevel,
+      skipConfirmations: args.skipConfirmations,
     });
 
     return {

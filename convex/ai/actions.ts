@@ -159,6 +159,7 @@ export const generateResponse = internalAction({
     thinkingLevel: v.optional(
       v.union(v.literal('low'), v.literal('medium'), v.literal('high')),
     ),
+    skipConfirmations: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -213,6 +214,7 @@ export const generateResponse = internalAction({
         userId: args.userId,
         assistantThreadId: args.assistantThreadId,
         currentPageContext: args.pageContext,
+        skipConfirmations: args.skipConfirmations ?? false,
       });
 
       // Build provider options for thinking/reasoning budget

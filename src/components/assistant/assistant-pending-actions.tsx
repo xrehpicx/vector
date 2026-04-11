@@ -20,6 +20,7 @@ export type AssistantPendingAction =
       entityLabel: string;
       summary: string;
       createdAt: number;
+      executed?: boolean;
     }
   | {
       id: string;
@@ -28,6 +29,7 @@ export type AssistantPendingAction =
       entities: Array<{ entityId: string; entityLabel: string }>;
       summary: string;
       createdAt: number;
+      executed?: boolean;
     }
   | {
       id: string;
@@ -40,6 +42,7 @@ export type AssistantPendingAction =
       html: string;
       summary: string;
       createdAt: number;
+      executed?: boolean;
     };
 
 export function normalizePendingActions(

@@ -11,6 +11,22 @@ import {
   defaultAssistantModel,
   openrouterLanguageModelWithAnnotations,
 } from '../ai/provider';
+
+/**
+ * Provider options used for all `generateObject` calls in this file.
+ *
+ * The workspace default model is a reasoning model (Kimi K2.5 at time of
+ * writing). For structured-output calls the reasoning channel eats into the
+ * generation budget and frequently truncates the final JSON, which then
+ * fails schema validation and propagates up as `AI_NoObjectGeneratedError`.
+ * Disabling reasoning here keeps the full token budget available for the
+ * actual JSON response.
+ */
+const STRUCTURED_OUTPUT_PROVIDER_OPTIONS = {
+  openrouter: {
+    reasoning: { enabled: false, exclude: true },
+  },
+} as const;
 import {
   decryptSecret,
   encryptSecret,
@@ -259,6 +275,8 @@ async function resolveAutoLinkIssueKeys(
   try {
     const result = await generateObject({
       model: openrouterLanguageModelWithAnnotations(defaultAssistantModel),
+      providerOptions: STRUCTURED_OUTPUT_PROVIDER_OPTIONS,
+      maxOutputTokens: 512,
       schema: z.object({
         issueKey: z.string().nullable(),
         confidence: z.enum(['high', 'low']),
@@ -407,6 +425,8 @@ export const refreshIssuePullRequestSummary = internalAction({
       try {
         const result = await generateObject({
           model: openrouterLanguageModelWithAnnotations(defaultAssistantModel),
+          providerOptions: STRUCTURED_OUTPUT_PROVIDER_OPTIONS,
+          maxOutputTokens: 2048,
           schema: z.object({
             overview: z.string().nullable(),
             pullRequests: z.array(

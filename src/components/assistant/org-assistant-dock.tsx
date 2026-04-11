@@ -448,6 +448,7 @@ export function OrgAssistantDock({ orgSlug }: { orgSlug: string }) {
         prompt,
         model: options.model,
         thinkingLevel: options.thinkingLevel,
+        skipConfirmations: options.skipConfirmations,
         attachments: options.attachments.map(attachment => ({
           storageId: attachment.storageId,
           filename: attachment.filename,
