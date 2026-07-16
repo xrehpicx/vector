@@ -517,7 +517,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
     guard !isUpdating else { return }
     isUpdating = true
     log("starting CLI update")
-    runCLI(arguments: ["update"]) { [weak self] success, output in
+    runCLI(arguments: ["update"], timeout: 180) { [weak self] success, output in
       guard let self else { return }
       self.isUpdating = false
       if success {
