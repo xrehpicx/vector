@@ -24,6 +24,7 @@ import {
 } from './auth';
 import { createConvexClient, runAction, runMutation, runQuery } from './convex';
 import { printOutput } from './output';
+import { isNewerVersion } from './version';
 import {
   diffWorkSnapshots,
   parseWorkWatchCategories,
@@ -43,8 +44,11 @@ import {
   type CliSession,
 } from './session';
 
-loadEnv({ path: '.env.local', override: false });
-loadEnv({ path: '.env', override: false });
+// Machine-readable commands (especially the native menu bar's `menu-state`
+// request) require stdout to contain only the requested payload. dotenv 17
+// prints promotional diagnostics by default, which corrupts JSON and `--version`.
+loadEnv({ path: '.env.local', override: false, quiet: true });
+loadEnv({ path: '.env', override: false, quiet: true });
 
 const cliApi = {
   listWorkspaceReferenceData: makeFunctionReference<'action'>(
@@ -101,6 +105,8 @@ type GlobalOptions = {
   profile?: string;
 };
 
+const CLI_LIST_FETCH_LIMIT = 500;
+
 type Runtime = {
   appUrl: string;
   convexUrl: string;
@@ -137,6 +143,14 @@ const NOTIFICATION_CATEGORIES = [
   'assignments',
   'mentions',
   'comments',
+  'work_sessions',
+  'team_status_changes',
+  'requests',
+  'handoffs',
+  'reviews',
+  'attention',
+  'reminders',
+  'github',
 ] as const;
 
 function requiredString(value: string | undefined, label: string) {
@@ -373,7 +387,10 @@ async function getRuntime(command: Command) {
   const appUrlSource =
     options.appUrl ?? session?.appUrl ?? process.env.NEXT_PUBLIC_APP_URL;
   const appUrl = await resolveAppUrl(requiredString(appUrlSource, 'app URL'));
-  let convexUrl = options.convexUrl ?? session?.convexUrl;
+  // An explicit app URL selects a different environment. Never pair it with a
+  // Convex URL cached by another app/profile.
+  let convexUrl =
+    options.convexUrl ?? (options.appUrl ? undefined : session?.convexUrl);
 
   if (!convexUrl) {
     // When an explicit --app-url is provided, always fetch from the app
@@ -470,12 +487,23 @@ function decodeSessionClaims(session: CliSession | null): {
 function buildMenuSessionInfo(session: CliSession | null) {
   const claims = decodeSessionClaims(session);
   return {
-    orgSlug: session?.activeOrgSlug ?? 'oss-lab',
+    orgSlug: session?.activeOrgSlug ?? '',
     appUrl: session?.appUrl,
     appDomain: hostForAppUrl(session?.appUrl),
     email: claims.email,
     userId: claims.userId,
   };
+}
+
+function projectMenuRecords(value: unknown, keys: string[]): unknown[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(item => {
+    if (!item || typeof item !== 'object') return {};
+    const record = item as Record<string, unknown>;
+    return Object.fromEntries(
+      keys.filter(key => key in record).map(key => [key, record[key]]),
+    );
+  });
 }
 
 function parseAgentProvider(
@@ -576,9 +604,6 @@ async function ensureBridgeConfig(
     saveBridgeConfig(config);
     return config;
   } catch (error) {
-    if (config) {
-      return config;
-    }
     throw error;
   }
 }
@@ -995,23 +1020,24 @@ authCommand
     } else {
       const deviceResp = await requestDeviceCode(runtime.appUrl, 'vcli');
       const verifyUrl = `${runtime.appUrl}/device?user_code=${deviceResp.user_code}`;
+      const writeLoginProgress = runtime.json ? console.error : console.log;
 
-      console.log();
-      console.log(`  Open this URL in your browser to log in:`);
-      console.log();
-      console.log(`    ${verifyUrl}`);
-      console.log();
-      console.log(`  Or go to ${runtime.appUrl}/device and enter code:`);
-      console.log();
-      console.log(`    ${deviceResp.user_code}`);
-      console.log();
+      writeLoginProgress();
+      writeLoginProgress(`  Open this URL in your browser to log in:`);
+      writeLoginProgress();
+      writeLoginProgress(`    ${verifyUrl}`);
+      writeLoginProgress();
+      writeLoginProgress(`  Or go to ${runtime.appUrl}/device and enter code:`);
+      writeLoginProgress();
+      writeLoginProgress(`    ${deviceResp.user_code}`);
+      writeLoginProgress();
 
       const open = await import('open').then(m => m.default).catch(() => null);
       if (open) {
         await open(verifyUrl).catch(() => {});
       }
 
-      console.log('  Waiting for authorization...');
+      writeLoginProgress('  Waiting for authorization...');
       session = await pollDeviceToken(
         session,
         runtime.appUrl,
@@ -1049,7 +1075,13 @@ authCommand
 authCommand.command('logout').action(async (_options, command) => {
   const runtime = await getRuntime(command);
   const session = requireSession(runtime);
-  await logout(session, runtime.appUrl);
+  try {
+    await logout(session, runtime.appUrl);
+  } catch (error) {
+    console.error(
+      `Warning: remote logout failed; the local session was still cleared (${error instanceof Error ? error.message : String(error)}).`,
+    );
+  }
   await clearSession(runtime.profile);
   printOutput({ success: true }, runtime.json);
 });
@@ -1872,6 +1904,7 @@ priorityCommand
   .requiredOption('--color <hex>')
   .option('--weight <n>')
   .option('--icon <icon>')
+  .option('--clear-icon')
   .action(async (priority, options, command) => {
     const { client, runtime } = await getClient(command);
     const orgSlug = requireOrg(runtime);
@@ -1885,7 +1918,7 @@ priorityCommand
         name: options.name,
         weight: optionalNumber(options.weight, 'weight'),
         color: options.color,
-        icon: options.icon,
+        icon: nullableOption(options.icon, options.clearIcon),
       },
     );
     printOutput(result ?? { success: true }, runtime.json);
@@ -1971,6 +2004,7 @@ stateCommand
   .requiredOption('--type <type>')
   .requiredOption('--color <hex>')
   .option('--icon <icon>')
+  .option('--clear-icon')
   .action(async (state, options, command) => {
     const { client, runtime } = await getClient(command);
     const orgSlug = requireOrg(runtime);
@@ -1988,7 +2022,7 @@ stateCommand
         position: requiredNumber(options.position, 'position'),
         type: options.type,
         color: options.color,
-        icon: options.icon,
+        icon: nullableOption(options.icon, options.clearIcon),
       },
     );
     printOutput(result ?? { success: true }, runtime.json);
@@ -2072,6 +2106,7 @@ statusCommand
   .requiredOption('--type <type>')
   .requiredOption('--color <hex>')
   .option('--icon <icon>')
+  .option('--clear-icon')
   .action(async (status, options, command) => {
     const { client, runtime } = await getClient(command);
     const orgSlug = requireOrg(runtime);
@@ -2091,7 +2126,7 @@ statusCommand
         position: requiredNumber(options.position, 'position'),
         type: options.type,
         color: options.color,
-        icon: options.icon,
+        icon: nullableOption(options.icon, options.clearIcon),
       },
     );
     printOutput(result ?? { success: true }, runtime.json);
@@ -2322,6 +2357,7 @@ teamCommand
     const orgSlug = requireOrg(runtime, slug);
     const raw = await runAction(client, cliApi.listTeams, {
       orgSlug,
+      limit: CLI_LIST_FETCH_LIMIT,
     });
     const filtered = applyListFilters(raw, options);
     const result = addEntityUrls(filtered, runtime.appUrl, orgSlug, 'teams');
@@ -2473,6 +2509,7 @@ projectCommand
     const raw = await runAction(client, cliApi.listProjects, {
       orgSlug,
       teamKey: options.team,
+      limit: CLI_LIST_FETCH_LIMIT,
     });
     const filtered = applyListFilters(raw, options);
     const result = addEntityUrls(filtered, runtime.appUrl, orgSlug, 'projects');
@@ -3231,6 +3268,7 @@ issueCommand
       projectKey: options.project,
       teamKey: options.team,
       assigneeName: options.assignee,
+      limit: CLI_LIST_FETCH_LIMIT,
     });
     const filtered = applyListFilters(raw, options);
     const result = addEntityUrls(filtered, runtime.appUrl, orgSlug, 'issues');
@@ -3546,6 +3584,7 @@ documentCommand
     const raw = await runAction(client, cliApi.listDocuments, {
       orgSlug,
       folderId: options.folderId,
+      limit: CLI_LIST_FETCH_LIMIT,
     });
     const filtered = applyListFilters(raw, options);
     const result = addEntityUrls(
@@ -3742,6 +3781,7 @@ import {
   BridgeService,
   getBridgeStatus,
   installLaunchAgent,
+  isLaunchAgentInstalled,
   launchMenuBar,
   loadBridgeConfig,
   loadLaunchAgent,
@@ -3761,30 +3801,53 @@ const serviceCommand = program
   .command('service')
   .description('Manage the local bridge service');
 
+async function selectExplicitBridgeProfile(command: Command): Promise<void> {
+  const options = command.optsWithGlobals() as GlobalOptions;
+  const profile = options.profile?.trim();
+  if (profile) {
+    // The bridge is a single per-user daemon. Persist an explicitly selected
+    // profile so its future LaunchAgent invocations use the same account.
+    await writeDefaultProfile(profile);
+  }
+}
+
+function startLaunchAgent(vcliPath: string): void {
+  installLaunchAgent(vcliPath);
+  if (!loadLaunchAgent()) {
+    throw new Error(
+      `Could not start the bridge LaunchAgent. Check ${VECTOR_HOME}/bridge.err.log`,
+    );
+  }
+}
+
 serviceCommand
   .command('start')
   .description('Start the bridge service via LaunchAgent (macOS) or foreground')
   .action(async (_options, command) => {
-    // Check if already running
+    await selectExplicitBridgeProfile(command);
     const existing = getBridgeStatus();
-    if (existing.running) {
-      console.log(`Bridge is already running (PID ${existing.pid}).`);
-      return;
-    }
-
     const { spinner } = await import('@clack/prompts');
     const s = spinner();
 
+    // An explicit start is also the repair/reconciliation path. Do not silently
+    // reuse a device registered for a different account or deployment.
     s.start('Ensuring device registration...');
     const config = await ensureBridgeConfig(command);
     s.stop(`Device ready: ${config.displayName}`);
 
     if (osPlatform() === 'darwin') {
-      s.start('Starting bridge service...');
+      s.start(
+        existing.running
+          ? 'Repairing bridge service...'
+          : 'Starting bridge service...',
+      );
       const vcliPath = process.argv[1] ?? 'vcli';
-      installLaunchAgent(vcliPath);
-      loadLaunchAgent();
-      s.stop('Bridge service started.');
+      startLaunchAgent(vcliPath);
+      s.stop(
+        existing.running
+          ? 'Bridge service repaired and restarted.'
+          : 'Bridge service started.',
+      );
     } else {
       // Linux / other: run in foreground
       console.log(
@@ -3798,8 +3861,13 @@ serviceCommand
 serviceCommand
   .command('run')
   .description('Run the bridge service in the foreground (used by LaunchAgent)')
-  .action(async (_options, command) => {
-    const config = await ensureBridgeConfig(command);
+  .action(async () => {
+    // Registration is reconciled by `service start`/`install`. The daemon must
+    // still launch while offline so its retry loops can recover connectivity.
+    const config = loadBridgeConfig();
+    if (!config) {
+      throw new Error('Bridge not configured. Run: vcli service start');
+    }
 
     if (osPlatform() === 'darwin') {
       await launchMenuBar();
@@ -3841,10 +3909,14 @@ serviceCommand
     );
     console.log(`  User:    ${status.config!.userId}`);
     const statusLabel = status.running
-      ? `Running (PID ${status.pid})`
+      ? status.health?.state === 'degraded'
+        ? `Degraded (PID ${status.pid}): ${status.health.lastError ?? 'heartbeat is stale'}`
+        : `Running (PID ${status.pid})`
       : status.starting
         ? 'Starting...'
-        : 'Not running';
+        : status.health?.lastError
+          ? `Not running: ${status.health.lastError}`
+          : 'Not running';
     console.log(`  Status:  ${statusLabel}`);
     console.log(`  Config:  ${VECTOR_HOME}/bridge.json`);
   });
@@ -3862,6 +3934,7 @@ serviceCommand
     let workspaces: unknown[] = [];
     let workSessions: unknown[] = [];
     let detectedSessions: unknown[] = [];
+    let stateError: string | undefined;
 
     try {
       const runtime = await getRuntime(command);
@@ -3871,19 +3944,42 @@ serviceCommand
           runtime.appUrl,
           runtime.convexUrl,
         );
-        workspaces = await runQuery(
-          client,
-          api.agentBridge.queries.listDeviceWorkspaces,
-          {
+        workspaces = projectMenuRecords(
+          await runQuery(client, api.agentBridge.queries.listDeviceWorkspaces, {
             deviceId: status.config.deviceId as Id<'agentDevices'>,
-          },
+          }),
+          [
+            '_id',
+            'label',
+            'path',
+            'repoName',
+            'defaultBranch',
+            'isDefault',
+            'launchPolicy',
+          ],
         );
-        workSessions = await runQuery(
-          client,
-          api.agentBridge.queries.listDeviceWorkSessions,
-          {
-            deviceId: status.config.deviceId as Id<'agentDevices'>,
-          },
+        workSessions = projectMenuRecords(
+          await runQuery(
+            client,
+            api.agentBridge.queries.listDeviceWorkSessions,
+            {
+              deviceId: status.config.deviceId as Id<'agentDevices'>,
+            },
+          ),
+          [
+            '_id',
+            'issueKey',
+            'issueTitle',
+            'title',
+            'status',
+            'latestSummary',
+            'workspacePath',
+            'cwd',
+            'repoRoot',
+            'branch',
+            'tmuxPaneId',
+            'agentProvider',
+          ],
         );
         const devices = await runQuery(
           client,
@@ -3894,12 +3990,23 @@ serviceCommand
           (entry: { device: { _id: string } }) =>
             entry.device._id === status.config?.deviceId,
         );
-        detectedSessions = currentDevice?.processes ?? [];
+        detectedSessions = projectMenuRecords(currentDevice?.processes, [
+          '_id',
+          'provider',
+          'providerLabel',
+          'cwd',
+          'repoRoot',
+          'branch',
+          'title',
+          'mode',
+          'status',
+        ]);
       }
-    } catch {
+    } catch (error) {
       workspaces = [];
       workSessions = [];
       detectedSessions = [];
+      stateError = error instanceof Error ? error.message : String(error);
     }
 
     printOutput(
@@ -3908,7 +4015,15 @@ serviceCommand
         running: status.running,
         starting: status.starting,
         pid: status.pid,
-        config: status.config,
+        config: status.config
+          ? {
+              deviceId: status.config.deviceId,
+              displayName: status.config.displayName,
+              userId: status.config.userId,
+            }
+          : undefined,
+        health: status.health,
+        stateError,
         sessionInfo: buildMenuSessionInfo(session),
         activeProfile: profile,
         defaultProfile,
@@ -3986,6 +4101,7 @@ serviceCommand
       return;
     }
 
+    await selectExplicitBridgeProfile(command);
     const { spinner } = await import('@clack/prompts');
     const s = spinner();
 
@@ -3999,7 +4115,11 @@ serviceCommand
     s.stop('LaunchAgent installed');
 
     s.start('Starting bridge service...');
-    loadLaunchAgent();
+    if (!loadLaunchAgent()) {
+      throw new Error(
+        `Could not start the bridge LaunchAgent. Check ${VECTOR_HOME}/bridge.err.log`,
+      );
+    }
     s.stop('Bridge service started');
 
     console.log('');
@@ -4037,14 +4157,17 @@ serviceCommand
 serviceCommand
   .command('enable')
   .description('Enable bridge to start at login (macOS LaunchAgent)')
-  .action(async () => {
+  .action(async (_options, command) => {
     if (osPlatform() !== 'darwin') {
       console.error('Login item is macOS only.');
       return;
     }
+    await selectExplicitBridgeProfile(command);
+    if (!loadBridgeConfig()) {
+      throw new Error('Bridge not configured. Run: vcli service start');
+    }
     const vcliPath = process.argv[1] ?? 'vcli';
-    installLaunchAgent(vcliPath);
-    loadLaunchAgent();
+    startLaunchAgent(vcliPath);
     console.log('Bridge will start automatically on login.');
   });
 
@@ -4066,6 +4189,7 @@ bridgeCommand
   .command('start')
   .description('Register device, install service, and start the bridge')
   .action(async (_options, command) => {
+    await selectExplicitBridgeProfile(command);
     const existingConfig = loadBridgeConfig();
     const config = await ensureBridgeConfig(command);
     if (
@@ -4080,8 +4204,7 @@ bridgeCommand
 
     if (osPlatform() === 'darwin') {
       const vcliPath = process.argv[1] ?? 'vcli';
-      installLaunchAgent(vcliPath);
-      loadLaunchAgent();
+      startLaunchAgent(vcliPath);
       console.log('\nBridge installed and started as LaunchAgent.');
       console.log('It will restart automatically on login.');
       console.log('Run `vcli service status` to check.');
@@ -4120,7 +4243,15 @@ bridgeCommand
     console.log('Vector Bridge');
     console.log(`  Device:  ${s.config!.displayName} (${s.config!.deviceId})`);
     console.log(
-      `  Status:  ${s.running ? `Running (PID ${s.pid})` : 'Not running'}`,
+      `  Status:  ${
+        s.running
+          ? s.health?.state === 'degraded'
+            ? `Degraded (PID ${s.pid})`
+            : `Running (PID ${s.pid})`
+          : s.health?.lastError
+            ? `Not running: ${s.health.lastError}`
+            : 'Not running'
+      }`,
     );
   });
 
@@ -4168,20 +4299,21 @@ async function checkForUpdate(): Promise<{
   hasUpdate: boolean;
 } | null> {
   try {
-    const { execSync: exec } = await import('child_process');
-    // Get all dist-tags and pick the newest version
-    const tagsRaw = exec('npm view @rehpic/vcli dist-tags --json', {
-      encoding: 'utf-8',
-      timeout: 10000,
-    }).trim();
-    const tags = JSON.parse(tagsRaw) as Record<string, string>;
-    // Use the beta tag (where active builds go) — fall back to latest
-    const latest = tags.beta ?? tags.latest ?? '';
+    const { execFileSync: exec } = await import('child_process');
+    const latestRaw = exec(
+      'npm',
+      ['view', '@rehpic/vcli@latest', 'version', '--json'],
+      {
+        encoding: 'utf-8',
+        timeout: 10000,
+      },
+    ).trim();
+    const latest = JSON.parse(latestRaw) as string;
     const current = readPackageVersionSync();
     return {
       current,
       latest,
-      hasUpdate: Boolean(latest) && latest !== current,
+      hasUpdate: Boolean(latest) && isNewerVersion(latest, current),
     };
   } catch {
     return null;
@@ -4211,19 +4343,9 @@ program
     const install = detectInstallMethod(updateInfo.latest);
     log.info(`Install method: ${install.method}`);
 
-    // 2. Stop the bridge service
-    s.start('Stopping bridge service...');
-    const wasRunning = getBridgeStatus().running;
-    if (wasRunning) {
-      stopBridge({ includeMenuBar: true });
-      if (osPlatform() === 'darwin') {
-        unloadLaunchAgent();
-      }
-      stopMenuBar();
-    }
-    s.stop(wasRunning ? 'Bridge stopped.' : 'Bridge was not running.');
-
-    // 3. Run the update
+    // Install first. A failed package-manager command must not take a working
+    // bridge and tray offline.
+    const previousStatus = getBridgeStatus();
     s.start(`Updating via ${install.method}...`);
     try {
       const { execFileSync: exec } = await import('child_process');
@@ -4238,18 +4360,33 @@ program
       return;
     }
 
-    // 4. Restart the bridge + menu bar using the NEW binary
-    if (wasRunning) {
-      s.start('Restarting bridge service...');
-      try {
-        const { execFileSync: exec } = await import('child_process');
-        exec('vcli', ['service', 'start'], {
-          stdio: 'inherit',
-          timeout: 30000,
-        });
-        s.stop('Bridge restarted.');
-      } catch {
-        s.stop('Could not auto-restart. Run: vcli service start');
+    // Regenerate the LaunchAgent with the new Node/package paths. Configured
+    // but previously broken services are repaired as part of the update.
+    const shouldRestartBridge =
+      previousStatus.running ||
+      previousStatus.starting ||
+      isLaunchAgentInstalled();
+    if (shouldRestartBridge) {
+      if (osPlatform() === 'darwin') {
+        s.start('Restarting bridge service...');
+        try {
+          // Keep the current tray alive until the newly installed service starts;
+          // the new bridge replaces it only after a successful launch.
+          unloadLaunchAgent();
+          stopBridge();
+          const { execFileSync: exec } = await import('child_process');
+          // `enable` repairs and starts the LaunchAgent from the existing device
+          // config without making a package update depend on network access.
+          exec('vcli', ['service', 'enable'], {
+            stdio: 'inherit',
+            timeout: 30000,
+          });
+          s.stop('Bridge restarted.');
+        } catch {
+          s.stop('Could not auto-restart. Run: vcli service start');
+        }
+      } else {
+        log.info('Restart the bridge service to use the new CLI version.');
       }
     }
 

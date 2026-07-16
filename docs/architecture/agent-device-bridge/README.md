@@ -62,7 +62,7 @@ Seven tables store all bridge state:
 | `agentProcesses`      | Discovered/managed local agent processes        |
 | `delegatedRuns`       | Issue delegation to a device/agent/workspace    |
 | `issueLiveActivities` | Issue-bound view of a running agent session     |
-| `issueLiveMessages`   | Transcript messages (agent ↔ user)             |
+| `issueLiveMessages`   | Transcript messages (agent ↔ user)              |
 | `agentCommands`       | Outbound command queue (Vector → bridge)        |
 
 Key backend files:
@@ -107,23 +107,24 @@ For managed launches, `packages/vector-cli/src/agent-adapters.ts` and `packages/
 
 - Codex uses `codex app-server` JSON-RPC.
 - Claude uses `@anthropic-ai/claude-agent-sdk`.
-- Cursor, Copilot, OpenCode, and Pi are exposed as CLI-owned managed providers with native CLI fallbacks while the SDK-specific event streams are normalized behind the same runtime boundary.
+- Cursor, Copilot, OpenCode, and Pi are exposed as CLI-owned one-shot providers with native CLI fallbacks. They do not claim resumable inbound messaging until a verifiable provider session id is available.
 - Adapters emit normalized `AgentSessionEvent` objects.
 - The bridge stores those events in `issueLiveMessages` with structured payload fields for source, provider, title, status, attachments, auth URLs, tool ids, and usage metadata.
-- Follow-up user messages resume the provider session by session key instead of typing into a terminal.
+- Follow-up user messages resume Codex and Claude sessions by session key instead of typing into a terminal.
 - Work session rows store Cells-style settings and state: model, permission mode, thinking level, fast mode, context length, queue, pending approvals, pending plan approval, pending questions, Codex plan state, and usage.
 
 Tmux is still supported for attached shell sessions and manually observed panes. Those sessions continue to use terminal snapshots and pane input.
 
-### 4. macOS Menu Bar (`cli/macos/VectorMenuBar.swift`)
+### 4. macOS Menu Bar (`packages/vector-cli/macos/VectorMenuBar.swift`)
 
 A lightweight native Swift app that shows the Vector icon in the macOS status bar.
 
-- Reads bridge status from `~/.vector/bridge.pid`
-- Reads active sessions from `~/.vector/live-activities.json`
+- Reads a bounded, secret-free snapshot from `vcli --json service menu-state`
+- Shows running, degraded, starting, and offline bridge state
+- Switches CLI profiles and reconciles the bridge account/device
 - Shows issue list with click-to-open (opens issue in Vector web app)
 - Start/Stop/Restart bridge controls
-- Refreshes every 10 seconds
+- Refreshes every 8 seconds with subprocess timeouts
 
 ## CLI Commands
 
@@ -146,14 +147,13 @@ vcli bridge status      # Quick status check
 
 ```bash
 # Compile the menu bar app (requires Xcode CLI tools)
-cd cli/macos
-swiftc -o VectorMenuBar VectorMenuBar.swift -framework AppKit
+pnpm --filter @rehpic/vcli build
 
 # Run it
-./VectorMenuBar
+open packages/vector-cli/native/VectorMenuBar.app
 ```
 
-The menu bar app is also auto-installed as a LaunchAgent when you run `vcli service install`.
+The menu bar app is bundled with the CLI and launched by the bridge LaunchAgent.
 
 ## Data Flow
 

@@ -2942,7 +2942,7 @@ export const updateTeam = internalMutation({
     pageContext: v.optional(assistantPageContextValidator),
     teamKey: v.optional(v.string()),
     name: v.optional(v.string()),
-    description: v.optional(v.string()),
+    description: v.optional(v.union(v.string(), v.null())),
     visibility: v.optional(
       v.union(
         v.literal('private'),
@@ -2975,14 +2975,18 @@ export const updateTeam = internalMutation({
         throw new ConvexError('INVALID_INPUT');
       }
     }
-    if (args.description !== undefined && args.description.length > 2000) {
+    if (
+      args.description !== undefined &&
+      args.description !== null &&
+      args.description.length > 2000
+    ) {
       throw new ConvexError('INVALID_INPUT');
     }
 
     await ctx.db.patch('teams', team._id, {
       ...(args.name !== undefined ? { name: args.name.trim() } : {}),
       ...(args.description !== undefined
-        ? { description: args.description }
+        ? { description: args.description ?? undefined }
         : {}),
       ...(args.visibility !== undefined ? { visibility: args.visibility } : {}),
       ...(args.icon !== undefined ? { icon: args.icon ?? undefined } : {}),

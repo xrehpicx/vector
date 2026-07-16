@@ -12,15 +12,17 @@ import type { Id, TableNames } from '../../../convex/_generated/dataModel';
 import { execFileSync, execSync } from 'child_process';
 import { TerminalPeerManager } from './terminal-peer';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   writeFileSync,
   unlinkSync,
 } from 'fs';
 import { homedir, hostname, platform } from 'os';
-import { dirname, join } from 'path';
+import { dirname, isAbsolute, join } from 'path';
 import { randomUUID } from 'crypto';
 import type {
   AgentContextLength,
@@ -41,12 +43,16 @@ import {
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-const CONFIG_DIR =
-  process.env.VECTOR_HOME?.trim() || join(homedir(), '.vector');
+const configuredVectorHome = process.env.VECTOR_HOME?.trim();
+if (configuredVectorHome && !isAbsolute(configuredVectorHome)) {
+  throw new Error('VECTOR_HOME must be an absolute path.');
+}
+const CONFIG_DIR = configuredVectorHome || join(homedir(), '.vector');
 const BRIDGE_CONFIG_FILE = join(CONFIG_DIR, 'bridge.json');
 const DEVICE_KEY_FILE = join(CONFIG_DIR, 'device-key');
 const PID_FILE = join(CONFIG_DIR, 'bridge.pid');
 const LIVE_ACTIVITIES_CACHE = join(CONFIG_DIR, 'live-activities.json');
+const BRIDGE_HEALTH_FILE = join(CONFIG_DIR, 'bridge-health.json');
 const LAUNCHAGENT_DIR = join(homedir(), 'Library', 'LaunchAgents');
 const LAUNCHAGENT_PLIST = join(LAUNCHAGENT_DIR, 'com.vector.bridge.plist');
 const LAUNCHAGENT_LABEL = 'com.vector.bridge';
@@ -73,11 +79,25 @@ export interface BridgeConfig {
   tunnelHost?: string;
 }
 
+export interface BridgeHealth {
+  state: 'starting' | 'healthy' | 'degraded' | 'stopped';
+  updatedAt: string;
+  lastHeartbeatAt?: string;
+  lastError?: string;
+}
+
 // ── Config persistence ──────────────────────────────────────────────────────
 
 export function loadBridgeConfig(): BridgeConfig | null {
   if (!existsSync(BRIDGE_CONFIG_FILE)) return null;
   try {
+    ensureConfigDir();
+    try {
+      chmodSync(BRIDGE_CONFIG_FILE, 0o600);
+    } catch {
+      // Reading an existing config must not fail solely because its ownership
+      // prevents this best-effort permission migration.
+    }
     return JSON.parse(readFileSync(BRIDGE_CONFIG_FILE, 'utf-8'));
   } catch {
     return null;
@@ -85,14 +105,50 @@ export function loadBridgeConfig(): BridgeConfig | null {
 }
 
 export function saveBridgeConfig(config: BridgeConfig): void {
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(BRIDGE_CONFIG_FILE, JSON.stringify(config, null, 2));
+  writePrivateFileSync(BRIDGE_CONFIG_FILE, JSON.stringify(config, null, 2));
   persistDeviceKey(config.deviceKey);
 }
 
 function writeLiveActivitiesCache(activities: unknown[]): void {
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(LIVE_ACTIVITIES_CACHE, JSON.stringify(activities, null, 2));
+  writePrivateFileSync(
+    LIVE_ACTIVITIES_CACHE,
+    JSON.stringify(activities, null, 2),
+  );
+}
+
+function ensureConfigDir(): void {
+  if (!existsSync(CONFIG_DIR)) {
+    mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  }
+  try {
+    chmodSync(CONFIG_DIR, 0o700);
+  } catch {
+    // Best effort on filesystems that do not expose POSIX permissions.
+  }
+}
+
+function writePrivateFileSync(filePath: string, contents: string): void {
+  ensureConfigDir();
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
+  renameSync(temporaryPath, filePath);
+  try {
+    chmodSync(filePath, 0o600);
+  } catch {
+    // Best effort on filesystems that do not expose POSIX permissions.
+  }
+}
+
+function writeBridgeHealth(health: BridgeHealth): void {
+  writePrivateFileSync(BRIDGE_HEALTH_FILE, JSON.stringify(health, null, 2));
+}
+
+function loadBridgeHealth(): BridgeHealth | null {
+  try {
+    return JSON.parse(readFileSync(BRIDGE_HEALTH_FILE, 'utf8')) as BridgeHealth;
+  } catch {
+    return null;
+  }
 }
 
 interface PendingBridgeCommand {
@@ -212,10 +268,28 @@ export class BridgeService {
   }
 
   async heartbeat(): Promise<void> {
-    await this.client.mutation(api.agentBridge.bridgePublic.heartbeat, {
-      deviceId: this.config.deviceId as Id<'agentDevices'>,
-      deviceSecret: this.config.deviceSecret,
-    });
+    try {
+      await this.client.mutation(api.agentBridge.bridgePublic.heartbeat, {
+        deviceId: this.config.deviceId as Id<'agentDevices'>,
+        deviceSecret: this.config.deviceSecret,
+      });
+      const now = new Date().toISOString();
+      writeBridgeHealth({
+        state: 'healthy',
+        updatedAt: now,
+        lastHeartbeatAt: now,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const previous = loadBridgeHealth();
+      writeBridgeHealth({
+        state: 'degraded',
+        updatedAt: new Date().toISOString(),
+        lastHeartbeatAt: previous?.lastHeartbeatAt,
+        lastError: message,
+      });
+      throw error;
+    }
   }
 
   async pollCommands(): Promise<void> {
@@ -422,8 +496,10 @@ export class BridgeService {
 
       // Watch active sessions for interactive terminal viewers
       // and auto-update titles from tmux pane state
+      const activeTerminalSessionIds = new Set<string>();
       for (const activity of activities) {
         if (activity.workSessionId && activity.tmuxSessionName) {
+          activeTerminalSessionIds.add(activity.workSessionId);
           this.terminalPeer?.watchSession(
             activity.workSessionId,
             activity.tmuxSessionName,
@@ -465,6 +541,7 @@ export class BridgeService {
           }
         }
       }
+      this.terminalPeer?.reconcileWatchedSessions(activeTerminalSessionIds);
     } catch {
       /* non-critical */
     }
@@ -626,8 +703,11 @@ export class BridgeService {
     console.log('');
 
     // Write PID
-    if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(PID_FILE, String(process.pid));
+    writePrivateFileSync(PID_FILE, String(process.pid));
+    writeBridgeHealth({
+      state: 'starting',
+      updatedAt: new Date().toISOString(),
+    });
 
     // Start WebRTC terminal peer manager
     try {
@@ -649,12 +729,22 @@ export class BridgeService {
 
     process.on('uncaughtException', error => {
       console.error(`[${ts()}] Uncaught error:`, error.message);
+      writeBridgeHealth({
+        state: 'degraded',
+        updatedAt: new Date().toISOString(),
+        lastHeartbeatAt: loadBridgeHealth()?.lastHeartbeatAt,
+        lastError: error.message,
+      });
     });
     process.on('unhandledRejection', reason => {
-      console.error(
-        `[${ts()}] Unhandled rejection:`,
-        reason instanceof Error ? reason.message : String(reason),
-      );
+      const message = reason instanceof Error ? reason.message : String(reason);
+      console.error(`[${ts()}] Unhandled rejection:`, message);
+      writeBridgeHealth({
+        state: 'degraded',
+        updatedAt: new Date().toISOString(),
+        lastHeartbeatAt: loadBridgeHealth()?.lastHeartbeatAt,
+        lastError: message,
+      });
     });
 
     // Initial sync is best-effort. A network or auth blip should leave the
@@ -710,6 +800,10 @@ export class BridgeService {
       } catch {
         /* ok */
       }
+      writeBridgeHealth({
+        state: 'stopped',
+        updatedAt: new Date().toISOString(),
+      });
       process.exit(0);
     };
     process.on('SIGINT', shutdown);
@@ -785,7 +879,8 @@ export class BridgeService {
       !process.supportsInboundMessages ||
       !process.sessionKey ||
       !process.cwd ||
-      !isBridgeProvider(process.provider)
+      !isBridgeProvider(process.provider) ||
+      (process.provider !== 'codex' && process.provider !== 'claude_code')
     ) {
       throw new Error('No resumable local session is attached to this issue');
     }
@@ -1440,7 +1535,7 @@ export async function setupBridgeDevice(
       hostname: hostname(),
       platform: platform(),
       serviceType: 'foreground',
-      cliVersion: '0.1.0',
+      cliVersion: readCliVersion(),
       capabilities: ['codex', 'claude_code'],
     },
   );
@@ -1468,6 +1563,11 @@ function getStableDeviceKey(): string {
   }
 
   if (existsSync(DEVICE_KEY_FILE)) {
+    try {
+      chmodSync(DEVICE_KEY_FILE, 0o600);
+    } catch {
+      // Best effort migration for existing installs.
+    }
     const savedKey = readFileSync(DEVICE_KEY_FILE, 'utf-8').trim();
     if (savedKey) {
       return savedKey;
@@ -1480,8 +1580,7 @@ function getStableDeviceKey(): string {
 }
 
 function persistDeviceKey(deviceKey: string): void {
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(DEVICE_KEY_FILE, `${deviceKey}\n`);
+  writePrivateFileSync(DEVICE_KEY_FILE, `${deviceKey}\n`);
 }
 
 function buildLaunchPrompt(
@@ -1871,6 +1970,17 @@ function providerLabel(provider: AgentProvider): string {
   return 'Vector CLI';
 }
 
+function readCliVersion(): string {
+  try {
+    const packagePath = join(import.meta.dirname ?? '', '..', 'package.json');
+    return (
+      JSON.parse(readFileSync(packagePath, 'utf8')) as { version: string }
+    ).version;
+  } catch {
+    return process.env.npm_package_version ?? 'unknown';
+  }
+}
+
 // ── LaunchAgent (macOS) ─────────────────────────────────────────────────────
 
 export function installLaunchAgent(vcliPath: string): void {
@@ -1880,6 +1990,11 @@ export function installLaunchAgent(vcliPath: string): void {
   }
 
   const programArguments = getLaunchAgentProgramArguments(vcliPath);
+  const resolvedInvocation = resolveCliInvocation(vcliPath);
+  const executable = resolvedInvocation[0];
+  if (executable?.startsWith('/') && !existsSync(executable)) {
+    throw new Error(`LaunchAgent executable does not exist: ${executable}`);
+  }
   const launchPath = buildLaunchAgentPath();
   const environmentVariables = [
     '  <key>PATH</key>',
@@ -1919,8 +2034,13 @@ ${environmentVariables}
     mkdirSync(LAUNCHAGENT_DIR, { recursive: true });
   }
   removeLegacyMenuBarLaunchAgent();
-  writeFileSync(LAUNCHAGENT_PLIST, plist);
+  writeFileSync(LAUNCHAGENT_PLIST, plist, { encoding: 'utf8', mode: 0o600 });
+  chmodSync(LAUNCHAGENT_PLIST, 0o600);
   console.log(`Installed LaunchAgent: ${LAUNCHAGENT_PLIST}`);
+}
+
+export function isLaunchAgentInstalled(): boolean {
+  return platform() === 'darwin' && existsSync(LAUNCHAGENT_PLIST);
 }
 
 function getLaunchAgentProgramArguments(vcliPath: string): string {
@@ -1970,6 +2090,7 @@ function resolveExecutablePath(executablePath: string): string {
 
 function buildLaunchAgentPath(): string {
   const entries = [
+    ...(process.env.PATH?.split(':') ?? []),
     dirname(process.execPath),
     join(homedir(), '.volta', 'bin'),
     '/opt/homebrew/bin',
@@ -1991,17 +2112,22 @@ function escapePlistString(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
-export function loadLaunchAgent(): void {
+export function loadLaunchAgent(): boolean {
   if (runLaunchctl(['bootstrap', launchctlGuiDomain(), LAUNCHAGENT_PLIST])) {
-    runLaunchctl([
-      'kickstart',
-      '-k',
-      `${launchctlGuiDomain()}/${LAUNCHAGENT_LABEL}`,
-    ]);
+    if (
+      !runLaunchctl([
+        'kickstart',
+        '-k',
+        `${launchctlGuiDomain()}/${LAUNCHAGENT_LABEL}`,
+      ])
+    ) {
+      console.error('LaunchAgent was installed but could not be started');
+      return false;
+    }
     console.log(
       'LaunchAgent loaded. Bridge will start automatically on login.',
     );
-    return;
+    return true;
   }
 
   if (
@@ -2009,16 +2135,30 @@ export function loadLaunchAgent(): void {
       'kickstart',
       '-k',
       `${launchctlGuiDomain()}/${LAUNCHAGENT_LABEL}`,
-    ]) ||
-    runLaunchctl(['load', LAUNCHAGENT_PLIST])
+    ])
   ) {
     console.log(
       'LaunchAgent loaded. Bridge will start automatically on login.',
     );
-    return;
+    return true;
+  }
+
+  if (
+    runLaunchctl(['load', LAUNCHAGENT_PLIST]) &&
+    runLaunchctl([
+      'kickstart',
+      '-k',
+      `${launchctlGuiDomain()}/${LAUNCHAGENT_LABEL}`,
+    ])
+  ) {
+    console.log(
+      'LaunchAgent loaded. Bridge will start automatically on login.',
+    );
+    return true;
   }
 
   console.error('Failed to load LaunchAgent');
+  return false;
 }
 
 export function unloadLaunchAgent(): boolean {
@@ -2059,7 +2199,7 @@ function removeLegacyMenuBarLaunchAgent(): void {
   }
 
   try {
-    execSync(`launchctl unload ${LEGACY_MENUBAR_LAUNCHAGENT_PLIST}`, {
+    execFileSync('launchctl', ['unload', LEGACY_MENUBAR_LAUNCHAGENT_PLIST], {
       stdio: 'pipe',
     });
   } catch {
@@ -2179,30 +2319,6 @@ function killExistingMenuBar(): void {
   }
 }
 
-function getRunningMenuBarPid(): number | null {
-  if (!existsSync(MENUBAR_PID_FILE)) {
-    return null;
-  }
-
-  try {
-    const pid = Number(readFileSync(MENUBAR_PID_FILE, 'utf-8').trim());
-    if (Number.isFinite(pid) && pid > 0 && isKnownMenuBarProcess(pid)) {
-      process.kill(pid, 0);
-      return pid;
-    }
-  } catch {
-    /* stale pid */
-  }
-
-  try {
-    unlinkSync(MENUBAR_PID_FILE);
-  } catch {
-    /* ignore */
-  }
-
-  return null;
-}
-
 export async function launchMenuBar(): Promise<void> {
   if (platform() !== 'darwin') return;
 
@@ -2212,9 +2328,9 @@ export async function launchMenuBar(): Promise<void> {
   const cliInvocation = getCurrentCliInvocation();
   if (!executable || !cliInvocation) return;
 
-  if (getRunningMenuBarPid()) {
-    return;
-  }
+  // Relaunch on every bridge start so an npm update cannot leave an older tray
+  // binary or CLI invocation running indefinitely.
+  killExistingMenuBar();
 
   try {
     const { spawn: spawnChild } = await import('child_process');
@@ -2231,7 +2347,7 @@ export async function launchMenuBar(): Promise<void> {
 
     // Save the PID so we can kill it later
     if (child.pid) {
-      writeFileSync(MENUBAR_PID_FILE, String(child.pid));
+      writePrivateFileSync(MENUBAR_PID_FILE, String(child.pid));
     }
   } catch {
     // Non-critical — menu bar is optional
@@ -2250,50 +2366,129 @@ export function getBridgeStatus(): {
   starting: boolean;
   pid?: number;
   config?: BridgeConfig;
+  health?: BridgeHealth;
 } {
   const config = loadBridgeConfig();
   if (!config) return { configured: false, running: false, starting: false };
 
-  let running = false;
+  const pid = getRunningBridgePid() ?? undefined;
+  const running = pid !== undefined;
   let starting = false;
-  let pid: number | undefined;
-  if (existsSync(PID_FILE)) {
-    const pidStr = readFileSync(PID_FILE, 'utf-8').trim();
-    pid = Number(pidStr);
-    try {
-      process.kill(pid, 0);
-      running = true;
-    } catch {
-      running = false;
-    }
-  }
 
   // Check if LaunchAgent is loaded but PID file not yet written (starting up)
   if (!running && platform() === 'darwin') {
-    starting =
-      runLaunchctl(['print', `${launchctlGuiDomain()}/${LAUNCHAGENT_LABEL}`]) ||
-      runLaunchctl(['list', LAUNCHAGENT_LABEL]);
+    starting = getLaunchAgentState() === 'running';
   }
 
-  return { configured: true, running, starting, pid, config };
+  let health = loadBridgeHealth() ?? undefined;
+  if (running && health) {
+    const referenceTime = health.lastHeartbeatAt ?? health.updatedAt;
+    const heartbeatAge = Date.now() - Date.parse(referenceTime);
+    if (
+      heartbeatAge > HEARTBEAT_INTERVAL_MS * 3 &&
+      (health.state === 'starting' || health.lastHeartbeatAt)
+    ) {
+      health = {
+        ...health,
+        state: 'degraded',
+        lastError:
+          health.lastError ??
+          (health.lastHeartbeatAt
+            ? 'Heartbeat is stale'
+            : 'Bridge did not complete its first heartbeat'),
+      };
+    }
+  }
+  return { configured: true, running, starting, pid, config, health };
 }
 
 export function stopBridge(options?: { includeMenuBar?: boolean }): boolean {
   if (options?.includeMenuBar) {
     killExistingMenuBar();
   }
-  try {
-    writeLiveActivitiesCache([]);
-  } catch {
-    /* ok */
+  if (existsSync(BRIDGE_CONFIG_FILE)) {
+    try {
+      writeLiveActivitiesCache([]);
+    } catch {
+      /* ok */
+    }
   }
-  if (!existsSync(PID_FILE)) return false;
-  const pid = Number(readFileSync(PID_FILE, 'utf-8').trim());
+  const pid = getRunningBridgePid();
+  if (!pid) return false;
   try {
     process.kill(pid, 'SIGTERM');
+    writeBridgeHealth({
+      state: 'stopped',
+      updatedAt: new Date().toISOString(),
+    });
     return true;
   } catch {
     return false;
+  }
+}
+
+function getRunningBridgePid(): number | null {
+  if (!existsSync(PID_FILE)) return null;
+
+  let pid: number;
+  try {
+    pid = Number(readFileSync(PID_FILE, 'utf-8').trim());
+  } catch {
+    removeStaleBridgePidFile();
+    return null;
+  }
+  if (!Number.isInteger(pid) || pid <= 0) {
+    removeStaleBridgePidFile();
+    return null;
+  }
+  try {
+    process.kill(pid, 0);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+      // EPERM still proves that a process owns this PID.
+      return pid;
+    }
+    removeStaleBridgePidFile();
+    return null;
+  }
+
+  let command: string;
+  try {
+    command = execFileSync('ps', ['-p', String(pid), '-o', 'args='], {
+      encoding: 'utf8',
+      timeout: 3000,
+    });
+  } catch {
+    // A transient ps failure must not make a live bridge unmanageable. The
+    // signal-0 probe above already established that the PID exists.
+    return pid;
+  }
+
+  if (!command.includes('service run')) {
+    removeStaleBridgePidFile();
+    return null;
+  }
+  return pid;
+}
+
+function removeStaleBridgePidFile(): void {
+  try {
+    unlinkSync(PID_FILE);
+  } catch {
+    // Already removed.
+  }
+}
+
+function getLaunchAgentState(): string | null {
+  try {
+    const output = execFileSync(
+      'launchctl',
+      ['print', `${launchctlGuiDomain()}/${LAUNCHAGENT_LABEL}`],
+      { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    return output.match(/^\s*state\s*=\s*(\S+)/m)?.[1] ?? null;
+  } catch {
+    return null;
   }
 }
 

@@ -47,7 +47,7 @@ interface ActiveTerminal {
   ptyProcess: pty.IPty;
   httpServer: Server;
   wss: WebSocketServer;
-  tunnel: { close: () => void };
+  tunnel: { url: string; close: () => void };
   viewerSessionName: string | null;
   token: string;
   workSessionId: string;
@@ -123,9 +123,12 @@ export class TerminalPeerManager {
   private config: TerminalPeerConfig;
   private client: ConvexClient;
   private terminals = new Map<string, ActiveTerminal>();
+  private startingSessions = new Set<string>();
   private failedSessions = new Set<string>();
+  private failureRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private pendingStops = new Map<string, ReturnType<typeof setTimeout>>();
   private unsubscribers = new Map<string, () => void>();
+  private viewerActiveSessions = new Set<string>();
 
   constructor(config: TerminalPeerConfig) {
     this.config = config;
@@ -148,6 +151,12 @@ export class TerminalPeerManager {
       },
       state => {
         if (!state) return;
+
+        if (state.terminalViewerActive) {
+          this.viewerActiveSessions.add(workSessionId);
+        } else {
+          this.viewerActiveSessions.delete(workSessionId);
+        }
 
         const terminal = this.terminals.get(workSessionId);
 
@@ -194,7 +203,23 @@ export class TerminalPeerManager {
       unsub();
       this.unsubscribers.delete(workSessionId);
     }
+    const pendingStop = this.pendingStops.get(workSessionId);
+    if (pendingStop) clearTimeout(pendingStop);
+    this.pendingStops.delete(workSessionId);
+    const retryTimer = this.failureRetryTimers.get(workSessionId);
+    if (retryTimer) clearTimeout(retryTimer);
+    this.failureRetryTimers.delete(workSessionId);
+    this.failedSessions.delete(workSessionId);
+    this.viewerActiveSessions.delete(workSessionId);
     this.stopTerminal(workSessionId);
+  }
+
+  reconcileWatchedSessions(activeWorkSessionIds: Set<string>): void {
+    for (const workSessionId of this.unsubscribers.keys()) {
+      if (!activeWorkSessionIds.has(workSessionId)) {
+        this.unwatchSession(workSessionId);
+      }
+    }
   }
 
   private async startTerminal(
@@ -204,42 +229,61 @@ export class TerminalPeerManager {
     cols: number,
     rows: number,
   ): Promise<void> {
-    if (this.terminals.has(workSessionId)) return;
+    if (
+      this.terminals.has(workSessionId) ||
+      this.startingSessions.has(workSessionId)
+    ) {
+      return;
+    }
+    this.startingSessions.add(workSessionId);
+
+    let viewerSession: string | undefined;
+    let viewerIsLinked = false;
+    let ptyProcess: pty.IPty | undefined;
+    let httpServer: Server | undefined;
+    let wss: WebSocketServer | undefined;
+    let tunnel: ActiveTerminal['tunnel'] | undefined;
 
     try {
       // 1. Find a free port
       const port = await findPort();
 
       // 2. Create a linked viewer session (no status bar, targets pane)
-      const viewerSession = createViewerSession(tmuxSessionName, tmuxPaneId);
-      const isLinked = viewerSession !== tmuxSessionName;
+      viewerSession = createViewerSession(tmuxSessionName, tmuxPaneId);
+      viewerIsLinked = viewerSession !== tmuxSessionName;
       console.log(
-        `[${ts()}] Viewer session: ${viewerSession}${isLinked ? ' (linked)' : ''}`,
+        `[${ts()}] Viewer session: ${viewerSession}${viewerIsLinked ? ' (linked)' : ''}`,
       );
 
       // 3. Spawn PTY attached to the viewer session
       console.log(
         `[${ts()}] Spawning PTY: ${TMUX} attach-session -t ${viewerSession}`,
       );
-      const ptyProcess = pty.spawn(
-        TMUX,
-        ['attach-session', '-t', viewerSession],
-        {
-          name: 'xterm-256color',
-          cols: Math.max(cols, 10),
-          rows: Math.max(rows, 4),
-          cwd: process.env.HOME ?? '/',
-          env: { ...process.env, TERM: 'xterm-256color' },
-        },
-      );
+      ptyProcess = pty.spawn(TMUX, ['attach-session', '-t', viewerSession], {
+        name: 'xterm-256color',
+        cols: Math.max(cols, 10),
+        rows: Math.max(rows, 4),
+        cwd: process.env.HOME ?? '/',
+        env: { ...process.env, TERM: 'xterm-256color' },
+      });
+      const activePtyProcess = ptyProcess;
+      const activeViewerSession = viewerSession;
+      let ptyExited = false;
+      activePtyProcess.onExit(() => {
+        ptyExited = true;
+        console.log(`[${ts()}] PTY exited for ${tmuxSessionName}`);
+        if (this.terminals.has(workSessionId)) {
+          this.stopTerminal(workSessionId);
+        }
+      });
       console.log(`[${ts()}] PTY started`);
 
       // 4. Generate auth token
       const token = randomUUID();
 
       // 5. Start WebSocket server
-      const httpServer = createServer();
-      const wss = new WebSocketServer({ server: httpServer });
+      httpServer = createServer();
+      wss = new WebSocketServer({ server: httpServer });
 
       wss.on('connection', (ws, req) => {
         const url = new URL(req.url ?? '/', `http://localhost`);
@@ -255,12 +299,12 @@ export class TerminalPeerManager {
         // Force tmux to redraw the pane so the client gets a clean initial render
         // (otherwise buffered output from before the WS connected causes garbled display)
         try {
-          execFileSync(TMUX, ['refresh-client', '-t', viewerSession]);
+          execFileSync(TMUX, ['refresh-client', '-t', activeViewerSession]);
         } catch {
           // best effort
         }
 
-        const dataHandler = ptyProcess.onData(data => {
+        const dataHandler = activePtyProcess.onData(data => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(data);
           }
@@ -273,13 +317,17 @@ export class TerminalPeerManager {
             try {
               const parsed = JSON.parse(str.slice(1));
               if (parsed.type === 'resize' && parsed.cols && parsed.rows) {
-                ptyProcess.resize(
+                activePtyProcess.resize(
                   Math.max(parsed.cols, 10),
                   Math.max(parsed.rows, 4),
                 );
                 // Force tmux to redraw at the new size
                 try {
-                  execFileSync(TMUX, ['refresh-client', '-t', viewerSession]);
+                  execFileSync(TMUX, [
+                    'refresh-client',
+                    '-t',
+                    activeViewerSession,
+                  ]);
                 } catch {
                   // best effort
                 }
@@ -290,7 +338,7 @@ export class TerminalPeerManager {
             }
           }
 
-          ptyProcess.write(str);
+          activePtyProcess.write(str);
         });
 
         ws.on('close', () => {
@@ -299,8 +347,12 @@ export class TerminalPeerManager {
         });
       });
 
-      await new Promise<void>(resolve => {
-        httpServer.listen(port, '0.0.0.0', resolve);
+      await new Promise<void>((resolve, reject) => {
+        httpServer!.once('error', reject);
+        httpServer!.listen(port, '127.0.0.1', () => {
+          httpServer!.off('error', reject);
+          resolve();
+        });
       });
       console.log(`[${ts()}] WS server on port ${port}`);
 
@@ -312,18 +364,25 @@ export class TerminalPeerManager {
       console.log(
         `[${ts()}] Opening tunnel...${this.config.tunnelHost ? ` (host: ${this.config.tunnelHost})` : ''}`,
       );
-      const tunnel = await localtunnel(tunnelOpts);
-      const tunnelUrl = tunnel.url;
+      const activeTunnel = await localtunnel(tunnelOpts);
+      tunnel = activeTunnel;
+      const tunnelUrl = activeTunnel.url;
       console.log(`[${ts()}] Tunnel: ${tunnelUrl}`);
 
       const wsUrl = tunnelUrl.replace(/^https?:\/\//, 'wss://');
+      if (ptyExited) {
+        throw new Error('Terminal process exited during startup');
+      }
+      if (!this.viewerActiveSessions.has(workSessionId)) {
+        throw new Error('Terminal viewer disconnected during startup');
+      }
 
       const terminal: ActiveTerminal = {
         ptyProcess,
         httpServer,
         wss,
         tunnel,
-        viewerSessionName: isLinked ? viewerSession : null,
+        viewerSessionName: viewerIsLinked ? viewerSession : null,
         token,
         workSessionId,
         tmuxSessionName,
@@ -343,14 +402,59 @@ export class TerminalPeerManager {
           terminalLocalPort: port,
         },
       );
-
-      ptyProcess.onExit(() => {
-        console.log(`[${ts()}] PTY exited for ${tmuxSessionName}`);
-        this.stopTerminal(workSessionId);
-      });
     } catch (err) {
       console.error(`[${ts()}] Failed to start terminal:`, err);
+      if (this.terminals.has(workSessionId)) {
+        this.stopTerminal(workSessionId);
+      } else {
+        try {
+          ptyProcess?.kill();
+        } catch {
+          /* best effort */
+        }
+        try {
+          tunnel?.close();
+        } catch {
+          /* best effort */
+        }
+        try {
+          wss?.close();
+        } catch {
+          /* best effort */
+        }
+        try {
+          httpServer?.close();
+        } catch {
+          /* best effort */
+        }
+        if (viewerIsLinked && viewerSession) {
+          killViewerSession(viewerSession);
+        }
+      }
       this.failedSessions.add(workSessionId);
+      const previousRetry = this.failureRetryTimers.get(workSessionId);
+      if (previousRetry) clearTimeout(previousRetry);
+      this.failureRetryTimers.set(
+        workSessionId,
+        setTimeout(() => {
+          this.failedSessions.delete(workSessionId);
+          this.failureRetryTimers.delete(workSessionId);
+          if (
+            this.viewerActiveSessions.has(workSessionId) &&
+            this.unsubscribers.has(workSessionId)
+          ) {
+            void this.startTerminal(
+              workSessionId,
+              tmuxSessionName,
+              tmuxPaneId,
+              cols,
+              rows,
+            );
+          }
+        }, 30_000),
+      );
+    } finally {
+      this.startingSessions.delete(workSessionId);
     }
   }
 
@@ -387,6 +491,12 @@ export class TerminalPeerManager {
   }
 
   stop(): void {
+    for (const timeout of this.pendingStops.values()) clearTimeout(timeout);
+    this.pendingStops.clear();
+    for (const timeout of this.failureRetryTimers.values())
+      clearTimeout(timeout);
+    this.failureRetryTimers.clear();
+    this.viewerActiveSessions.clear();
     for (const unsub of this.unsubscribers.values()) {
       try {
         unsub();

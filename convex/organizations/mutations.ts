@@ -831,7 +831,7 @@ export const updateIssuePriority = mutation({
     name: v.string(),
     weight: v.optional(v.number()),
     color: v.string(),
-    icon: v.optional(v.string()),
+    icon: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const org = await requireOrgAccess(
@@ -847,9 +847,9 @@ export const updateIssuePriority = mutation({
 
     await ctx.db.patch('issuePriorities', args.priorityId, {
       name: args.name,
-      weight: args.weight,
       color: args.color,
-      icon: args.icon,
+      ...(args.weight !== undefined ? { weight: args.weight } : {}),
+      ...(args.icon !== undefined ? { icon: args.icon ?? undefined } : {}),
     });
   },
 });
@@ -997,7 +997,7 @@ export const updateIssueState = mutation({
     name: v.string(),
     position: v.number(),
     color: v.string(),
-    icon: v.optional(v.string()),
+    icon: v.optional(v.union(v.string(), v.null())),
     type: v.union(
       v.literal('backlog'),
       v.literal('todo'),
@@ -1022,7 +1022,7 @@ export const updateIssueState = mutation({
       name: args.name,
       position: args.position,
       color: args.color,
-      icon: args.icon,
+      ...(args.icon !== undefined ? { icon: args.icon ?? undefined } : {}),
       type: args.type,
     });
   },
@@ -1070,7 +1070,7 @@ export const updateProjectStatus = mutation({
     name: v.string(),
     position: v.number(),
     color: v.string(),
-    icon: v.optional(v.string()),
+    icon: v.optional(v.union(v.string(), v.null())),
     type: v.union(
       v.literal('backlog'),
       v.literal('planned'),
@@ -1095,7 +1095,7 @@ export const updateProjectStatus = mutation({
       name: args.name,
       position: args.position,
       color: args.color,
-      icon: args.icon,
+      ...(args.icon !== undefined ? { icon: args.icon ?? undefined } : {}),
       type: args.type,
     });
   },

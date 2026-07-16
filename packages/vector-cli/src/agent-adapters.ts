@@ -5,12 +5,7 @@ import { basename, join } from 'path';
 import type { AgentProvider } from '../../../convex/_shared/agentBridge';
 
 export type BridgeProvider =
-  | 'codex'
-  | 'claude_code'
-  | 'cursor'
-  | 'copilot'
-  | 'opencode'
-  | 'pi';
+  'codex' | 'claude_code' | 'cursor' | 'copilot' | 'opencode' | 'pi';
 
 export interface SessionProcessRecord {
   provider: AgentProvider;
@@ -31,7 +26,7 @@ export interface SessionProcessRecord {
   tmuxPaneId?: string;
   mode: 'observed' | 'managed';
   status: 'observed' | 'waiting';
-  supportsInboundMessages: true;
+  supportsInboundMessages: boolean;
 }
 
 export interface SessionRunResult extends SessionProcessRecord {
@@ -139,15 +134,9 @@ export async function resumeProviderSession(
     });
   }
 
-  return runGenericCliAgentTurn({
-    provider,
-    cwd,
-    prompt,
-    sessionKey,
-    launchCommand: genericProviderLaunchCommand(provider),
-    onEvent,
-    signal,
-  });
+  throw new Error(
+    `${providerLabel(provider)} sessions cannot be resumed reliably by this CLI yet. Start a new session instead.`,
+  );
 }
 
 async function runGenericCliAgentTurn(args: {
@@ -237,7 +226,7 @@ async function runGenericCliAgentTurn(args: {
       summarizeTitle(responseText, args.cwd) ?? providerLabel(args.provider),
     mode: 'managed',
     status: 'waiting',
-    supportsInboundMessages: true,
+    supportsInboundMessages: false,
     responseText,
     launchCommand: args.launchCommand,
   };
@@ -314,6 +303,17 @@ async function runCodexAppServerTurn(args: {
   const emitEvent = (event: AgentSessionEvent): void => {
     eventWrites.push(Promise.resolve(args.onEvent?.(event)));
   };
+
+  const waitForExit = new Promise<never>((_, reject) => {
+    child.on('error', error => reject(error));
+    child.on('close', code => {
+      if (!completed) {
+        const detail =
+          stderr.trim() || `codex app-server exited with code ${code}`;
+        reject(new Error(detail));
+      }
+    });
+  });
 
   child.stdout.on('data', chunk => {
     stdoutBuffer += chunk.toString();
@@ -470,11 +470,20 @@ async function runCodexAppServerTurn(args: {
     new Promise((resolve, reject) => {
       const id = nextRequestId++;
       pending.set(id, { resolve, reject });
-      child.stdin.write(`${JSON.stringify({ method, id, params })}\n`);
+      child.stdin.write(
+        `${JSON.stringify({ method, id, params })}\n`,
+        error => {
+          if (!error) return;
+          pending.delete(id);
+          reject(error);
+        },
+      );
     });
 
   const notify = (method: string, params?: unknown): void => {
-    child.stdin.write(`${JSON.stringify({ method, params })}\n`);
+    if (!child.stdin.destroyed) {
+      child.stdin.write(`${JSON.stringify({ method, params })}\n`);
+    }
   };
 
   const abort = (): void => {
@@ -487,18 +496,12 @@ async function runCodexAppServerTurn(args: {
     child.kill('SIGTERM');
     failTurn?.(new Error('Agent turn interrupted'));
   };
-  args.signal?.addEventListener('abort', abort, { once: true });
-
-  const waitForExit = new Promise<never>((_, reject) => {
-    child.on('error', error => reject(error));
-    child.on('close', code => {
-      if (!completed) {
-        const detail =
-          stderr.trim() || `codex app-server exited with code ${code}`;
-        reject(new Error(detail));
-      }
+  if (typeof child.stdin.on === 'function') {
+    child.stdin.on('error', error => {
+      failTurn?.(error);
     });
-  });
+  }
+  args.signal?.addEventListener('abort', abort, { once: true });
 
   try {
     await Promise.race([
@@ -611,6 +614,7 @@ async function runClaudeSdkTurn(args: {
 
   let sessionKey = args.sessionKey;
   let responseText = '';
+  let emittedAssistantText = '';
   let model: string | undefined;
   const abort = (): void => {
     stream.close();
@@ -634,6 +638,7 @@ async function runClaudeSdkTurn(args: {
           .trim();
         if (assistantText) {
           responseText = assistantText;
+          emittedAssistantText = assistantText;
           await args.onEvent?.({
             provider: 'claude_code',
             role: 'assistant',
@@ -652,12 +657,15 @@ async function runClaudeSdkTurn(args: {
         const resultText = asString(readProperty(message, 'result'));
         if (resultText) {
           responseText = resultText;
-          await args.onEvent?.({
-            provider: 'claude_code',
-            role: 'assistant',
-            text: resultText,
-            status: 'completed',
-          });
+          if (resultText !== emittedAssistantText) {
+            await args.onEvent?.({
+              provider: 'claude_code',
+              role: 'assistant',
+              text: resultText,
+              status: 'completed',
+            });
+            emittedAssistantText = resultText;
+          }
         }
         model = firstObjectKey(readProperty(message, 'modelUsage'));
         continue;
@@ -674,6 +682,8 @@ async function runClaudeSdkTurn(args: {
     args.signal?.removeEventListener('abort', abort);
     stream.close();
   }
+
+  throwIfAborted(args.signal);
 
   if (!sessionKey) {
     throw new Error('Claude Agent SDK did not return a session id');

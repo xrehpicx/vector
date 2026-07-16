@@ -15,17 +15,9 @@ import { fileURLToPath } from 'url';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageDir = resolve(scriptDir, '..');
 const sourceFile = join(packageDir, 'macos', 'VectorMenuBar.swift');
-const repoRoot = resolve(packageDir, '..', '..');
-const menuBarIcon1x = join(
-  repoRoot,
-  'cli',
-  'macos',
-  'assets',
-  'vector-menubar.png',
-);
+const menuBarIcon1x = join(packageDir, 'macos', 'assets', 'vector-menubar.png');
 const menuBarIcon2x = join(
-  repoRoot,
-  'cli',
+  packageDir,
   'macos',
   'assets',
   'vector-menubar@2x.png',
@@ -55,6 +47,11 @@ mkdirSync(macOSDir, { recursive: true });
 mkdirSync(resourcesDir, { recursive: true });
 
 const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+const shortVersion = String(pkg.version);
+const bundleVersion =
+  process.env.VECTOR_BUILD_NUMBER?.trim() ||
+  shortVersion.match(/^\d+\.\d+\.\d+/)?.[0] ||
+  '1';
 const buildDir = join(nativeDir, '.build');
 rmSync(buildDir, { recursive: true, force: true });
 mkdirSync(buildDir, { recursive: true });
@@ -96,9 +93,9 @@ writeFileSync(
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>${pkg.version}</string>
+  <string>${shortVersion}</string>
   <key>CFBundleVersion</key>
-  <string>${pkg.version}</string>
+  <string>${bundleVersion}</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>

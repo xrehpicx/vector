@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -47,6 +47,65 @@ function runCli(args: string[]) {
 }
 
 describe('Vector CLI command surface', () => {
+  it('keeps version and JSON output machine-readable when dotenv files exist', () => {
+    const tempRoot = mkdtempSync(path.join(tmpdir(), 'vcli-output-'));
+    writeFileSync(
+      path.join(tempRoot, '.env'),
+      'NEXT_PUBLIC_APP_URL=http://127.0.0.1:9\n',
+    );
+
+    const env = {
+      ...process.env,
+      VECTOR_HOME: path.join(tempRoot, '.vector'),
+    };
+    const version = runCliRaw(['--version'], { cwd: tempRoot, env });
+    expect(version.status).toBe(0);
+    expect(version.stderr).toBe('');
+    expect(version.stdout).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\n$/);
+
+    const menuState = runCliRaw(['--json', 'service', 'menu-state'], {
+      cwd: tempRoot,
+      env,
+    });
+    expect(menuState.status).toBe(0);
+    expect(() => JSON.parse(menuState.stdout)).not.toThrow();
+    expect(JSON.parse(menuState.stdout)).toMatchObject({
+      configured: false,
+      running: false,
+      starting: false,
+    });
+
+    const vectorHome = path.join(tempRoot, '.vector');
+    mkdirSync(vectorHome, { recursive: true });
+    writeFileSync(
+      path.join(vectorHome, 'bridge.json'),
+      JSON.stringify({
+        deviceId: 'device-1',
+        deviceKey: 'device-key',
+        deviceSecret: 'must-not-leak',
+        userId: 'user-1',
+        displayName: 'Test Mac',
+        convexUrl: 'https://example.convex.cloud',
+        registeredAt: new Date().toISOString(),
+      }),
+    );
+    const configuredState = runCliRaw(['--json', 'service', 'menu-state'], {
+      cwd: tempRoot,
+      env,
+    });
+    expect(configuredState.status).toBe(0);
+    expect(configuredState.stdout).not.toContain('must-not-leak');
+    expect(JSON.parse(configuredState.stdout).config).toEqual({
+      deviceId: 'device-1',
+      displayName: 'Test Mac',
+      userId: 'user-1',
+    });
+    expect(statSync(vectorHome).mode & 0o777).toBe(0o700);
+    expect(statSync(path.join(vectorHome, 'bridge.json')).mode & 0o777).toBe(
+      0o600,
+    );
+  }, 30_000);
+
   it('requires an app URL when no flag, env var, or saved session is available', () => {
     const tempHome = mkdtempSync(path.join(tmpdir(), 'vcli-home-'));
     const tempCwd = mkdtempSync(path.join(tmpdir(), 'vcli-cwd-'));
@@ -93,6 +152,19 @@ describe('Vector CLI command surface', () => {
       expect(output).toContain(command);
     });
   }, 30_000);
+
+  it.each([
+    ['priority', 'update', '--clear-icon'],
+    ['state', 'update', '--clear-icon'],
+    ['status', 'update', '--clear-icon'],
+    ['team', 'update', '--clear-description'],
+  ])(
+    'documents the explicit clearing flag for %s %s',
+    (group, command, flag) => {
+      expect(runCli([group, command, '--help'])).toContain(flag);
+    },
+    30_000,
+  );
 
   it.each([
     [

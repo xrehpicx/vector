@@ -30,6 +30,14 @@ struct WorkSessionSummary: Decodable, Identifiable {
       return "Codex"
     case "claude_code":
       return "Claude"
+    case "cursor":
+      return "Cursor"
+    case "copilot":
+      return "Copilot"
+    case "opencode":
+      return "OpenCode"
+    case "pi":
+      return "Pi"
     default:
       return "Shell"
     }
@@ -187,11 +195,20 @@ struct IssueSearchResult: Decodable, Identifiable {
 }
 
 struct MenuStateSnapshot: Decodable {
+  struct Health: Decodable {
+    let state: String
+    let updatedAt: String?
+    let lastHeartbeatAt: String?
+    let lastError: String?
+  }
+
   let configured: Bool
   let running: Bool
   let starting: Bool
   let pid: Int32?
   let config: BridgeConfig?
+  let health: Health?
+  let stateError: String?
   let sessionInfo: SessionInfo
   let activeProfile: String
   let defaultProfile: String
@@ -206,8 +223,10 @@ struct MenuStateSnapshot: Decodable {
     starting: false,
     pid: nil,
     config: nil,
+    health: nil,
+    stateError: nil,
     sessionInfo: SessionInfo(
-      orgSlug: "oss-lab",
+      orgSlug: "",
       appUrl: nil,
       appDomain: nil,
       email: nil,
@@ -239,7 +258,25 @@ enum BridgeTransition {
   }
 }
 
+final class ProcessOutputCollector {
+  private let lock = NSLock()
+  private var data = Data()
+
+  func append(_ chunk: Data) {
+    lock.lock()
+    data.append(chunk)
+    lock.unlock()
+  }
+
+  func string() -> String {
+    lock.lock()
+    defer { lock.unlock() }
+    return String(data: data, encoding: .utf8) ?? ""
+  }
+}
+
 final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject {
+  private static let autoUpdatePreferenceKey = "VectorMenuBar.autoUpdateEnabled"
   private let configDir: URL
   private let cliCommand: String
   private let cliArgs: [String]
@@ -264,8 +301,14 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
   @Published private(set) var selectingProfileName: String?
   @Published private(set) var updateAvailable: String?
   @Published private(set) var isUpdating = false
-  @Published var autoUpdateEnabled = true
+  @Published private(set) var lastRefreshError: String?
+  @Published var autoUpdateEnabled: Bool {
+    didSet {
+      UserDefaults.standard.set(autoUpdateEnabled, forKey: Self.autoUpdatePreferenceKey)
+    }
+  }
   private var lastUpdateCheck = Date.distantPast
+  private var updateCheckInFlight = false
   private let launchTime = Date()
 
   init(configDir: URL, cliCommand: String, cliArgs: [String]) {
@@ -273,6 +316,9 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
     self.cliCommand = cliCommand
     self.cliArgs = cliArgs
     self.logURL = configDir.appendingPathComponent("menubar.log")
+    self.autoUpdateEnabled = UserDefaults.standard.bool(
+      forKey: Self.autoUpdatePreferenceKey
+    )
     super.init()
   }
 
@@ -308,7 +354,9 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
       return transition.label.replacingOccurrences(of: "...", with: "")
     }
     if snapshot.running {
-      return "Running"
+      return lastRefreshError == nil && snapshot.health?.state != "degraded"
+        ? "Running"
+        : "Degraded"
     }
     if snapshot.starting {
       return "Starting"
@@ -415,20 +463,33 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
       guard let self else { return }
       if !success {
         self.log("failed to switch default profile: \(profile.name)")
+        self.selectingProfileName = nil
+        self.refreshState()
+        return
       }
-      self.selectingProfileName = nil
-      self.refreshState()
+      self.beginTransition(.restarting)
+      self.runCLI(arguments: ["service", "stop"]) { [weak self] _, _ in
+        self?.runCLI(arguments: ["--profile", profile.name, "service", "start"]) {
+          [weak self] _, _ in
+          self?.selectingProfileName = nil
+          self?.refreshState()
+        }
+      }
     }
   }
 
   func startBridge() {
     beginTransition(.starting)
-    runCLI(arguments: ["service", "start"])
+    runCLI(arguments: ["service", "start"]) { [weak self] success, output in
+      self?.finishBridgeAction(success: success, output: output)
+    }
   }
 
   func stopBridge() {
     beginTransition(.stopping)
-    runCLI(arguments: ["service", "stop"])
+    runCLI(arguments: ["service", "stop"]) { [weak self] success, output in
+      self?.finishBridgeAction(success: success, output: output)
+    }
   }
 
   func restartBridge() {
@@ -448,12 +509,8 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
 
   func quitVector() {
     log("quit vector clicked")
-    runCLI(arguments: ["service", "stop"]) { _ , _ in
-      DispatchQueue.main.async {
-        self.popover.performClose(nil)
-        NSApp.terminate(nil)
-      }
-    }
+    popover.performClose(nil)
+    NSApp.terminate(nil)
   }
 
   func updateCLI() {
@@ -475,11 +532,18 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
 
   private func checkForUpdate() {
     // Only check every 5 minutes
+    guard !updateCheckInFlight else { return }
     guard Date().timeIntervalSince(lastUpdateCheck) > 300 else { return }
     lastUpdateCheck = Date()
+    updateCheckInFlight = true
 
     DispatchQueue.global(qos: .utility).async { [weak self] in
       guard let self else { return }
+      defer {
+        DispatchQueue.main.async {
+          self.updateCheckInFlight = false
+        }
+      }
 
       // Get dist-tags JSON to find the actual newest version
       let task = Process()
@@ -496,8 +560,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
         guard let tags = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
           return
         }
-        // Use the beta tag (where active builds go), fall back to latest
-        let latestVersion = tags["beta"] ?? tags["latest"] ?? ""
+        let latestVersion = tags["latest"] ?? ""
 
         // Get current version
         let versionTask = Process()
@@ -509,13 +572,15 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
         try versionTask.run()
         versionTask.waitUntilExit()
         let versionData = versionPipe.fileHandleForReading.readDataToEndOfFile()
-        let currentVersion = String(data: versionData, encoding: .utf8)?
+        let currentVersion =
+          String(data: versionData, encoding: .utf8)?
+          .split(whereSeparator: \.isNewline)
+          .last
+          .map(String.init)?
           .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         DispatchQueue.main.async {
-          if !latestVersion.isEmpty && !currentVersion.isEmpty
-            && latestVersion != currentVersion
-          {
+          if isVersion(latestVersion, newerThan: currentVersion) {
             self.updateAvailable = latestVersion
             // Auto-update if enabled (but not within the first 5 minutes or while popover is open)
             let uptime = Date().timeIntervalSince(self.launchTime)
@@ -611,6 +676,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
     }
     refreshState()
     popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    NSApp.activate(ignoringOtherApps: true)
     popover.contentViewController?.view.window?.becomeKey()
   }
 
@@ -627,14 +693,29 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
     }
     isRefreshing = true
 
-    runCLI(arguments: ["--json", "service", "menu-state"], captureOutput: true) { [weak self] success, output in
+    runCLI(
+      arguments: ["--json", "service", "menu-state"],
+      captureOutput: true,
+      timeout: 20
+    ) { [weak self] success, output in
       guard let self else { return }
       defer { self.isRefreshing = false }
 
-      if success,
-         let data = output.data(using: .utf8),
-         let state = try? JSONDecoder().decode(MenuStateSnapshot.self, from: data) {
-        self.snapshot = state
+      if success, let data = output.data(using: .utf8) {
+        do {
+          self.snapshot = try JSONDecoder().decode(MenuStateSnapshot.self, from: data)
+          self.lastRefreshError =
+            self.snapshot.stateError
+            ?? (self.snapshot.health?.state == "degraded"
+              ? self.snapshot.health?.lastError
+              : nil)
+        } catch {
+          self.lastRefreshError = "Status unavailable"
+          self.log("menu-state decode failed: \(error)")
+        }
+      } else {
+        self.lastRefreshError = "Status unavailable"
+        self.log("menu-state command failed: \(output.prefix(500))")
       }
 
       self.reconcileTransition()
@@ -666,11 +747,14 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
 
     // Show update dot indicator
     if updateAvailable != nil {
-      button.title = " \u{2022}" // bullet dot
+      button.title = " \u{2022}"  // bullet dot
     }
 
     button.image = brandIcon ?? fallbackStatusIcon()
-    button.image?.isTemplate = false
+    button.image?.isTemplate = true
+    button.toolTip = "Vector — \(statusBadgeLabel())"
+    button.setAccessibilityLabel("Vector")
+    button.setAccessibilityHelp(statusBadgeLabel())
 
     // Dim icon when bridge is not running (and not transitioning)
     if transition != nil && !blinkVisible {
@@ -692,8 +776,8 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
       self.searchingProcessIds.remove(processId)
 
       guard success,
-            let data = output.data(using: .utf8),
-            let issues = try? JSONDecoder().decode([IssueSearchResult].self, from: data)
+        let data = output.data(using: .utf8),
+        let issues = try? JSONDecoder().decode([IssueSearchResult].self, from: data)
       else {
         self.issueResults[processId] = []
         return
@@ -706,6 +790,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
   private func runCLI(
     arguments: [String],
     captureOutput: Bool = false,
+    timeout: TimeInterval = 45,
     completion: ((Bool, String) -> Void)? = nil
   ) {
     log("running CLI: \(arguments.joined(separator: " "))")
@@ -717,27 +802,60 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
 
     let stdoutPipe = captureOutput ? Pipe() : nil
     let stderrPipe = captureOutput ? Pipe() : nil
+    let stdoutCollector = ProcessOutputCollector()
+    let stderrCollector = ProcessOutputCollector()
+    let drainGroup = DispatchGroup()
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
 
-    process.terminationHandler = { process in
-      let stdout = stdoutPipe.flatMap { pipe in
-        String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-      } ?? ""
-      let stderr = stderrPipe.flatMap { pipe in
-        String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-      } ?? ""
-      let output = !stdout.isEmpty ? stdout : stderr
+    func drain(_ pipe: Pipe?, into collector: ProcessOutputCollector) {
+      guard let pipe else { return }
+      drainGroup.enter()
+      pipe.fileHandleForReading.readabilityHandler = { handle in
+        let chunk = handle.availableData
+        if chunk.isEmpty {
+          handle.readabilityHandler = nil
+          drainGroup.leave()
+        } else {
+          collector.append(chunk)
+        }
+      }
+    }
 
-      DispatchQueue.main.async {
-        self.log("CLI finished (\(process.terminationStatus)): \(arguments.joined(separator: " "))")
-        completion?(process.terminationStatus == 0, output)
+    drain(stdoutPipe, into: stdoutCollector)
+    drain(stderrPipe, into: stderrCollector)
+
+    let timeoutWorkItem = DispatchWorkItem { [weak process] in
+      guard let process, process.isRunning else { return }
+      process.terminate()
+    }
+
+    process.terminationHandler = { process in
+      timeoutWorkItem.cancel()
+      DispatchQueue.global(qos: .utility).async {
+        _ = drainGroup.wait(timeout: .now() + 2)
+        let stdout = stdoutCollector.string()
+        let stderr = stderrCollector.string()
+        let output = !stdout.isEmpty ? stdout : stderr
+
+        DispatchQueue.main.async {
+          self.log(
+            "CLI finished (\(process.terminationStatus)): \(arguments.joined(separator: " "))")
+          completion?(process.terminationStatus == 0, output)
+        }
       }
     }
 
     do {
       try process.run()
+      DispatchQueue.global(qos: .utility).asyncAfter(
+        deadline: .now() + timeout,
+        execute: timeoutWorkItem
+      )
     } catch {
+      timeoutWorkItem.cancel()
+      stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+      stderrPipe?.fileHandleForReading.readabilityHandler = nil
       log("CLI failed to start: \(arguments.joined(separator: " "))")
       transition = nil
       blinkVisible = true
@@ -746,11 +864,17 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
     }
   }
 
+  private func finishBridgeAction(success: Bool, output: String) {
+    if !success {
+      transition = nil
+      blinkVisible = true
+      log("bridge action failed: \(output.prefix(500))")
+    }
+    refreshState()
+  }
+
   private func loadBrandIcon() -> NSImage? {
-    let candidates = [
-      "vector-menubar@2x",
-      "vector-menubar",
-    ]
+    let candidates = ["vector-menubar"]
 
     for name in candidates {
       guard let url = Bundle.main.url(forResource: name, withExtension: "png") else {
@@ -783,6 +907,17 @@ final class MenuBarController: NSObject, NSApplicationDelegate, ObservableObject
     let formatter = ISO8601DateFormatter()
     let line = "[\(formatter.string(from: Date()))] \(message)\n"
     let data = Data(line.utf8)
+
+    if FileManager.default.fileExists(atPath: logURL.path) {
+      if let attributes = try? FileManager.default.attributesOfItem(atPath: logURL.path),
+        let size = attributes[.size] as? NSNumber,
+        size.intValue > 1_000_000
+      {
+        let rotatedURL = logURL.appendingPathExtension("previous")
+        try? FileManager.default.removeItem(at: rotatedURL)
+        try? FileManager.default.moveItem(at: logURL, to: rotatedURL)
+      }
+    }
 
     if FileManager.default.fileExists(atPath: logURL.path) {
       if let handle = try? FileHandle(forWritingTo: logURL) {
@@ -830,9 +965,9 @@ struct TrayPopoverView: View {
   }
 
   private var currentProfile: ProfileSummary? {
-    sortedProfiles.first(where: \.isDefault) ??
-      sortedProfiles.first(where: { $0.name == controller.snapshot.activeProfile }) ??
-      sortedProfiles.first
+    sortedProfiles.first(where: \.isDefault) ?? sortedProfiles.first(where: {
+      $0.name == controller.snapshot.activeProfile
+    }) ?? sortedProfiles.first
   }
 
   private var currentWorkspace: DeviceWorkspaceSummary? {
@@ -852,6 +987,13 @@ struct TrayPopoverView: View {
         Spacer(minLength: 0)
 
         StatusChip(text: controller.statusBadgeLabel())
+      }
+
+      if let statusError = controller.lastRefreshError, !statusError.isEmpty {
+        Label(statusError, systemImage: "exclamationmark.triangle.fill")
+          .font(.system(size: 10, weight: .medium))
+          .foregroundStyle(.orange)
+          .lineLimit(2)
       }
 
       Divider()
@@ -965,7 +1107,8 @@ struct TrayPopoverView: View {
                             }
                           } else if controller.results(for: process.id).isEmpty {
                             EmptySectionLabel(
-                              text: (controller.issueSearchText[process.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+                              text: (controller.issueSearchText[process.id] ?? "")
+                                .trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
                                 ? "No matching issues."
                                 : "Type at least 2 characters to search."
                             )
@@ -985,7 +1128,10 @@ struct TrayPopoverView: View {
                                       .lineLimit(2)
                                   }
                                   Spacer(minLength: 0)
-                                  Button(controller.isAttaching(processId: process.id) ? "Attaching..." : "Attach") {
+                                  Button(
+                                    controller.isAttaching(processId: process.id)
+                                      ? "Attaching..." : "Attach"
+                                  ) {
                                     controller.attach(process: process, to: issue)
                                   }
                                   .buttonStyle(.borderedProminent)
@@ -1075,10 +1221,12 @@ struct TrayPopoverView: View {
 
         Spacer(minLength: 0)
 
-        Toggle(isOn: Binding(
-          get: { controller.autoUpdateEnabled },
-          set: { controller.autoUpdateEnabled = $0 }
-        )) {
+        Toggle(
+          isOn: Binding(
+            get: { controller.autoUpdateEnabled },
+            set: { controller.autoUpdateEnabled = $0 }
+          )
+        ) {
           Text("Auto-update")
             .font(.system(size: 10))
             .foregroundStyle(.tertiary)
@@ -1268,10 +1416,13 @@ struct WorkspaceRow: View {
           }
         }
 
-        Text(workspace.defaultBranch.map { "\(workspace.workspaceName) · \($0)" } ?? workspace.workspaceName)
-          .font(.system(size: 11))
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
+        Text(
+          workspace.defaultBranch.map { "\(workspace.workspaceName) · \($0)" }
+            ?? workspace.workspaceName
+        )
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
 
         Text(workspace.path)
           .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -1394,7 +1545,7 @@ enum WorkSessionFilter: String, CaseIterable, Identifiable {
     case .all:
       return true
     case .agent:
-      return session.agentProvider == "codex" || session.agentProvider == "claude_code"
+      return session.agentProvider != nil && session.agentProvider != "vector_cli"
     case .manual:
       return session.agentProvider == nil || session.agentProvider == "vector_cli"
     }
@@ -1542,6 +1693,14 @@ func providerColor(_ provider: String?) -> Color {
     return Color(red: 0.95, green: 0.55, blue: 0.28)
   case "codex":
     return Color(red: 0.22, green: 0.62, blue: 0.96)
+  case "cursor":
+    return Color(red: 0.58, green: 0.42, blue: 0.96)
+  case "copilot":
+    return Color(red: 0.55, green: 0.65, blue: 0.95)
+  case "opencode":
+    return Color(red: 0.32, green: 0.76, blue: 0.55)
+  case "pi":
+    return Color(red: 0.85, green: 0.48, blue: 0.72)
   case "vector_cli", nil:
     return Color(red: 0.58, green: 0.62, blue: 0.7)
   default:
@@ -1620,7 +1779,7 @@ func buildMetadataLine(
 ) -> String {
   let deviceName = config.displayName
   let orgLabel = sessionInfo.orgSlug
-  return "\(deviceName) · \(orgLabel)"
+  return orgLabel.isEmpty ? deviceName : "\(deviceName) · \(orgLabel)"
 }
 
 func summarizeWorkspace(
@@ -1631,11 +1790,14 @@ func summarizeWorkspace(
     return current.displayLabel
   }
 
-  let workspaces = Array(Set<String>(workSessions.compactMap { workSession in
-    let path = workSession.repoRoot ?? workSession.cwd ?? workSession.workspacePath
-    guard let path else { return nil }
-    return URL(fileURLWithPath: path).lastPathComponent
-  })).sorted()
+  let workspaces = Array(
+    Set<String>(
+      workSessions.compactMap { workSession in
+        let path = workSession.repoRoot ?? workSession.cwd ?? workSession.workspacePath
+        guard let path else { return nil }
+        return URL(fileURLWithPath: path).lastPathComponent
+      })
+  ).sorted()
 
   guard !workspaces.isEmpty else { return nil }
   if workspaces.count == 1 {
@@ -1663,15 +1825,56 @@ func buildIssueUrl(sessionInfo: SessionInfo, issueKey: String) -> String? {
   return base.appending(path: "\(sessionInfo.orgSlug)/issues/\(issueKey)").absoluteString
 }
 
+func isVersion(_ candidate: String, newerThan current: String) -> Bool {
+  func parse(_ value: String) -> (core: [Int], prerelease: [String])? {
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: "^v", with: "", options: .regularExpression)
+    let buildParts = normalized.split(separator: "+", maxSplits: 1)
+    let versionParts = buildParts[0].split(separator: "-", maxSplits: 1)
+    let core = versionParts[0].split(separator: ".").compactMap { Int($0) }
+    guard core.count == 3 else { return nil }
+    let prerelease =
+      versionParts.count > 1
+      ? versionParts[1].split(separator: ".").map(String.init)
+      : []
+    return (core, prerelease)
+  }
+
+  guard let left = parse(candidate), let right = parse(current) else {
+    return false
+  }
+  for index in 0..<3 where left.core[index] != right.core[index] {
+    return left.core[index] > right.core[index]
+  }
+  if left.prerelease.isEmpty != right.prerelease.isEmpty {
+    return left.prerelease.isEmpty
+  }
+  for index in 0..<max(left.prerelease.count, right.prerelease.count) {
+    guard index < left.prerelease.count else { return false }
+    guard index < right.prerelease.count else { return true }
+    let leftPart = left.prerelease[index]
+    let rightPart = right.prerelease[index]
+    if leftPart == rightPart { continue }
+    if let leftNumber = Int(leftPart), let rightNumber = Int(rightPart) {
+      return leftNumber > rightNumber
+    }
+    if Int(leftPart) != nil { return false }
+    if Int(rightPart) != nil { return true }
+    return leftPart.localizedStandardCompare(rightPart) == .orderedDescending
+  }
+  return false
+}
+
 let environment = ProcessInfo.processInfo.environment
 let homeDir = FileManager.default.homeDirectoryForCurrentUser
-let configDir = URL(fileURLWithPath: environment["VECTOR_HOME"] ?? homeDir.appendingPathComponent(".vector").path)
+let configDir = URL(
+  fileURLWithPath: environment["VECTOR_HOME"] ?? homeDir.appendingPathComponent(".vector").path)
 let cliCommand = environment["VECTOR_CLI_COMMAND"] ?? "/usr/bin/env"
 let cliArgs: [String]
 if let rawArgs = environment["VECTOR_CLI_ARGS_JSON"], let data = rawArgs.data(using: .utf8) {
   cliArgs = (try? JSONDecoder().decode([String].self, from: data)) ?? []
 } else {
-  cliArgs = []
+  cliArgs = cliCommand == "/usr/bin/env" ? ["vcli"] : []
 }
 
 let app = NSApplication.shared

@@ -99,6 +99,18 @@ vcli --profile staging --app-url http://localhost:3001 auth whoami
 
 Use profiles when you work across multiple environments or accounts.
 
+Starting the bridge with an explicit profile makes it the daemon's active
+profile and repairs the macOS LaunchAgent if Node or the CLI moved:
+
+```bash
+vcli --profile work service start
+vcli service status
+```
+
+The status command reports a degraded bridge when heartbeats fail instead of
+leaving it stuck at "Starting". On macOS, the native menu bar app is installed
+with the bridge, uses the active profile, and requires macOS 14 or newer.
+
 ## Common Commands
 
 Inspect the current session:
@@ -186,6 +198,16 @@ vcli status list acme
 vcli role list acme
 ```
 
+Update metadata without unintentionally clearing an existing icon, or clear it
+explicitly when needed:
+
+```bash
+vcli priority update urgent --name "Urgent" --color "#DC2626"
+vcli priority update urgent --name "Urgent" --color "#DC2626" --clear-icon
+vcli state update review --name "Review" --position 3 --type in_progress --color "#F59E0B" --clear-icon
+vcli status update paused --name "Paused" --position 3 --type planned --color "#6B7280" --clear-icon
+```
+
 Platform admin:
 
 ```bash
@@ -232,6 +254,13 @@ Convex connection errors
 
 - Make sure `--app-url` points at the right Vector app first, since `vcli` fetches the Convex URL from that app when possible.
 - Otherwise set `--convex-url`, `NEXT_PUBLIC_CONVEX_URL`, or `CONVEX_URL`.
+
+Bridge or menu bar is stale after updating Node or the CLI
+
+- Run `vcli service start` again. It regenerates and restarts the LaunchAgent.
+- Use `vcli service logs` if `vcli service status` reports a degraded bridge.
+- Stable updates use the npm `latest` channel. Menu-bar automatic updates are
+  opt-in; use `vcli update` for an explicit update.
 
 Validation errors when creating teams or projects
 

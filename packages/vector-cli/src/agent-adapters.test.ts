@@ -413,6 +413,7 @@ describe('agent-adapters session discovery', () => {
   it('uses the Claude Agent SDK query resume flow for managed follow-up messages', async () => {
     const workspace = mkdtempSync(join(tmpdir(), 'vector-workspace-'));
     const close = vi.fn();
+    const assistantEvents: string[] = [];
     const queryMock = vi
       .fn()
       .mockImplementationOnce((args: { options?: { resume?: string } }) => {
@@ -476,13 +477,15 @@ describe('agent-adapters session discovery', () => {
       };
     });
 
-    const { launchProviderSession, resumeProviderSession } = await import(
-      './agent-adapters'
-    );
+    const { launchProviderSession, resumeProviderSession } =
+      await import('./agent-adapters');
     const launched = await launchProviderSession(
       'claude_code',
       workspace,
       'Start the delegated issue',
+      event => {
+        if (event.role === 'assistant') assistantEvents.push(event.text);
+      },
     );
     const resumed = await resumeProviderSession(
       'claude_code',
@@ -505,5 +508,19 @@ describe('agent-adapters session discovery', () => {
       launchCommand: '@anthropic-ai/claude-agent-sdk query(resume)',
     });
     expect(close).toHaveBeenCalledTimes(2);
+    expect(assistantEvents).toEqual(['Initial Claude reply']);
+  });
+
+  it('rejects unsupported generic-provider resumes instead of starting a fresh session', async () => {
+    const { resumeProviderSession } = await import('./agent-adapters');
+
+    await expect(
+      resumeProviderSession(
+        'cursor',
+        'unverifiable-session-id',
+        process.cwd(),
+        'Continue',
+      ),
+    ).rejects.toThrow(/cannot be resumed reliably/);
   });
 });

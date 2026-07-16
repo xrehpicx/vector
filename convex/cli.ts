@@ -477,7 +477,7 @@ export const updateTeam: any = action({
     orgSlug: v.string(),
     teamKey: v.string(),
     name: v.optional(v.string()),
-    description: v.optional(v.string()),
+    description: optionalStringOrNull,
     visibility: nullableVisibilityValidator,
     icon: optionalStringOrNull,
     color: optionalStringOrNull,

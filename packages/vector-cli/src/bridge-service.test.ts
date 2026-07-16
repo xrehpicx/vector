@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  statSync,
+  writeFileSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { spawnSync } from 'child_process';
@@ -9,25 +15,25 @@ import path from 'path';
 
 describe('BridgeConfig persistence', () => {
   let tempDir: string;
-  let originalHome: string | undefined;
+  let originalVectorHome: string | undefined;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'vector-bridge-test-'));
-    originalHome = process.env.HOME;
+    originalVectorHome = process.env.VECTOR_HOME;
+    process.env.VECTOR_HOME = join(tempDir, '.vector');
+    vi.resetModules();
   });
 
   afterEach(() => {
-    process.env.HOME = originalHome;
+    if (originalVectorHome === undefined) {
+      delete process.env.VECTOR_HOME;
+    } else {
+      process.env.VECTOR_HOME = originalVectorHome;
+    }
     vi.restoreAllMocks();
   });
 
   it('saveBridgeConfig creates config directory and writes JSON', async () => {
-    // We test the persistence logic directly
-    const configDir = join(tempDir, '.vector');
-    const configFile = join(configDir, 'bridge.json');
-    const { mkdirSync } = await import('fs');
-
-    mkdirSync(configDir, { recursive: true });
     const config = {
       deviceId: 'test-device-id',
       deviceKey: 'test-key',
@@ -37,27 +43,46 @@ describe('BridgeConfig persistence', () => {
       convexUrl: 'https://test.convex.cloud',
       registeredAt: '2026-03-18T00:00:00.000Z',
     };
-    writeFileSync(configFile, JSON.stringify(config, null, 2));
+    const { loadBridgeConfig, saveBridgeConfig } =
+      await import('./bridge-service');
+    saveBridgeConfig(config);
 
-    const loaded = JSON.parse(readFileSync(configFile, 'utf-8'));
-    expect(loaded.deviceId).toBe('test-device-id');
-    expect(loaded.deviceSecret).toBe('test-secret');
-    expect(loaded.displayName).toBe("Test's Mac");
+    expect(loadBridgeConfig()).toEqual(config);
+    expect(statSync(process.env.VECTOR_HOME!).mode & 0o777).toBe(0o700);
+    expect(
+      statSync(join(process.env.VECTOR_HOME!, 'bridge.json')).mode & 0o777,
+    ).toBe(0o600);
+    expect(
+      statSync(join(process.env.VECTOR_HOME!, 'device-key')).mode & 0o777,
+    ).toBe(0o600);
   });
 
-  it('loadBridgeConfig returns null when no config exists', () => {
-    const configFile = join(tempDir, 'nonexistent.json');
-    expect(existsSync(configFile)).toBe(false);
+  it('loadBridgeConfig returns null when no config exists', async () => {
+    const { loadBridgeConfig } = await import('./bridge-service');
+    expect(loadBridgeConfig()).toBeNull();
   });
 
-  it('loadBridgeConfig parses valid JSON', () => {
-    const configFile = join(tempDir, 'bridge.json');
+  it('does not create bridge state when stopping an unconfigured service', async () => {
+    const { stopBridge } = await import('./bridge-service');
+
+    expect(stopBridge()).toBe(false);
+    expect(existsSync(process.env.VECTOR_HOME!)).toBe(false);
+  });
+
+  it('loadBridgeConfig migrates an existing config to mode 0600', async () => {
+    const configDir = process.env.VECTOR_HOME!;
+    const configFile = join(configDir, 'bridge.json');
+    const { mkdirSync } = await import('fs');
+    mkdirSync(configDir, { recursive: true });
     writeFileSync(
       configFile,
       JSON.stringify({ deviceId: 'abc', deviceSecret: 'xyz' }),
     );
-    const loaded = JSON.parse(readFileSync(configFile, 'utf-8'));
-    expect(loaded.deviceId).toBe('abc');
+    chmodSync(configFile, 0o644);
+
+    const { loadBridgeConfig } = await import('./bridge-service');
+    expect(loadBridgeConfig()).toMatchObject({ deviceId: 'abc' });
+    expect(statSync(configFile).mode & 0o777).toBe(0o600);
   });
 });
 
@@ -92,6 +117,7 @@ describe('Process discovery helpers', () => {
       execSync('git rev-parse --abbrev-ref HEAD', {
         encoding: 'utf-8',
         cwd: tempDir,
+        stdio: ['ignore', 'pipe', 'ignore'],
         timeout: 3000,
       });
     } catch {
@@ -99,45 +125,6 @@ describe('Process discovery helpers', () => {
     }
 
     expect(result).toEqual({});
-  });
-});
-
-describe('Reply generation', () => {
-  // Test the reply logic directly
-  function generateReply(userMessage: string): string {
-    const lower = userMessage.toLowerCase().trim();
-    if (['hey', 'hi', 'hello'].includes(lower)) {
-      return "Hey! I'm running on your local machine via the Vector bridge. What would you like me to work on?";
-    }
-    if (lower.includes('status') || lower.includes('progress')) {
-      return "I'm making good progress. Currently reviewing the changes and running tests.";
-    }
-    if (lower.includes('stop') || lower.includes('cancel')) {
-      return 'Understood — wrapping up the current step.';
-    }
-    return `Got it — "${userMessage}". I'll incorporate that into my current work.`;
-  }
-
-  it('replies to greetings', () => {
-    expect(generateReply('hey')).toContain('running on your local machine');
-    expect(generateReply('Hi')).toContain('running on your local machine');
-    expect(generateReply('hello')).toContain('running on your local machine');
-  });
-
-  it('replies to status queries', () => {
-    expect(generateReply('what is the status?')).toContain('good progress');
-    expect(generateReply('any progress?')).toContain('good progress');
-  });
-
-  it('replies to stop/cancel', () => {
-    expect(generateReply('stop working')).toContain('wrapping up');
-    expect(generateReply('please cancel')).toContain('wrapping up');
-  });
-
-  it('echoes unknown messages', () => {
-    const reply = generateReply('refactor the auth module');
-    expect(reply).toContain('refactor the auth module');
-    expect(reply).toContain('Got it');
   });
 });
 
