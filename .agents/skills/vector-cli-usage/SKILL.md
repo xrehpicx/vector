@@ -204,6 +204,7 @@ vcli org use acme
 vcli team create --key eng --name "Engineering"
 vcli project create --key api --name "API" --team eng
 vcli --org acme request create --title "Ship CLI" --expected-output "A reviewed CLI release"
+vcli --org acme request claim REQ-1
 vcli --org acme work create --title "Ship CLI" --request REQ-1
 vcli --org acme work start WORK-1
 vcli --org acme task create WORK-1 --title "Implement command surface"
