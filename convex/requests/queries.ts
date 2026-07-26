@@ -142,25 +142,12 @@ export const list = query({
         : enriched;
     };
 
-    let page = await fetchPage(args.paginationOpts);
-    const inbox = await enrich(page.page);
-    let refillAttempts = 0;
-    while (
-      inbox.length < args.paginationOpts.numItems &&
-      !page.isDone &&
-      refillAttempts < 5
-    ) {
-      refillAttempts += 1;
-      page = await fetchPage({
-        ...args.paginationOpts,
-        cursor: page.continueCursor,
-        numItems: args.paginationOpts.numItems - inbox.length,
-      });
-      inbox.push(...(await enrich(page.page)));
-    }
+    const page = await fetchPage(args.paginationOpts);
     // Inbox priority is applied by by_org_focus_created before pagination, so
-    // urgent review/change requests cannot be hidden on a later page.
-    return { ...page, page: inbox };
+    // urgent review/change requests cannot be hidden on a later page. Convex
+    // only permits one paginated database query per function invocation; the
+    // client loads subsequent filtered pages with the returned cursor.
+    return { ...page, page: await enrich(page.page) };
   },
 });
 
