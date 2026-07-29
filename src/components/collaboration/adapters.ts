@@ -278,6 +278,7 @@ export function toCollaborationMessage({
 
   return {
     id: String(view.message._id),
+    clientMessageId: view.message.clientMessageId,
     channelId: String(view.message.channelId),
     body: view.message.body,
     createdAt: view.message.createdAt,

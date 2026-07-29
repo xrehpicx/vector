@@ -144,6 +144,7 @@ export interface CollaborationAgentRun {
 
 export interface CollaborationMessage {
   id: string;
+  clientMessageId?: string | null;
   channelId: string;
   body: string;
   createdAt: number;
@@ -180,6 +181,7 @@ export interface CollaborationDraftAttachment {
 }
 
 export interface SendCollaborationMessageInput {
+  clientMessageId: string;
   body: string;
   mentions: CollaborationMention[];
   attachments: File[];

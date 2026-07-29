@@ -22,7 +22,6 @@ import {
   SmilePlus,
   X,
 } from 'lucide-react';
-import { BarsSpinner } from '@/components/bars-spinner';
 import { UserAvatar } from '@/components/user-avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -113,6 +112,10 @@ export function MessageComposer({
   const fileInputId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachmentsRef = useRef<CollaborationDraftAttachment[]>([]);
+  const pendingAttachmentsRef = useRef(
+    new Map<string, CollaborationDraftAttachment[]>(),
+  );
+  const submitLockRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingActiveRef = useRef(false);
   const [body, setBody] = useState(initialValue);
@@ -120,7 +123,6 @@ export function MessageComposer({
   const [attachments, setAttachments] = useState<
     CollaborationDraftAttachment[]
   >([]);
-  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSuggestion, setActiveSuggestion] = useState(0);
 
@@ -182,10 +184,17 @@ export function MessageComposer({
   }, [body, compact]);
 
   useEffect(() => {
+    const pendingAttachments = pendingAttachmentsRef.current;
     return () => {
       for (const attachment of attachmentsRef.current) {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
       }
+      for (const pendingDraft of pendingAttachments.values()) {
+        for (const attachment of pendingDraft) {
+          if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+        }
+      }
+      pendingAttachments.clear();
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (typingActiveRef.current) onTypingChange?.(false, threadRootId);
     };
@@ -285,46 +294,111 @@ export function MessageComposer({
     }, 2000);
   }, [onTyping, onTypingChange, threadRootId]);
 
-  const submit = useCallback(async () => {
+  const submit = useCallback(() => {
     const trimmed = body.trim();
-    if ((!trimmed && attachments.length === 0) || isSending || disabled) return;
-
-    setIsSending(true);
-    setError(null);
-    try {
-      const activeMentions = mentions.filter(mention => {
-        const pattern = new RegExp(
-          `(^|\\s)@${escapeRegExp(mention.label)}(?=\\s|$|[.,!?;:])`,
-        );
-        return pattern.test(trimmed);
-      });
-      await onSend({
-        body: trimmed,
-        mentions: activeMentions,
-        attachments: attachments.map(attachment => attachment.file),
-        threadRootId,
-        replyToMessageId,
-      });
-      for (const attachment of attachments) {
-        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
-      }
-      setBody('');
-      setMentions([]);
-      setAttachments([]);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingActiveRef.current = false;
-      onTypingChange?.(false, threadRootId);
-      textareaRef.current?.focus();
-    } catch {
-      setError('Unable to send. Check your connection and try again.');
-    } finally {
-      setIsSending(false);
+    if (
+      (!trimmed && attachments.length === 0) ||
+      submitLockRef.current ||
+      disabled
+    ) {
+      return;
     }
+
+    submitLockRef.current = true;
+    setError(null);
+    const clientMessageId = crypto.randomUUID();
+    const draftAttachments = attachments;
+    const activeMentions = mentions.filter(mention => {
+      const pattern = new RegExp(
+        `(^|\\s)@${escapeRegExp(mention.label)}(?=\\s|$|[.,!?;:])`,
+      );
+      return pattern.test(trimmed);
+    });
+
+    pendingAttachmentsRef.current.set(clientMessageId, draftAttachments);
+    setBody('');
+    setMentions([]);
+    setAttachments([]);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingActiveRef.current = false;
+    onTypingChange?.(false, threadRootId);
+    textareaRef.current?.focus();
+
+    let sendPromise: Promise<void>;
+    try {
+      sendPromise = Promise.resolve(
+        onSend({
+          clientMessageId,
+          body: trimmed,
+          mentions: activeMentions,
+          attachments: draftAttachments.map(attachment => attachment.file),
+          threadRootId,
+          replyToMessageId,
+        }),
+      );
+    } catch (sendError) {
+      sendPromise = Promise.reject(sendError);
+    }
+
+    void sendPromise
+      .then(() => {
+        const sentAttachments =
+          pendingAttachmentsRef.current.get(clientMessageId) ?? [];
+        for (const attachment of sentAttachments) {
+          if (attachment.previewUrl) {
+            URL.revokeObjectURL(attachment.previewUrl);
+          }
+        }
+        pendingAttachmentsRef.current.delete(clientMessageId);
+      })
+      .catch(() => {
+        pendingAttachmentsRef.current.delete(clientMessageId);
+        setBody(current => {
+          if (!current.trim()) return trimmed;
+          if (!trimmed) return current;
+          return `${trimmed}\n${current}`;
+        });
+        setMentions(current => {
+          const restored = [...activeMentions];
+          for (const mention of current) {
+            if (
+              !restored.some(
+                item => item.id === mention.id && item.type === mention.type,
+              )
+            ) {
+              restored.push(mention);
+            }
+          }
+          return restored;
+        });
+        setAttachments(current => {
+          const restored = [
+            ...draftAttachments,
+            ...current.filter(
+              item =>
+                !draftAttachments.some(
+                  draftAttachment => draftAttachment.id === item.id,
+                ),
+            ),
+          ];
+          const kept = restored.slice(0, MAX_ATTACHMENTS);
+          for (const discarded of restored.slice(MAX_ATTACHMENTS)) {
+            if (discarded.previewUrl) {
+              URL.revokeObjectURL(discarded.previewUrl);
+            }
+          }
+          return kept;
+        });
+        setError('Message was not sent. Your draft has been restored.');
+      });
+
+    requestAnimationFrame(() => {
+      submitLockRef.current = false;
+    });
   }, [
     attachments,
     body,
     disabled,
-    isSending,
     mentions,
     onSend,
     onTypingChange,
@@ -472,13 +546,13 @@ export function MessageComposer({
         <label htmlFor={textareaId} className='sr-only'>
           Message {channelName}
         </label>
-        <div className='flex min-w-0 flex-wrap items-end gap-0.5 p-2 sm:flex-nowrap'>
+        <div className='flex min-w-0 flex-nowrap items-center gap-0.5 p-2'>
           <input
             id={fileInputId}
             type='file'
             multiple
             className='hidden'
-            disabled={disabled || isSending}
+            disabled={disabled}
             accept='image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.zip'
             onChange={event => {
               handleFiles(event.target.files);
@@ -491,7 +565,7 @@ export function MessageComposer({
             value={body}
             name='message'
             rows={1}
-            disabled={disabled || isSending}
+            disabled={disabled}
             aria-describedby={
               error
                 ? `${textareaId}-error`
@@ -556,7 +630,7 @@ export function MessageComposer({
               }
             }}
             className={cn(
-              'placeholder:text-muted-foreground/75 order-first max-h-44 min-h-10 min-w-0 basis-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-base leading-6 outline-none sm:min-h-9 sm:flex-1 sm:basis-auto sm:text-sm',
+              'placeholder:text-muted-foreground/75 max-h-44 min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-base leading-6 outline-none sm:min-h-9 sm:py-1.5 sm:text-sm',
               compact && 'min-h-9',
             )}
           />
@@ -568,9 +642,7 @@ export function MessageComposer({
                 size='icon-sm'
                 className='text-muted-foreground hover:text-foreground size-10 transition-[background-color,color,transform] active:scale-[0.96] sm:size-7'
                 onClick={() => document.getElementById(fileInputId)?.click()}
-                disabled={
-                  disabled || isSending || attachments.length >= MAX_ATTACHMENTS
-                }
+                disabled={disabled || attachments.length >= MAX_ATTACHMENTS}
                 aria-label='Attach files'
               >
                 <Paperclip
@@ -588,7 +660,7 @@ export function MessageComposer({
                 variant='ghost'
                 size='icon-sm'
                 className='text-muted-foreground hover:text-foreground size-10 transition-[background-color,color,transform] active:scale-[0.96] sm:size-7'
-                disabled={disabled || isSending}
+                disabled={disabled}
                 aria-label='Add a link'
                 onClick={() => {
                   setBody(
@@ -612,7 +684,7 @@ export function MessageComposer({
                 variant='ghost'
                 size='icon-sm'
                 className='text-muted-foreground hover:text-foreground size-10 transition-[background-color,color,transform] active:scale-[0.96] sm:size-7'
-                disabled={disabled || isSending}
+                disabled={disabled}
                 aria-label='Add an emoji'
                 onClick={() => {
                   setBody(current => `${current}🙂`);
@@ -639,21 +711,15 @@ export function MessageComposer({
                 )}
                 onClick={() => void submit()}
                 disabled={
-                  disabled ||
-                  isSending ||
-                  (!body.trim() && attachments.length === 0)
+                  disabled || (!body.trim() && attachments.length === 0)
                 }
                 aria-label={submitLabel}
                 aria-keyshortcuts='Enter'
               >
-                {isSending ? (
-                  <BarsSpinner size={12} aria-label='Sending message' />
-                ) : (
-                  <ArrowUp
-                    className='size-[18px] sm:size-3.5'
-                    aria-hidden='true'
-                  />
-                )}
+                <ArrowUp
+                  className='size-[18px] sm:size-3.5'
+                  aria-hidden='true'
+                />
               </Button>
             </TooltipTrigger>
             <TooltipContent side='top'>{submitLabel} · Enter</TooltipContent>

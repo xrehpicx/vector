@@ -285,6 +285,9 @@ function ActiveChannel({
     kind: 'request' | 'work';
     message: CollaborationMessage;
   } | null>(null);
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    CollaborationMessage[]
+  >([]);
   const [localAttachmentPreviews, setLocalAttachmentPreviews] = useState<
     Record<string, LocalAttachmentPreview[]>
   >({});
@@ -354,6 +357,46 @@ function ActiveChannel({
     [messagePage.results],
   );
   const threadResponses = useQueries(threadRequests);
+  const confirmedClientMessageIds = useMemo(() => {
+    const confirmed = new Set<string>();
+    for (const view of messagePage.results) {
+      if (view.message.clientMessageId) {
+        confirmed.add(view.message.clientMessageId);
+      }
+    }
+    for (const response of Object.values(threadResponses)) {
+      if (
+        !response ||
+        response instanceof Error ||
+        typeof response !== 'object' ||
+        !('page' in response)
+      ) {
+        continue;
+      }
+      for (const view of response.page as MessageView[]) {
+        if (view.message.clientMessageId) {
+          confirmed.add(view.message.clientMessageId);
+        }
+      }
+    }
+    return confirmed;
+  }, [messagePage.results, threadResponses]);
+  const confirmedClientMessageKey = useMemo(
+    () => [...confirmedClientMessageIds].sort().join('|'),
+    [confirmedClientMessageIds],
+  );
+
+  useEffect(() => {
+    if (!confirmedClientMessageKey) return;
+    setOptimisticMessages(current => {
+      const next = current.filter(
+        message =>
+          !message.clientMessageId ||
+          !confirmedClientMessageIds.has(message.clientMessageId),
+      );
+      return next.length === current.length ? current : next;
+    });
+  }, [confirmedClientMessageIds, confirmedClientMessageKey]);
 
   const channelMembers = useMemo(
     () =>
@@ -405,7 +448,7 @@ function ActiveChannel({
     });
   }, [availableAgents, eventResponses, runPage.results]);
   const messages = useMemo(() => {
-    return [...messagePage.results].reverse().map(view => {
+    const confirmedMessages = [...messagePage.results].reverse().map(view => {
       const response = entityResponses[`message:${String(view.message._id)}`];
       const entities =
         Array.isArray(response) && !(response instanceof Error)
@@ -424,17 +467,28 @@ function ActiveChannel({
         localAttachmentPreviews[message.id],
       );
     });
+    const pendingChannelMessages = optimisticMessages.filter(
+      message =>
+        !message.threadRootId &&
+        (!message.clientMessageId ||
+          !confirmedClientMessageIds.has(message.clientMessageId)),
+    );
+    return [...confirmedMessages, ...pendingChannelMessages].sort(
+      (first, second) => first.createdAt - second.createdAt,
+    );
   }, [
     availableAgents,
     channelMembers,
+    confirmedClientMessageIds,
     currentUser.id,
     entityResponses,
     localAttachmentPreviews,
     mappedRuns,
     messagePage.results,
+    optimisticMessages,
   ]);
   const threadMessages = useMemo(() => {
-    return Object.fromEntries(
+    const confirmedThreads = Object.fromEntries(
       messagePage.results
         .filter(view => view.message.replyCount > 0)
         .map(root => {
@@ -464,14 +518,32 @@ function ActiveChannel({
             }),
           ];
         }),
-    );
+    ) as Record<string, CollaborationMessage[]>;
+
+    for (const message of optimisticMessages) {
+      if (
+        !message.threadRootId ||
+        (message.clientMessageId &&
+          confirmedClientMessageIds.has(message.clientMessageId))
+      ) {
+        continue;
+      }
+      confirmedThreads[message.threadRootId] = [
+        ...(confirmedThreads[message.threadRootId] ?? []),
+        message,
+      ].sort((first, second) => first.createdAt - second.createdAt);
+    }
+
+    return confirmedThreads;
   }, [
     availableAgents,
     channelMembers,
+    confirmedClientMessageIds,
     currentUser.id,
     localAttachmentPreviews,
     mappedRuns,
     messagePage.results,
+    optimisticMessages,
     threadResponses,
   ]);
 
@@ -526,12 +598,40 @@ function ActiveChannel({
   };
 
   const handleSend = async (input: SendCollaborationMessageInput) => {
+    const clientMessageId = input.clientMessageId || crypto.randomUUID();
     const pendingPreviews = input.attachments.map(file => ({
       kind: attachmentKind(file),
       name: file.name,
       size: file.size,
       url: URL.createObjectURL(file),
     }));
+    const optimisticMessage: CollaborationMessage = {
+      id: `optimistic:${clientMessageId}`,
+      clientMessageId,
+      channelId: String(channelId),
+      body: input.body,
+      createdAt: Date.now(),
+      threadRootId: input.threadRootId,
+      replyToMessageId: input.replyToMessageId,
+      replyCount: 0,
+      author: { kind: 'user', user: currentUser },
+      attachments: pendingPreviews.map((preview, index) => ({
+        id: `optimistic:${clientMessageId}:${index}`,
+        kind: preview.kind,
+        name: preview.name,
+        contentType:
+          input.attachments[index]?.type || 'application/octet-stream',
+        size: preview.size,
+        url: preview.url,
+      })),
+      reactions: [],
+      isPinned: false,
+      isSaved: false,
+      canEdit: false,
+      canDelete: false,
+      linkedEntities: [],
+    };
+    setOptimisticMessages(current => [...current, optimisticMessage]);
 
     try {
       const attachments = await uploadFiles(input.attachments);
@@ -545,7 +645,7 @@ function ActiveChannel({
         replyToMessageId: input.replyToMessageId
           ? (input.replyToMessageId as Id<'channelMessages'>)
           : undefined,
-        clientMessageId: crypto.randomUUID(),
+        clientMessageId,
         mentionedUserIds: input.mentions
           .filter(mention => mention.type === 'user')
           .map(mention => mention.id as Id<'users'>),
@@ -571,6 +671,9 @@ function ActiveChannel({
       }
       await updatePresence({ roomId, data: { typing: false } });
     } catch (error) {
+      setOptimisticMessages(current =>
+        current.filter(message => message.clientMessageId !== clientMessageId),
+      );
       for (const preview of pendingPreviews) {
         URL.revokeObjectURL(preview.url);
       }

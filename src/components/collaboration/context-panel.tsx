@@ -131,7 +131,7 @@ function ThreadPanel({
   );
 
   return (
-    <div className='flex h-full min-h-0 flex-col'>
+    <div className='flex h-full min-h-0 min-w-0 flex-col overflow-hidden'>
       <div className='flex h-10 shrink-0 items-center gap-2 border-b px-3'>
         <div className='flex min-w-0 flex-1 items-baseline gap-1.5'>
           <h2 className='shrink-0 text-sm font-semibold'>Thread</h2>
@@ -150,9 +150,13 @@ function ThreadPanel({
           <X className='size-3.5' aria-hidden='true' />
         </Button>
       </div>
-      <div className='flex min-h-0 flex-1 flex-col'>
-        <ScrollArea className='min-h-0 flex-1'>
-          <div className='py-1.5'>
+      <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
+        <ScrollArea
+          className='min-h-0 min-w-0 flex-1'
+          viewportClassName='overflow-x-hidden'
+          scrollbars='vertical'
+        >
+          <div className='max-w-full min-w-0 py-1.5'>
             <MessageItem
               message={root}
               onToggleReaction={onToggleReaction}

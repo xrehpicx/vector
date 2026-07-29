@@ -138,7 +138,12 @@ function AttachmentView({
     const width = attachment.width ?? 720;
     const height = attachment.height ?? 480;
     return (
-      <figure className={cn('min-w-0', grouped ? 'w-full' : 'max-w-xl')}>
+      <figure
+        className={cn(
+          'max-w-full min-w-0',
+          grouped ? 'w-full' : 'w-full max-w-xl',
+        )}
+      >
         <button
           type='button'
           onClick={onOpen}
@@ -187,7 +192,12 @@ function AttachmentView({
 
   if (attachment.kind === 'video') {
     return (
-      <figure className={cn('min-w-0', grouped ? 'w-full' : 'max-w-xl')}>
+      <figure
+        className={cn(
+          'max-w-full min-w-0',
+          grouped ? 'w-full' : 'w-full max-w-xl',
+        )}
+      >
         <div
           className={cn(
             'bg-muted/30 relative overflow-hidden rounded-lg',
@@ -241,7 +251,7 @@ function AttachmentView({
 
   if (attachment.kind === 'audio') {
     return (
-      <div className='bg-muted/35 max-w-md rounded-lg border p-2'>
+      <div className='bg-muted/35 w-full max-w-md min-w-0 rounded-lg border p-2'>
         <p className='mb-1 truncate text-xs font-medium'>{attachment.name}</p>
         <audio
           src={attachment.url}
@@ -258,7 +268,7 @@ function AttachmentView({
     <a
       href={attachment.url}
       download={attachment.name}
-      className='hover:bg-muted/50 focus-visible:ring-ring flex max-w-sm items-center gap-2 rounded-lg border p-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+      className='hover:bg-muted/50 focus-visible:ring-ring flex w-full max-w-sm min-w-0 items-center gap-2 overflow-hidden rounded-lg border p-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
     >
       <div className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-md'>
         <File className='size-4' aria-hidden='true' />
@@ -459,7 +469,7 @@ export function MessageItem({
     <>
       <article
         id={`message-${message.id}`}
-        className='group/message hover:bg-muted/25 relative flex gap-2 px-3 py-2'
+        className='group/message hover:bg-muted/25 relative flex max-w-full min-w-0 gap-2 px-3 py-2'
         aria-label={
           authorAgent
             ? `Message from agent ${authorAgent.name}`
@@ -587,10 +597,10 @@ export function MessageItem({
               {message.attachments.length > 0 ? (
                 <div
                   className={cn(
-                    'mt-2 gap-2',
+                    'mt-2 max-w-full min-w-0 gap-2',
                     message.attachments.length > 1
-                      ? 'grid max-w-xl grid-cols-2 sm:grid-cols-3'
-                      : 'flex max-w-3xl flex-wrap',
+                      ? 'grid w-full max-w-xl grid-cols-2 sm:grid-cols-3'
+                      : 'flex w-full max-w-3xl flex-wrap',
                   )}
                 >
                   {message.attachments.map(attachment => {
