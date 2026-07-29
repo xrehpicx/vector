@@ -33,7 +33,7 @@ private struct AuthenticatedVectorMobileView: View {
   @ObservedObject var viewModel: VectorMobileViewModel
   @ObservedObject var sessionController: VectorMobileSessionController
   @StateObject private var pushCoordinator = VectorPushNotificationCoordinator.shared
-  @State private var selectedTab: VectorMobileTab = .work
+  @State private var selectedTab: VectorMobileTab = .home
   @State private var isShowingNotificationPrompt = false
   @State private var hasPresentedNotificationPromptThisLaunch = false
   @State private var notificationHrefToOpen: String?
@@ -41,28 +41,20 @@ private struct AuthenticatedVectorMobileView: View {
   var body: some View {
     TabView(selection: $selectedTab) {
       NavigationStack {
-        MobileRequestsScreen(viewModel: viewModel, sessionController: sessionController)
+        MobileConversationHomeScreen(viewModel: viewModel, directOnly: false)
       }
       .tabItem {
-        Label(VectorMobileTab.requests.title, systemImage: VectorMobileTab.requests.systemImage)
+        Label(VectorMobileTab.home.title, systemImage: VectorMobileTab.home.systemImage)
       }
-      .tag(VectorMobileTab.requests)
+      .tag(VectorMobileTab.home)
 
       NavigationStack {
-        MobileWorkScreen(viewModel: viewModel, sessionController: sessionController)
+        MobileConversationHomeScreen(viewModel: viewModel, directOnly: true)
       }
       .tabItem {
-        Label(VectorMobileTab.work.title, systemImage: VectorMobileTab.work.systemImage)
+        Label(VectorMobileTab.directMessages.title, systemImage: VectorMobileTab.directMessages.systemImage)
       }
-      .tag(VectorMobileTab.work)
-
-      NavigationStack {
-        WorkspaceScreen(viewModel: viewModel)
-      }
-      .tabItem {
-        Label(VectorMobileTab.workspace.title, systemImage: VectorMobileTab.workspace.systemImage)
-      }
-      .tag(VectorMobileTab.workspace)
+      .tag(VectorMobileTab.directMessages)
 
       NavigationStack {
         InboxScreen(
@@ -72,21 +64,29 @@ private struct AuthenticatedVectorMobileView: View {
         )
       }
       .tabItem {
-        Label(VectorMobileTab.inbox.title, systemImage: VectorMobileTab.inbox.systemImage)
+        Label(VectorMobileTab.activity.title, systemImage: VectorMobileTab.activity.systemImage)
       }
-      .tag(VectorMobileTab.inbox)
+      .tag(VectorMobileTab.activity)
 
       NavigationStack {
-        MobileSettingsScreen(
+        MobileCollaborationSearchScreen(viewModel: viewModel)
+      }
+      .tabItem {
+        Label(VectorMobileTab.search.title, systemImage: VectorMobileTab.search.systemImage)
+      }
+      .tag(VectorMobileTab.search)
+
+      NavigationStack {
+        MobileMoreScreen(
           viewModel: viewModel,
           sessionController: sessionController,
           pushCoordinator: pushCoordinator
         )
       }
       .tabItem {
-        Label(VectorMobileTab.settings.title, systemImage: VectorMobileTab.settings.systemImage)
+        Label(VectorMobileTab.more.title, systemImage: VectorMobileTab.more.systemImage)
       }
-      .tag(VectorMobileTab.settings)
+      .tag(VectorMobileTab.more)
     }
     .tint(VectorTheme.accent)
     .onAppear {
@@ -167,7 +167,7 @@ private struct AuthenticatedVectorMobileView: View {
     if let target = pendingNotificationTarget(for: trimmedHref),
        target.orgSlug == viewModel.configuration.orgSlug
     {
-      selectedTab = .inbox
+      selectedTab = .activity
       notificationHrefToOpen = trimmedHref
     } else {
       #if os(iOS)
@@ -209,31 +209,31 @@ private func pendingNotificationTarget(for href: String?) -> PendingNotification
 }
 
 private enum VectorMobileTab: String, CaseIterable, Identifiable {
-  case requests
-  case work
-  case workspace
-  case inbox
-  case settings
+  case home
+  case directMessages
+  case activity
+  case search
+  case more
 
   var id: String { rawValue }
 
   var title: String {
     switch self {
-    case .requests: "Requests"
-    case .work: "Work"
-    case .workspace: "Workspace"
-    case .inbox: "Inbox"
-    case .settings: "Settings"
+    case .home: "Home"
+    case .directMessages: "DMs"
+    case .activity: "Activity"
+    case .search: "Search"
+    case .more: "More"
     }
   }
 
   var systemImage: String {
     switch self {
-    case .requests: "tray"
-    case .work: "scope"
-    case .workspace: "square.grid.2x2"
-    case .inbox: "bell"
-    case .settings: "gearshape"
+    case .home: "house"
+    case .directMessages: "bubble.left.and.bubble.right"
+    case .activity: "bell"
+    case .search: "magnifyingglass"
+    case .more: "ellipsis"
     }
   }
 }

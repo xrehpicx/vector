@@ -270,4 +270,193 @@ enum VectorMockData {
       createdAt: 1_774_550_000_000
     ),
   ]
+
+  static let collaborationChannels = [
+    VectorChannelListItem(
+      channel: VectorChannel(
+        id: "channel-general",
+        kind: .public,
+        name: "general",
+        slug: "general",
+        topic: "Company-wide updates and conversation",
+        description: "Everyone in the workspace",
+        isDefault: true,
+        lastMessageAt: 1_774_590_000_000,
+        createdAt: 1_774_000_000_000,
+        updatedAt: 1_774_590_000_000
+      ),
+      membership: nil,
+      unreadCount: 3
+    ),
+    VectorChannelListItem(
+      channel: VectorChannel(
+        id: "channel-product",
+        kind: .public,
+        name: "product",
+        slug: "product",
+        topic: "Product decisions, demos, and launch notes",
+        lastMessageAt: 1_774_585_000_000,
+        createdAt: 1_774_100_000_000,
+        updatedAt: 1_774_585_000_000
+      ),
+      membership: nil,
+      unreadCount: 0
+    ),
+    VectorChannelListItem(
+      channel: VectorChannel(
+        id: "channel-maya",
+        kind: .direct,
+        name: "Maya",
+        slug: "dm-maya",
+        topic: "Direct message",
+        lastMessageAt: 1_774_580_000_000,
+        createdAt: 1_774_200_000_000,
+        updatedAt: 1_774_580_000_000
+      ),
+      membership: nil,
+      unreadCount: 1
+    ),
+  ]
+
+  static let collaborationAgent = VectorRegisteredAgent(
+    id: "agent-design",
+    ownerUserId: raj.id,
+    name: "Design Agent",
+    handle: "design-agent",
+    description: "Reviews interfaces and follows up with implementation notes.",
+    provider: "codex",
+    defaultFolder: "/workspace/vector",
+    lifecycleStatus: "ready"
+  )
+
+  static let collaborationMessages = [
+    VectorMessageView(
+      message: VectorChannelMessage(
+        id: "message-welcome",
+        channelId: "channel-general",
+        actorKind: "user",
+        authorUserId: maya.id,
+        body: "Welcome to the native collaboration workspace. Share an update, attach media, or mention @design-agent.",
+        replyCount: 2,
+        lastReplyAt: 1_774_581_000_000,
+        createdAt: 1_774_570_000_000
+      ),
+      authorUser: maya,
+      authorAgent: nil
+    ),
+    VectorMessageView(
+      message: VectorChannelMessage(
+        id: "message-agent",
+        channelId: "channel-general",
+        actorKind: "agent",
+        authorAgentId: collaborationAgent.id,
+        body: "I’m connected to Raj’s Mac and ready to help from the Vector workspace.",
+        createdAt: 1_774_580_000_000
+      ),
+      authorUser: nil,
+      authorAgent: VectorMessageAgentAuthor(
+        id: collaborationAgent.id,
+        name: collaborationAgent.name,
+        handle: collaborationAgent.handle,
+        avatar: collaborationAgent.avatar,
+        ownerUserId: collaborationAgent.ownerUserId,
+        provider: collaborationAgent.provider,
+        lifecycleStatus: collaborationAgent.lifecycleStatus
+      )
+    ),
+    VectorMessageView(
+      message: VectorChannelMessage(
+        id: "message-video",
+        channelId: "channel-general",
+        actorKind: "user",
+        authorUserId: raj.id,
+        body: "Here’s a video reference. It stays contained and uses the native player.",
+        createdAt: 1_774_590_000_000
+      ),
+      authorUser: raj,
+      authorAgent: nil,
+      attachments: [
+        VectorMessageAttachment(
+          id: "attachment-video",
+          channelId: "channel-general",
+          messageId: "message-video",
+          storageId: "storage-video",
+          kind: "video",
+          name: "product-walkthrough.m3u8",
+          contentType: "application/vnd.apple.mpegurl",
+          size: 1_200_000,
+          width: 1280,
+          height: 720,
+          duration: 31,
+          createdAt: 1_774_590_000_000
+        ),
+      ]
+    ),
+    VectorMessageView(
+      message: VectorChannelMessage(
+        id: "message-thread-reply-1",
+        channelId: "channel-general",
+        actorKind: "user",
+        authorUserId: raj.id,
+        body: "I’ll turn this into a short launch checklist.",
+        threadRootId: "message-welcome",
+        replyToMessageId: "message-welcome",
+        createdAt: 1_774_580_500_000
+      ),
+      authorUser: raj,
+      authorAgent: nil
+    ),
+    VectorMessageView(
+      message: VectorChannelMessage(
+        id: "message-thread-reply-2",
+        channelId: "channel-general",
+        actorKind: "agent",
+        authorAgentId: collaborationAgent.id,
+        body: "I can review that checklist when you mention me.",
+        threadRootId: "message-welcome",
+        replyToMessageId: "message-thread-reply-1",
+        createdAt: 1_774_581_000_000
+      ),
+      authorUser: nil,
+      authorAgent: VectorMessageAgentAuthor(
+        id: collaborationAgent.id,
+        name: collaborationAgent.name,
+        handle: collaborationAgent.handle,
+        avatar: collaborationAgent.avatar,
+        ownerUserId: collaborationAgent.ownerUserId,
+        provider: collaborationAgent.provider,
+        lifecycleStatus: collaborationAgent.lifecycleStatus
+      )
+    ),
+  ]
+
+  static let collaborationPriorityMessages = [
+    VectorPriorityInboxItem(
+      message: collaborationMessages[4],
+      channel: collaborationChannels[0].channel,
+      reason: "followed_thread",
+      occurredAt: collaborationMessages[4].message.createdAt
+    ),
+    VectorPriorityInboxItem(
+      message: collaborationMessages[0],
+      channel: collaborationChannels[0].channel,
+      reason: "mention",
+      occurredAt: collaborationMessages[0].message.createdAt
+    ),
+  ]
+
+  static let collaborationChannelAgents = [
+    VectorChannelAgentView(
+      membership: VectorChannelAgentMembership(
+        id: "agent-membership-design",
+        channelId: "channel-general",
+        agentId: collaborationAgent.id,
+        wakeMode: "mentions",
+        createdAt: 1_774_500_000_000,
+        updatedAt: 1_774_500_000_000
+      ),
+      agent: collaborationAgent,
+      owner: raj
+    ),
+  ]
 }

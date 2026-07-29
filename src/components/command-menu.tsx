@@ -36,6 +36,8 @@ import {
   Check,
   Signal,
   Target,
+  Hash,
+  Bot,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -713,6 +715,20 @@ export function CommandMenu() {
 
               {/* Navigation */}
               <CommandGroup heading='Go to'>
+                <CommandItem
+                  value='go-channels'
+                  onSelect={() => navigate(`/${orgSlug}/channels`)}
+                >
+                  <Hash className='size-4 shrink-0' />
+                  <span>Channels</span>
+                </CommandItem>
+                <CommandItem
+                  value='go-agents'
+                  onSelect={() => navigate(`/${orgSlug}/agents`)}
+                >
+                  <Bot className='size-4 shrink-0' />
+                  <span>Agents</span>
+                </CommandItem>
                 <CommandItem
                   value='go-requests'
                   onSelect={() => navigate(`/${orgSlug}/requests`)}

@@ -46,7 +46,7 @@ const PRESENCE_OPTIONS: {
   { value: 'invisible', description: 'Appear offline to others' },
 ];
 
-export function UserMenu() {
+export function UserMenu({ compact = false }: { compact?: boolean }) {
   const user = useCachedQuery(api.users.currentUser);
   const status = useCachedQuery(api.status.getCurrentUserStatus);
   const setPresence = useMutation(api.status.setPresence);
@@ -65,7 +65,18 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant='ghost' className='w-full justify-start gap-2 p-2'>
+        <Button
+          variant='ghost'
+          size={compact ? 'icon-sm' : undefined}
+          className={cn(
+            compact
+              ? 'size-8 justify-center p-0'
+              : 'w-full justify-start gap-2 p-2',
+          )}
+          aria-label={
+            compact ? `Open profile menu for ${user.name}` : undefined
+          }
+        >
           <UserAvatar
             name={user.name}
             email={user.email}
@@ -75,10 +86,16 @@ export function UserMenu() {
             showStatus
             presence={currentPresence}
           />
-          <div className='flex min-w-0 flex-col items-start'>
-            <span className='truncate text-sm font-medium'>{user.name}</span>
-          </div>
-          <ChevronsUpDown className='text-muted-foreground ml-auto size-3.5' />
+          {!compact ? (
+            <>
+              <div className='flex min-w-0 flex-col items-start'>
+                <span className='truncate text-sm font-medium'>
+                  {user.name}
+                </span>
+              </div>
+              <ChevronsUpDown className='text-muted-foreground ml-auto size-3.5' />
+            </>
+          ) : null}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className='w-56' align='end'>

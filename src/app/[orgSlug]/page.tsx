@@ -15,7 +15,7 @@ export default async function OrgRootPage({ params }: OrgRootPageProps) {
 
   // Logged-in users go straight to the main app
   if (await isAuthenticated()) {
-    redirect(`/${orgSlug}/requests`);
+    redirect(`/${orgSlug}/channels`);
   }
 
   // Anonymous visitors see the public landing page if configured
@@ -55,5 +55,5 @@ export default async function OrgRootPage({ params }: OrgRootPageProps) {
     console.error('Failed to load org landing page', error);
   }
 
-  redirect(`/${orgSlug}/requests`);
+  redirect(`/${orgSlug}/channels`);
 }

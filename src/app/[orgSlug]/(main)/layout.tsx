@@ -17,18 +17,38 @@ import { AssistantIssueDndProvider } from '@/components/assistant/assistant-issu
 import { UserMenu } from '@/components/user-menu';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { BarsSpinner } from '@/components/bars-spinner';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CommandMenu } from '@/components/command-menu';
 import { CommandMenuActions } from '@/components/command-menu-actions';
 import {
   CheckSquare,
-  Inbox,
+  AtSign,
+  Bookmark,
+  Bot,
   BriefcaseBusiness,
-  FolderOpen,
-  Users,
-  Menu,
+  ChevronRight,
+  FileInput,
+  Files,
+  FolderKanban,
+  House,
+  Inbox,
+  LayoutGrid,
+  MessagesSquare,
+  PanelsTopLeft,
+  Search,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sparkles,
+  UsersRound,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api, useCachedQuery, useMutation } from '@/lib/convex';
@@ -36,6 +56,12 @@ import { rememberLastWorkspaceNavigation } from '@/lib/workspace-navigation';
 import { useParams, usePathname } from 'next/navigation';
 import { useRouter } from 'nextjs-toploader/app';
 import { Doc } from '@/convex/_generated/dataModel';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -45,6 +71,8 @@ const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 224; // w-56
 const SIDEBAR_STORAGE_KEY = 'vector-sidebar-width';
+const SIDEBAR_COLLAPSED_WIDTH = 52;
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'vector-sidebar-collapsed';
 
 function parseSidebarWidth(raw: string | null): number {
   if (!raw) return SIDEBAR_DEFAULT_WIDTH;
@@ -88,6 +116,7 @@ export function BottomBarSlot({ children }: { children: ReactNode }) {
 
 function useResizableSidebar() {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [collapsed, setCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const isResizing = useRef(false);
   const hydrated = useRef(false);
@@ -96,6 +125,9 @@ function useResizableSidebar() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setWidth(parseSidebarWidth(localStorage.getItem(SIDEBAR_STORAGE_KEY)));
+      setCollapsed(
+        localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true',
+      );
       hydrated.current = true;
     });
 
@@ -138,7 +170,23 @@ function useResizableSidebar() {
     }
   }, [width]);
 
-  return { width, isDragging, handleMouseDown };
+  useEffect(() => {
+    if (hydrated.current) {
+      localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+    }
+  }, [collapsed]);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed(value => !value);
+  }, []);
+
+  return {
+    width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : width,
+    collapsed,
+    isDragging,
+    handleMouseDown,
+    toggleCollapsed,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -150,22 +198,75 @@ function BottomNavItem({
   icon: Icon,
   label,
   isActive,
+  badge,
 }: {
   href: string;
   icon: typeof CheckSquare;
   label: string;
   isActive: boolean;
+  badge?: number;
 }) {
   return (
     <Link
       href={href}
+      aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors',
-        isActive ? 'text-foreground' : 'text-muted-foreground',
+        'focus-visible:ring-ring relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] leading-3 font-medium transition-colors outline-none focus-visible:ring-2',
+        isActive
+          ? 'text-foreground'
+          : 'text-muted-foreground hover:text-foreground',
       )}
     >
-      <Icon className='size-5' strokeWidth={isActive ? 2.2 : 1.8} />
+      <span
+        className={cn(
+          'relative flex h-7 min-w-10 items-center justify-center rounded-full px-2 transition-colors',
+          isActive && 'bg-foreground/8',
+        )}
+      >
+        <Icon
+          className='size-[19px]'
+          strokeWidth={isActive ? 2.25 : 1.8}
+          aria-hidden='true'
+        />
+        {badge ? (
+          <span className='bg-primary text-primary-foreground absolute -top-1 -right-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-[9px] leading-4 font-semibold tabular-nums'>
+            {badge > 99 ? '99+' : badge}
+          </span>
+        ) : null}
+      </span>
       <span>{label}</span>
+    </Link>
+  );
+}
+
+function MobileMoreLink({
+  href,
+  label,
+  icon: Icon,
+  onNavigate,
+}: {
+  href: string;
+  label: string;
+  icon: typeof CheckSquare;
+  onNavigate: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className='hover:bg-muted/65 focus-visible:ring-ring flex min-h-12 items-center gap-3 rounded-xl px-3 text-[15px] font-medium transition-colors outline-none focus-visible:ring-2'
+    >
+      <span className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg'>
+        <Icon
+          className='text-muted-foreground size-[17px]'
+          aria-hidden='true'
+        />
+      </span>
+      <span className='min-w-0 flex-1 truncate'>{label}</span>
+      <ChevronRight
+        className='text-muted-foreground/65 size-4'
+        aria-hidden='true'
+      />
     </Link>
   );
 }
@@ -189,8 +290,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const inviteRecoveryAttemptedRef = useRef(false);
   const {
     width: sidebarWidth,
+    collapsed: sidebarCollapsed,
     isDragging,
     handleMouseDown,
+    toggleCollapsed,
   } = useResizableSidebar();
 
   // Fetch current user and organization data
@@ -209,6 +312,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const userOrganizations = useCachedQuery(
     api.users.getOrganizations,
     user?._id ? {} : 'skip',
+  );
+  const inboxCounts = useCachedQuery(
+    api.notifications.queries.inboxCounts,
+    user?._id ? { orgSlug } : 'skip',
   );
 
   // Route matching for bottom bar active state
@@ -232,7 +339,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       try {
         const result = await acceptPendingInvitation({ orgSlug });
         if (result.organizationSlug && result.organizationSlug !== orgSlug) {
-          router.replace(`/${result.organizationSlug}/requests`);
+          router.replace(`/${result.organizationSlug}/channels`);
         }
       } catch (error) {
         console.error('Failed to accept pending invitation', error);
@@ -321,7 +428,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
           </div>
         </aside>
-        <main className='bg-background mx-2 mt-2 mb-16 flex-1 overflow-x-hidden overflow-y-auto rounded-md border lg:mb-2 lg:ml-0' />
+        <main className='bg-background mb-[calc(3.5rem+env(safe-area-inset-bottom))] flex-1 overflow-x-hidden overflow-y-auto lg:mx-2 lg:mt-2 lg:mb-2 lg:ml-0 lg:rounded-md lg:border' />
       </div>
     );
   }
@@ -338,17 +445,52 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <div className='bg-secondary flex h-screen'>
             {/* Desktop sidebar */}
             <aside
-              className='relative hidden lg:block'
+              className={cn(
+                'relative hidden lg:block',
+                !isDragging && 'transition-[width] duration-200 ease-out',
+              )}
               style={{ width: sidebarWidth }}
             >
               <div className='flex h-full flex-col'>
-                <div className='p-2'>
-                  <OrgOptionsDropdown
-                    currentOrgSlug={orgSlug}
-                    currentOrgName={organization?.name ?? 'Organization'}
-                    currentOrgLogo={organization?.logo}
-                    organizations={organizations}
-                  />
+                <div
+                  className={cn(
+                    'flex items-center gap-1 p-2',
+                    sidebarCollapsed ? 'flex-col' : 'w-full',
+                  )}
+                >
+                  <div className={cn(!sidebarCollapsed && 'min-w-0 flex-1')}>
+                    <OrgOptionsDropdown
+                      currentOrgSlug={orgSlug}
+                      currentOrgName={organization?.name ?? 'Organization'}
+                      currentOrgLogo={organization?.logo}
+                      organizations={organizations}
+                      compact={sidebarCollapsed}
+                    />
+                  </div>
+                  {!sidebarCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type='button'
+                            variant='ghost'
+                            size='icon-sm'
+                            onClick={toggleCollapsed}
+                            className='text-muted-foreground hover:text-foreground size-8 shrink-0'
+                            aria-label='Collapse workspace sidebar'
+                          >
+                            <PanelLeftClose
+                              className='size-4'
+                              aria-hidden='true'
+                            />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side='bottom' sideOffset={8}>
+                          Collapse workspace sidebar
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : null}
                 </div>
                 <div className='min-h-0 flex-1 overflow-hidden'>
                   <ScrollArea
@@ -356,44 +498,120 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     viewportClassName='h-full min-w-0 max-w-full overflow-x-hidden'
                     scrollbars='vertical'
                   >
-                    <OrgSidebar orgSlug={orgSlug} />
+                    <OrgSidebar
+                      orgSlug={orgSlug}
+                      collapsed={sidebarCollapsed}
+                    />
                   </ScrollArea>
                 </div>
                 {/* Assistant dock */}
-                <OrgAssistantDock orgSlug={orgSlug} />
+                {sidebarCollapsed ? (
+                  <div className='flex shrink-0 flex-col items-center gap-1 pb-1'>
+                    <div
+                      className='bg-border mb-0.5 h-px w-6'
+                      aria-hidden='true'
+                    />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type='button'
+                            variant='ghost'
+                            size='icon-sm'
+                            onClick={toggleCollapsed}
+                            className='text-muted-foreground hover:text-foreground size-8'
+                            aria-label='Expand workspace sidebar'
+                          >
+                            <PanelLeftOpen
+                              className='size-4'
+                              aria-hidden='true'
+                            />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side='right' sideOffset={8}>
+                          Expand workspace sidebar
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type='button'
+                            className='hover:bg-foreground/5 focus-visible:ring-ring flex size-8 shrink-0 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+                            onClick={() => {
+                              toggleCollapsed();
+                              window.setTimeout(() => {
+                                window.dispatchEvent(
+                                  new Event('command-menu:focus-assistant'),
+                                );
+                              }, 220);
+                            }}
+                            aria-label='Ask Vector'
+                          >
+                            <Sparkles className='size-4' aria-hidden='true' />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side='right' sideOffset={8}>
+                          Ask Vector
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                ) : (
+                  <OrgAssistantDock orgSlug={orgSlug} />
+                )}
                 {/* User footer */}
-                <div className='border-border flex shrink-0 items-center gap-1 border-t p-2'>
-                  <div className='min-w-0 flex-1'>
-                    <UserMenu />
+                <div
+                  className={cn(
+                    'border-border flex shrink-0 items-center gap-1 border-t p-2',
+                    sidebarCollapsed && 'flex-col',
+                  )}
+                >
+                  <div className={cn('min-w-0', !sidebarCollapsed && 'flex-1')}>
+                    <UserMenu compact={sidebarCollapsed} />
                   </div>
                   <NotificationBell />
                 </div>
               </div>
-              <div
-                onMouseDown={handleMouseDown}
-                className='group absolute top-0 -right-0.5 bottom-0 z-30 flex w-1.5 cursor-col-resize items-center justify-center'
-              >
+              {!sidebarCollapsed ? (
                 <div
-                  className={cn(
-                    'h-full w-px transition-colors',
-                    isDragging
-                      ? 'bg-foreground/30'
-                      : 'group-hover:bg-foreground/15 bg-transparent',
-                  )}
-                />
-              </div>
+                  onMouseDown={handleMouseDown}
+                  className='group absolute top-0 -right-0.5 bottom-0 z-30 flex w-1.5 cursor-col-resize items-center justify-center'
+                >
+                  <div
+                    className={cn(
+                      'h-full w-px transition-colors',
+                      isDragging
+                        ? 'bg-foreground/30'
+                        : 'group-hover:bg-foreground/15 bg-transparent',
+                    )}
+                  />
+                </div>
+              ) : null}
             </aside>
 
-            {/* Mobile sheet (opened from "More" in bottom bar) */}
+            {/* Mobile workspace menu */}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetContent
-                side='left'
+                side='bottom'
                 showCloseButton={false}
-                className='bg-secondary !w-[85vw] !max-w-[85vw] p-0 sm:!max-w-80'
+                className='max-h-[88dvh] gap-0 overflow-hidden rounded-t-[22px] border-x px-0 pt-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]'
               >
-                <SheetTitle className='sr-only'>Navigation</SheetTitle>
-                <div className='flex h-full flex-col'>
-                  <div className='p-2'>
+                <div
+                  className='bg-foreground/15 mx-auto mt-2 h-1 w-9 shrink-0 rounded-full'
+                  aria-hidden='true'
+                />
+                <SheetHeader className='border-b px-4 pt-3 pb-3 text-left'>
+                  <SheetTitle className='text-[17px] leading-6 font-semibold tracking-[-0.01em]'>
+                    Workspace
+                  </SheetTitle>
+                  <SheetDescription className='text-xs'>
+                    Open collaboration and work tools.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className='flex min-h-0 flex-1 flex-col'>
+                  <div className='px-3 pt-3'>
                     <OrgOptionsDropdown
                       currentOrgSlug={orgSlug}
                       currentOrgName={organization?.name ?? 'Organization'}
@@ -401,21 +619,92 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       organizations={organizations}
                     />
                   </div>
-                  <div className='min-h-0 flex-1 overflow-hidden'>
-                    <ScrollArea
-                      className='h-full w-full max-w-full min-w-0'
-                      viewportClassName='h-full min-w-0 max-w-full overflow-x-hidden'
-                      scrollbars='vertical'
-                    >
-                      <OrgSidebar
-                        orgSlug={orgSlug}
-                        onNavigate={() => setMobileOpen(false)}
-                      />
-                    </ScrollArea>
+                  <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3'>
+                    <div className='space-y-4'>
+                      <section aria-labelledby='mobile-more-collaboration'>
+                        <h2
+                          id='mobile-more-collaboration'
+                          className='text-muted-foreground px-3 pb-1.5 text-[11px] font-semibold tracking-[0.04em] uppercase'
+                        >
+                          Collaboration
+                        </h2>
+                        <div className='space-y-0.5'>
+                          <MobileMoreLink
+                            href={`/${orgSlug}/channels/priority`}
+                            label='Priority'
+                            icon={AtSign}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                          <MobileMoreLink
+                            href={`/${orgSlug}/channels/threads`}
+                            label='Threads'
+                            icon={MessagesSquare}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                          <MobileMoreLink
+                            href={`/${orgSlug}/channels/saved`}
+                            label='Saved'
+                            icon={Bookmark}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                          <MobileMoreLink
+                            href={`/${orgSlug}/agents`}
+                            label='Agents'
+                            icon={Bot}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                        </div>
+                      </section>
+
+                      <section aria-labelledby='mobile-more-work'>
+                        <h2
+                          id='mobile-more-work'
+                          className='text-muted-foreground px-3 pb-1.5 text-[11px] font-semibold tracking-[0.04em] uppercase'
+                        >
+                          Work
+                        </h2>
+                        <div className='space-y-0.5'>
+                          <MobileMoreLink
+                            href={`/${orgSlug}/work`}
+                            label='My work'
+                            icon={BriefcaseBusiness}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                          <MobileMoreLink
+                            href={`/${orgSlug}/requests`}
+                            label='Requests'
+                            icon={FileInput}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                          <MobileMoreLink
+                            href={`/${orgSlug}/projects`}
+                            label='Projects'
+                            icon={FolderKanban}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                          <MobileMoreLink
+                            href={`/${orgSlug}/teams`}
+                            label='Teams'
+                            icon={UsersRound}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                          <MobileMoreLink
+                            href={`/${orgSlug}/documents`}
+                            label='Documents'
+                            icon={Files}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                          <MobileMoreLink
+                            href={`/${orgSlug}/views`}
+                            label='Views'
+                            icon={PanelsTopLeft}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                        </div>
+                      </section>
+                    </div>
                   </div>
-                  {/* Assistant dock in mobile sheet */}
-                  <OrgAssistantDock orgSlug={orgSlug} />
-                  <div className='border-border flex shrink-0 items-center gap-1 border-t p-2'>
+                  <div className='border-border flex shrink-0 items-center gap-1 border-t px-3 pt-2'>
                     <div className='min-w-0 flex-1'>
                       <UserMenu />
                     </div>
@@ -426,7 +715,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </Sheet>
 
             {/* Main content */}
-            <main className='bg-background mx-2 mt-2 mb-16 flex-1 overflow-x-hidden overflow-y-auto rounded-md border lg:mb-2 lg:ml-0'>
+            <main className='bg-background mb-[calc(3.5rem+env(safe-area-inset-bottom))] min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain lg:mx-2 lg:mt-2 lg:mb-2 lg:ml-0 lg:rounded-md lg:border'>
               {children}
             </main>
 
@@ -435,40 +724,72 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <CommandMenuActions />
 
             {/* Mobile bottom bar */}
-            <div className='bg-background/80 fixed right-0 bottom-0 left-0 z-50 border-t backdrop-blur-lg lg:hidden'>
+            <div className='bg-background/92 supports-[backdrop-filter]:bg-background/82 fixed right-0 bottom-0 left-0 z-50 border-t shadow-[0_-1px_0_rgb(0_0_0/0.02)] backdrop-blur-xl lg:hidden'>
               {/* Page actions slot */}
               <div ref={setPortalTarget} />
               {/* Nav */}
-              <nav className='flex h-12 items-stretch pb-[env(safe-area-inset-bottom)]'>
+              <nav
+                className='flex min-h-14 items-stretch px-1 pb-[env(safe-area-inset-bottom)]'
+                aria-label='Primary'
+              >
                 <BottomNavItem
-                  href={`/${orgSlug}/requests`}
+                  href={`/${orgSlug}/channels/home`}
+                  icon={House}
+                  label='Home'
+                  isActive={
+                    isActive(`/${orgSlug}/channels`) &&
+                    !isActive(`/${orgSlug}/channels/dms`) &&
+                    !isActive(`/${orgSlug}/channels/priority`) &&
+                    !isActive(`/${orgSlug}/channels/threads`) &&
+                    !isActive(`/${orgSlug}/channels/saved`) &&
+                    !isActive(`/${orgSlug}/channels/search`)
+                  }
+                />
+                <BottomNavItem
+                  href={`/${orgSlug}/channels/dms`}
+                  icon={MessagesSquare}
+                  label='DMs'
+                  isActive={isActive(`/${orgSlug}/channels/dms`)}
+                />
+                <BottomNavItem
+                  href={`/${orgSlug}/inbox`}
                   icon={Inbox}
-                  label='Requests'
-                  isActive={isActive(`/${orgSlug}/requests`)}
+                  label='Activity'
+                  badge={inboxCounts?.unread}
+                  isActive={isActive(`/${orgSlug}/inbox`)}
                 />
                 <BottomNavItem
-                  href={`/${orgSlug}/work`}
-                  icon={BriefcaseBusiness}
-                  label='Work'
-                  isActive={isActive(`/${orgSlug}/work`)}
-                />
-                <BottomNavItem
-                  href={`/${orgSlug}/projects`}
-                  icon={FolderOpen}
-                  label='Projects'
-                  isActive={isActive(`/${orgSlug}/projects`)}
-                />
-                <BottomNavItem
-                  href={`/${orgSlug}/teams`}
-                  icon={Users}
-                  label='Teams'
-                  isActive={isActive(`/${orgSlug}/teams`)}
+                  href={`/${orgSlug}/channels/search`}
+                  icon={Search}
+                  label='Search'
+                  isActive={isActive(`/${orgSlug}/channels/search`)}
                 />
                 <button
+                  type='button'
                   onClick={() => setMobileOpen(true)}
-                  className='text-muted-foreground flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-medium transition-colors'
+                  className={cn(
+                    'focus-visible:ring-ring relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] leading-3 font-medium transition-colors outline-none focus-visible:ring-2',
+                    !pathname.startsWith(`/${orgSlug}/channels`) &&
+                      !pathname.startsWith(`/${orgSlug}/inbox`)
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  aria-label='More workspace tools'
                 >
-                  <Menu className='size-5' strokeWidth={1.8} />
+                  <span
+                    className={cn(
+                      'flex h-7 min-w-10 items-center justify-center rounded-full px-2',
+                      !pathname.startsWith(`/${orgSlug}/channels`) &&
+                        !pathname.startsWith(`/${orgSlug}/inbox`) &&
+                        'bg-foreground/8',
+                    )}
+                  >
+                    <LayoutGrid
+                      className='size-[19px]'
+                      strokeWidth={1.8}
+                      aria-hidden='true'
+                    />
+                  </span>
                   <span>More</span>
                 </button>
               </nav>

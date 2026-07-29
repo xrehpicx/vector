@@ -39,6 +39,71 @@ final class VectorMobileTests: XCTestCase {
     XCTAssertEqual(VectorConvexFunctions.listInboxNotifications, "notifications/queries:listInbox")
     XCTAssertEqual(VectorConvexFunctions.getCurrentUserStatus, "status:getCurrentUserStatus")
     XCTAssertEqual(VectorConvexFunctions.upsertMobilePushToken, "notifications/mutations:upsertMobilePushToken")
+    XCTAssertEqual(VectorConvexFunctions.listCollaborationChannels, "collaboration/channels:list")
+    XCTAssertEqual(VectorConvexFunctions.listChannelMessages, "collaboration/messages:listChannel")
+    XCTAssertEqual(VectorConvexFunctions.listChannelThread, "collaboration/messages:listThread")
+    XCTAssertEqual(VectorConvexFunctions.listPriorityMessages, "collaboration/messages:listPriorityInbox")
+    XCTAssertEqual(VectorConvexFunctions.listSavedMessages, "collaboration/messages:listSaved")
+    XCTAssertEqual(VectorConvexFunctions.toggleSavedMessage, "collaboration/messages:toggleSaved")
+  }
+
+  func testCollaborationModelsDecodeMessagesAgentsAndPriorityMetadata() throws {
+    let payload = """
+      {
+        "message": {
+          "message": {
+            "_id": "message-1",
+            "channelId": "channel-1",
+            "actorKind": "agent",
+            "authorAgentId": "agent-1",
+            "body": "Native collaboration is ready.",
+            "format": "markdown",
+            "mentionedUserIds": [],
+            "mentionedAgentIds": [],
+            "replyCount": 2,
+            "createdAt": 1774560000000
+          },
+          "authorUser": null,
+          "authorAgent": {
+            "_id": "agent-1",
+            "name": "Design Agent",
+            "handle": "design-agent",
+            "avatar": null,
+            "ownerUserId": "user-1",
+            "provider": "codex",
+            "lifecycleStatus": "ready"
+          },
+          "attachments": [],
+          "reactions": [],
+          "saved": true,
+          "following": true
+        },
+        "channel": {
+          "_id": "channel-1",
+          "kind": "public",
+          "name": "general",
+          "slug": "general",
+          "topic": "Company-wide conversation",
+          "description": null,
+          "icon": null,
+          "color": null,
+          "isDefault": true,
+          "lastMessageAt": 1774560000000,
+          "createdAt": 1774550000000,
+          "updatedAt": 1774560000000
+        },
+        "reason": "mention",
+        "occurredAt": 1774560000000
+      }
+      """.data(using: .utf8)!
+
+    let item = try JSONDecoder().decode(VectorPriorityInboxItem.self, from: payload)
+
+    XCTAssertEqual(item.message.authorAgent?.handle, "design-agent")
+    XCTAssertEqual(item.message.message.replyCount, 2)
+    XCTAssertTrue(item.message.saved)
+    XCTAssertEqual(item.channel.kind, .public)
+    XCTAssertEqual(item.reason, "mention")
   }
 
   func testNotificationCategoryRawValuesMatchBackend() {

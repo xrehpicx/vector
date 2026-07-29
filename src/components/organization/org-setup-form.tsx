@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'nextjs-toploader/app';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,8 +58,7 @@ export function OrgSetupForm() {
       });
 
       if (result.orgId) {
-        // Redirect to the new organization's issues page using slug
-        router.push(`/${formData.slug}/requests`);
+        router.push(`/${formData.slug}/channels`);
       } else {
         throw new Error('Failed to create organization');
       }

@@ -7,6 +7,7 @@
  */
 
 import { ConvexHttpClient } from 'convex/browser';
+import { makeFunctionReference } from 'convex/server';
 import { api } from '../../../convex/_generated/api.js';
 import type { Id, TableNames } from '../../../convex/_generated/dataModel';
 import { execFileSync, execSync } from 'child_process';
@@ -40,6 +41,13 @@ import {
   type AgentSessionEventRole,
   type SessionProcessRecord,
 } from './agent-adapters';
+import {
+  CollaborationAcpRuntime,
+  parseCollaborationContextMessages,
+  type CollaborationAttachment,
+  type CollaborationPromptInput,
+  type CollaborationRunEvent,
+} from './acp-runtime';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +75,63 @@ const COMMAND_POLL_INTERVAL_MS = 5_000;
 const LIVE_ACTIVITY_SYNC_INTERVAL_MS = 5_000;
 const PROCESS_DISCOVERY_INTERVAL_MS = 60_000;
 const TERMINAL_SNAPSHOT_REFRESH_INTERVAL_MS = 180_000;
+
+type CollaborationRunStatus =
+  | 'starting'
+  | 'running'
+  | 'waiting_for_permission'
+  | 'completed'
+  | 'failed'
+  | 'canceled';
+
+interface CollaborationPermissionOptionPayload {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+const postCollaborationRunEventRef = makeFunctionReference<
+  'mutation',
+  {
+    deviceId: string;
+    deviceSecret: string;
+    runId: string;
+    sourceId?: string;
+    kind: CollaborationRunEvent['kind'];
+    title: string;
+    body?: string;
+    metadata?: Record<string, string | number | boolean | null>;
+    permissionOptions?: CollaborationPermissionOptionPayload[];
+  },
+  null
+>('collaboration/bridge:postCollaborationRunEvent');
+
+const updateCollaborationRunRef = makeFunctionReference<
+  'mutation',
+  {
+    deviceId: string;
+    deviceSecret: string;
+    runId: string;
+    status: CollaborationRunStatus;
+    currentActivity?: string;
+    latestSummary?: string;
+    sessionId?: string;
+    error?: string;
+  },
+  null
+>('collaboration/bridge:updateCollaborationRun');
+
+const postCollaborationAgentMessageRef = makeFunctionReference<
+  'mutation',
+  {
+    deviceId: string;
+    deviceSecret: string;
+    runId: string;
+    body: string;
+    clientMessageId: string;
+  },
+  null
+>('collaboration/bridge:postCollaborationAgentMessage');
 
 export interface BridgeConfig {
   deviceId: string;
@@ -157,6 +222,8 @@ interface PendingBridgeCommand {
   payload?: unknown;
   liveActivityId?: Id<'issueLiveActivities'>;
   processId?: Id<'agentProcesses'>;
+  collaborationRunId?: string;
+  registeredAgentId?: string;
   liveActivity?: {
     _id: Id<'issueLiveActivities'>;
     issueId: Id<'issues'>;
@@ -243,6 +310,7 @@ interface AgentMessageStructuredPayload {
 export class BridgeService {
   private client: ConvexHttpClient;
   private config: BridgeConfig;
+  private collaborationRuntime: CollaborationAcpRuntime;
   private timers: ReturnType<typeof setInterval>[] = [];
   private terminalPeer: TerminalPeerManager | null = null;
   private stopping = false;
@@ -267,6 +335,14 @@ export class BridgeService {
   constructor(config: BridgeConfig) {
     this.config = config;
     this.client = new ConvexHttpClient(config.convexUrl);
+    this.collaborationRuntime = new CollaborationAcpRuntime({
+      onEvent: (input, event) =>
+        this.postCollaborationRunEvent(input.runId, event),
+      onStatus: (input, status, summary, sessionId) =>
+        this.updateCollaborationRun(input.runId, status, summary, sessionId),
+      onReply: (input, reply) =>
+        this.postCollaborationAgentMessage(input.runId, reply),
+    });
   }
 
   async heartbeat(): Promise<void> {
@@ -300,6 +376,7 @@ export class BridgeService {
       {
         deviceId: this.config.deviceId as Id<'agentDevices'>,
         deviceSecret: this.config.deviceSecret,
+        now: Date.now(),
       },
     );
 
@@ -362,6 +439,48 @@ export class BridgeService {
       return;
     }
 
+    if (cmd.kind === 'collaboration_prompt') {
+      const runId =
+        cmd.collaborationRunId ??
+        readPayloadString(cmd.payload, 'runId') ??
+        readPayloadString(cmd.payload, 'collaborationRunId');
+      if (runId && this.collaborationRuntime.isActive(runId)) {
+        // A collaboration turn may legitimately exceed the backend's stale
+        // claim lease. The same local bridge must not start it twice.
+        return;
+      }
+      void this.handleCollaborationPromptCommand(cmd);
+      return;
+    }
+
+    if (cmd.kind === 'collaboration_cancel') {
+      try {
+        await this.handleCollaborationCancelCommand(cmd);
+        await this.completeCommand(cmd._id, 'delivered');
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown ACP bridge error';
+        console.error(`  ! ${message}`);
+        await this.failCollaborationCommand(cmd, message);
+        await this.completeCommand(cmd._id, 'failed');
+      }
+      return;
+    }
+
+    if (cmd.kind === 'approval_response' && cmd.collaborationRunId) {
+      try {
+        this.handleCollaborationPermissionResponse(cmd);
+        await this.completeCommand(cmd._id, 'delivered');
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown ACP bridge error';
+        console.error(`  ! ${message}`);
+        await this.failCollaborationCommand(cmd, message);
+        await this.completeCommand(cmd._id, 'failed');
+      }
+      return;
+    }
+
     if (
       cmd.kind === 'settings_update' ||
       cmd.kind === 'queue_update' ||
@@ -392,6 +511,68 @@ export class BridgeService {
     }
 
     await this.runClaimedCommand(cmd);
+  }
+
+  private async handleCollaborationPromptCommand(
+    cmd: PendingBridgeCommand,
+  ): Promise<void> {
+    try {
+      const input = readCollaborationPromptInput(cmd);
+      console.log(
+        `  collaboration_prompt: @${input.agentHandle} in ${input.threadRootId ? `thread ${input.threadRootId}` : `channel ${input.channelId}`}`,
+      );
+      const result = await this.collaborationRuntime.enqueue(input);
+      await this.completeCommand(
+        cmd._id,
+        result.status === 'failed' ? 'failed' : 'delivered',
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown ACP bridge error';
+      console.error(`  ! ${message}`);
+      await this.failCollaborationCommand(cmd, message);
+      await this.completeCommand(cmd._id, 'failed');
+    }
+  }
+
+  private async handleCollaborationCancelCommand(
+    cmd: PendingBridgeCommand,
+  ): Promise<void> {
+    const runId =
+      cmd.collaborationRunId ??
+      readPayloadString(cmd.payload, 'runId') ??
+      readPayloadString(cmd.payload, 'collaborationRunId');
+    if (!runId) {
+      throw new Error('Collaboration cancel command is missing runId');
+    }
+
+    const canceled = await this.collaborationRuntime.cancel(runId);
+    if (!canceled) {
+      await this.updateCollaborationRun(
+        runId,
+        'canceled',
+        'No active local turn was found',
+      );
+    }
+  }
+
+  private handleCollaborationPermissionResponse(
+    cmd: PendingBridgeCommand,
+  ): void {
+    const runId = cmd.collaborationRunId;
+    if (!runId) {
+      throw new Error('Permission response is missing collaborationRunId');
+    }
+
+    const optionId =
+      readPayloadString(cmd.payload, 'optionId') ??
+      readPayloadString(cmd.payload, 'selectedOptionId') ??
+      null;
+    if (!this.collaborationRuntime.resolvePermission(runId, optionId)) {
+      throw new Error(
+        `No matching permission request is pending for run ${runId}`,
+      );
+    }
   }
 
   private runAgentCommandInBackground(cmd: PendingBridgeCommand): void {
@@ -844,7 +1025,7 @@ export class BridgeService {
     );
 
     // Graceful shutdown
-    const shutdown = () => {
+    const shutdown = async () => {
       if (this.stopping) {
         return;
       }
@@ -852,6 +1033,7 @@ export class BridgeService {
       console.log(`\n[${ts()}] Shutting down...`);
       for (const t of this.timers) clearInterval(t);
       this.terminalPeer?.stop();
+      await this.collaborationRuntime.close();
       try {
         unlinkSync(PID_FILE);
       } catch {
@@ -1380,6 +1562,61 @@ export class BridgeService {
     });
   }
 
+  private async postCollaborationRunEvent(
+    runId: string,
+    event: CollaborationRunEvent,
+  ): Promise<void> {
+    const normalized = normalizeCollaborationRunEvent(event);
+    await this.client.mutation(postCollaborationRunEventRef, {
+      deviceId: this.config.deviceId,
+      deviceSecret: this.config.deviceSecret,
+      runId,
+      sourceId: event.sourceId,
+      kind: event.kind,
+      title: event.title,
+      body: event.body,
+      metadata: normalized.metadata,
+      permissionOptions: normalized.permissionOptions,
+    });
+  }
+
+  private async updateCollaborationRun(
+    runId: string,
+    status: CollaborationRunStatus,
+    summary?: string,
+    sessionId?: string,
+    error?: string,
+  ): Promise<void> {
+    await this.client.mutation(updateCollaborationRunRef, {
+      deviceId: this.config.deviceId,
+      deviceSecret: this.config.deviceSecret,
+      runId,
+      status,
+      currentActivity:
+        status === 'starting' ||
+        status === 'running' ||
+        status === 'waiting_for_permission'
+          ? summary
+          : undefined,
+      latestSummary: summary,
+      sessionId,
+      error,
+    });
+  }
+
+  private async postCollaborationAgentMessage(
+    runId: string,
+    body: string,
+  ): Promise<void> {
+    await this.client.mutation(postCollaborationAgentMessageRef, {
+      deviceId: this.config.deviceId,
+      deviceSecret: this.config.deviceSecret,
+      runId,
+      body,
+      clientMessageId: `agent-run:${runId}`,
+    });
+  }
+
   private async postAgentSessionEvent(
     liveActivityId: Id<'issueLiveActivities'>,
     event: AgentSessionEvent,
@@ -1431,6 +1668,35 @@ export class BridgeService {
         status: 'waiting_for_input',
         latestSummary: errorMessage,
       });
+    }
+  }
+
+  private async failCollaborationCommand(
+    cmd: PendingBridgeCommand,
+    message: string,
+  ): Promise<void> {
+    const runId =
+      cmd.collaborationRunId ??
+      readPayloadString(cmd.payload, 'runId') ??
+      readPayloadString(cmd.payload, 'collaborationRunId');
+    if (!runId) return;
+
+    try {
+      await this.postCollaborationRunEvent(runId, {
+        kind: 'error',
+        title: 'Agent run failed',
+        body: message,
+      });
+      await this.updateCollaborationRun(
+        runId,
+        'failed',
+        message,
+        undefined,
+        message,
+      );
+    } catch {
+      // The command can still be marked failed when the collaboration
+      // reporting endpoint is temporarily unavailable.
     }
   }
 }
@@ -1910,6 +2176,162 @@ function compareLocalSessionRecency(
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export function normalizeCollaborationRunEvent(event: CollaborationRunEvent): {
+  metadata?: Record<string, string | number | boolean | null>;
+  permissionOptions?: CollaborationPermissionOptionPayload[];
+} {
+  if (event.kind !== 'permission') {
+    return { metadata: event.metadata };
+  }
+
+  const { options, ...remainingMetadata } = event.metadata ?? {};
+  const permissionOptions = parsePermissionOptions(options);
+  return {
+    metadata:
+      Object.keys(remainingMetadata).length > 0 ? remainingMetadata : undefined,
+    permissionOptions:
+      permissionOptions.length > 0 ? permissionOptions : undefined,
+  };
+}
+
+function parsePermissionOptions(
+  value: string | number | boolean | null | undefined,
+): CollaborationPermissionOptionPayload[] {
+  if (typeof value !== 'string') return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .flatMap(option => {
+      if (!option || typeof option !== 'object') return [];
+      const id = readPayloadString(option, 'optionId')?.trim().slice(0, 160);
+      const label = readPayloadString(option, 'name')?.trim().slice(0, 200);
+      if (!id || !label) return [];
+      const kind = readPayloadString(option, 'kind')?.trim().slice(0, 500);
+      return [
+        {
+          id,
+          label,
+          ...(kind ? { description: kind } : {}),
+        },
+      ];
+    })
+    .slice(0, 20);
+}
+
+function readCollaborationPromptInput(
+  cmd: PendingBridgeCommand,
+): CollaborationPromptInput {
+  const payload = cmd.payload;
+  const runId =
+    cmd.collaborationRunId ??
+    readPayloadString(payload, 'runId') ??
+    readPayloadString(payload, 'collaborationRunId');
+  const agentId =
+    cmd.registeredAgentId ??
+    readPayloadString(payload, 'agentId') ??
+    readPayloadString(payload, 'registeredAgentId');
+  const provider = readPayloadAgentProvider(payload, 'provider');
+  const channelId = readPayloadString(payload, 'channelId');
+  const triggerMessageId = readPayloadString(payload, 'triggerMessageId');
+  const body = readPayloadString(payload, 'body');
+  const workspaceRoot =
+    readPayloadString(payload, 'workspaceRoot') ??
+    readPayloadString(payload, 'workspacePath');
+  const permissionMode = readPayloadPermissionMode(payload, 'permissionMode');
+
+  if (!runId) {
+    throw new Error('Collaboration prompt command is missing runId');
+  }
+  if (!agentId) {
+    throw new Error('Collaboration prompt command is missing agentId');
+  }
+  if (provider !== 'codex' && provider !== 'claude_code') {
+    throw new Error(
+      'Collaboration prompt command requires a Codex or Claude Code provider',
+    );
+  }
+  if (!channelId) {
+    throw new Error('Collaboration prompt command is missing channelId');
+  }
+  if (!triggerMessageId) {
+    throw new Error('Collaboration prompt command is missing triggerMessageId');
+  }
+  if (!body) {
+    throw new Error('Collaboration prompt command is missing message body');
+  }
+  if (!workspaceRoot) {
+    throw new Error(
+      'Collaboration prompt command is missing its registered workspace path',
+    );
+  }
+  if (permissionMode === 'bypass') {
+    throw new Error(
+      'Collaboration agents do not support bypass permission mode',
+    );
+  }
+
+  return {
+    runId,
+    agentId,
+    agentHandle:
+      readPayloadString(payload, 'agentHandle') ??
+      readPayloadString(payload, 'handle') ??
+      'agent',
+    provider,
+    channelId,
+    channelLabel: readPayloadString(payload, 'channelLabel'),
+    threadRootId: readPayloadString(payload, 'threadRootId'),
+    triggerMessageId,
+    authorLabel:
+      readPayloadString(payload, 'authorLabel') ??
+      readPayloadString(payload, 'authorName') ??
+      'Vector user',
+    body,
+    attachments: readCollaborationAttachments(payload),
+    contextMessages: parseCollaborationContextMessages(
+      readPayloadValue(payload, 'contextMessages'),
+    ),
+    workspaceRoot,
+    cwd:
+      readPayloadString(payload, 'cwd') ??
+      readPayloadString(payload, 'defaultFolder') ??
+      workspaceRoot,
+    model: readPayloadString(payload, 'model'),
+    permissionMode,
+    thinkingLevel: readPayloadThinkingLevel(payload, 'thinkingLevel'),
+  };
+}
+
+function readCollaborationAttachments(
+  payload: unknown,
+): CollaborationAttachment[] {
+  return readPayloadArray(payload, 'attachments').flatMap(value => {
+    if (!value || typeof value !== 'object') {
+      return [];
+    }
+
+    const name = readPayloadString(value, 'name');
+    if (!name) {
+      return [];
+    }
+
+    return [
+      {
+        name,
+        contentType: readPayloadString(value, 'contentType'),
+        url: readPayloadString(value, 'url'),
+      },
+    ];
+  });
 }
 
 function readPayloadValue(payload: unknown, key: string): unknown {

@@ -143,6 +143,7 @@ function SignupForm() {
                         type='email'
                         placeholder='you@example.com'
                         autoComplete='email'
+                        suppressHydrationWarning
                         disabled={isLoading}
                         autoFocus
                       />
@@ -164,6 +165,7 @@ function SignupForm() {
                         type='text'
                         placeholder='Choose a username'
                         autoComplete='username'
+                        suppressHydrationWarning
                         disabled={isLoading}
                       />
                     </FormControl>
@@ -184,6 +186,7 @@ function SignupForm() {
                         type='password'
                         placeholder='Min 6 characters'
                         autoComplete='new-password'
+                        suppressHydrationWarning
                         disabled={isLoading}
                       />
                     </FormControl>

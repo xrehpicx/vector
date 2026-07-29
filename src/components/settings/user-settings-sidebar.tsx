@@ -98,7 +98,7 @@ export function UserSettingsSidebar() {
       {workspace && (
         <div className='p-2'>
           <Link
-            href={`/${workspace.slug}/requests`}
+            href={`/${workspace.slug}/channels`}
             aria-label={`Back to ${workspace.name} workspace`}
             className='bg-background hover:bg-accent/50 focus-visible:ring-ring group flex w-full items-center justify-between rounded-md border p-1 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none'
           >

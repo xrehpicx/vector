@@ -117,6 +117,7 @@ function LoginForm() {
                         type='text'
                         placeholder='you@example.com'
                         autoComplete='email'
+                        suppressHydrationWarning
                         disabled={isLoading}
                         autoFocus
                       />
@@ -146,6 +147,7 @@ function LoginForm() {
                         type='password'
                         placeholder='Your password'
                         autoComplete='current-password'
+                        suppressHydrationWarning
                         disabled={isLoading}
                       />
                     </FormControl>

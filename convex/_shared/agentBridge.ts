@@ -273,6 +273,8 @@ export const AGENT_COMMAND_KINDS = [
   'detach_issue',
   'launch',
   'resize',
+  'collaboration_prompt',
+  'collaboration_cancel',
 ] as const;
 export type AgentCommandKind = (typeof AGENT_COMMAND_KINDS)[number];
 

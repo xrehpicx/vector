@@ -2,13 +2,14 @@ packages:
   - .
   - packages/*
 overrides:
-  '@connectrpc/connect-node>undici': 6.27.0
+  '@connectrpc/connect-node>undici': 6.28.0
   'localtunnel>axios': 1.18.1
-  'next>postcss': 8.5.19
+  'next>postcss': 8.5.24
   'tsup>esbuild': 0.28.1
 allowBuilds:
   '@google/genai': false
   esbuild: true
+  koffi: true
   msw: false
   node-datachannel: true
   node-pty: true
@@ -23,3 +24,57 @@ onlyBuiltDependencies:
   - node-datachannel
   - sharp
   - unrs-resolver
+minimumReleaseAgeExclude:
+  - '@ai-sdk/gateway@3.0.159'
+  - '@convex-dev/migrations@0.3.6'
+  - '@cursor/sdk-darwin-arm64@1.0.26'
+  - '@cursor/sdk-darwin-x64@1.0.26'
+  - '@cursor/sdk-linux-arm64@1.0.26'
+  - '@cursor/sdk-linux-x64@1.0.26'
+  - '@cursor/sdk-win32-x64@1.0.26'
+  - '@cursor/sdk@1.0.26'
+  - '@opencode-ai/sdk@1.18.9'
+  - '@tiptap/core@3.29.2'
+  - '@tiptap/extension-blockquote@3.29.2'
+  - '@tiptap/extension-bold@3.29.2'
+  - '@tiptap/extension-bubble-menu@3.29.2'
+  - '@tiptap/extension-bullet-list@3.29.2'
+  - '@tiptap/extension-code-block@3.29.2'
+  - '@tiptap/extension-code@3.29.2'
+  - '@tiptap/extension-document@3.29.2'
+  - '@tiptap/extension-dropcursor@3.29.2'
+  - '@tiptap/extension-floating-menu@3.29.2'
+  - '@tiptap/extension-gapcursor@3.29.2'
+  - '@tiptap/extension-hard-break@3.29.2'
+  - '@tiptap/extension-heading@3.29.2'
+  - '@tiptap/extension-horizontal-rule@3.29.2'
+  - '@tiptap/extension-image@3.29.2'
+  - '@tiptap/extension-italic@3.29.2'
+  - '@tiptap/extension-link@3.29.2'
+  - '@tiptap/extension-list-item@3.29.2'
+  - '@tiptap/extension-list-keymap@3.29.2'
+  - '@tiptap/extension-list@3.29.2'
+  - '@tiptap/extension-mention@3.29.2'
+  - '@tiptap/extension-ordered-list@3.29.2'
+  - '@tiptap/extension-paragraph@3.29.2'
+  - '@tiptap/extension-placeholder@3.29.2'
+  - '@tiptap/extension-strike@3.29.2'
+  - '@tiptap/extension-table-cell@3.29.2'
+  - '@tiptap/extension-table-header@3.29.2'
+  - '@tiptap/extension-table-row@3.29.2'
+  - '@tiptap/extension-table@3.29.2'
+  - '@tiptap/extension-task-item@3.29.2'
+  - '@tiptap/extension-task-list@3.29.2'
+  - '@tiptap/extension-text@3.29.2'
+  - '@tiptap/extension-underline@3.29.2'
+  - '@tiptap/extensions@3.29.2'
+  - '@tiptap/markdown@3.29.2'
+  - '@tiptap/pm@3.29.2'
+  - '@tiptap/react@3.29.2'
+  - '@tiptap/starter-kit@3.29.2'
+  - '@tiptap/suggestion@3.29.2'
+  - ai@6.0.237
+  - framer-motion@12.43.0
+  - motion-dom@12.43.0
+  - motion@12.43.0
+  - postcss@8.5.24

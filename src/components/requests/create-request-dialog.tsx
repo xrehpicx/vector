@@ -28,18 +28,29 @@ export function CreateRequestDialog({
   trigger,
   open: controlledOpen,
   onOpenChange,
+  defaultTitle = '',
+  defaultDescription = '',
+  defaultExpectedOutput = '',
+  onCreated,
 }: {
   orgSlug: string;
   trigger?: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  defaultTitle?: string;
+  defaultDescription?: string;
+  defaultExpectedOutput?: string;
+  onCreated?: (result: {
+    requestId: Id<'requests'>;
+    requestKey: string;
+  }) => Promise<void> | void;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [expectedOutput, setExpectedOutput] = useState('');
+  const [title, setTitle] = useState(defaultTitle);
+  const [description, setDescription] = useState(defaultDescription);
+  const [expectedOutput, setExpectedOutput] = useState(defaultExpectedOutput);
   const [reviewGuidance, setReviewGuidance] = useState('');
   const [recipients, setRecipients] = useState<Id<'users'>[]>([]);
   const [routedTeamId, setRoutedTeamId] = useState<Id<'teams'>>();
@@ -68,14 +79,21 @@ export function CreateRequestDialog({
           priorityId,
         },
       });
+      if (onCreated) {
+        try {
+          await onCreated(result);
+        } catch {
+          toast.error('Request created, but it could not be linked here.');
+        }
+      }
       toast.success(
         <Link href={`/${orgSlug}/requests/${result.requestKey}`}>
           Request {result.requestKey} created
         </Link>,
       );
-      setTitle('');
-      setDescription('');
-      setExpectedOutput('');
+      setTitle(defaultTitle);
+      setDescription(defaultDescription);
+      setExpectedOutput(defaultExpectedOutput);
       setReviewGuidance('');
       setRecipients([]);
       setRoutedTeamId(undefined);

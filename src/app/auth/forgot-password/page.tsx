@@ -205,6 +205,7 @@ function ForgotPasswordForm() {
                           type='password'
                           placeholder='New password'
                           autoComplete='new-password'
+                          suppressHydrationWarning
                           disabled={isLoading}
                         />
                       </FormControl>
@@ -227,6 +228,7 @@ function ForgotPasswordForm() {
                           type='password'
                           placeholder='Confirm new password'
                           autoComplete='new-password'
+                          suppressHydrationWarning
                           disabled={isLoading}
                         />
                       </FormControl>
@@ -307,6 +309,7 @@ function ForgotPasswordForm() {
                         type='email'
                         placeholder='you@example.com'
                         autoComplete='email'
+                        suppressHydrationWarning
                         disabled={isLoading}
                         autoFocus
                       />

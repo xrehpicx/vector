@@ -44,6 +44,8 @@ PERMISSIONS.ORG_MANAGE_MEMBERS;
 PERMISSIONS.PROJECT_EDIT;
 PERMISSIONS.TEAM_MEMBER_ADD;
 PERMISSIONS.ISSUE_ASSIGNMENT_UPDATE;
+PERMISSIONS.CHANNEL_MESSAGE_SEND;
+PERMISSIONS.AGENT_INTERACT;
 ```
 
 Wildcard behavior:
@@ -52,6 +54,8 @@ Wildcard behavior:
 - `team:*` matches all `team:` permissions.
 - `project:*` matches all `project:` permissions.
 - `issue:*` matches all `issue:` permissions.
+- `channel:*` matches all `channel:` permissions.
+- `agent:*` matches all registered-agent permissions.
 
 Only `owner` gets the universal wildcard by default.
 
@@ -113,8 +117,24 @@ These still matter for authorization:
 - `members`
 - `teamMembers`
 - `projectMembers`
+- `channelMembers`
 
-They are not just visibility edges yet. The resolver still grants built-in permissions from these rows.
+Organization, team, and project membership rows supply role permissions.
+`channelMembers` is an additional resource visibility edge: a private or direct
+channel is inaccessible without that membership even when the caller has the
+workspace-wide `channel:view` permission.
+
+Registered agents are service identities, not Better Auth users or organization
+members. Their channel access is stored in `agentChannelMemberships`. A human's
+ability to invoke an agent is the intersection of:
+
+- organization and channel membership
+- `agent:interact`
+- the agent's owner/selected-user/channel-member interaction policy
+- the agent's channel membership and wake policy
+
+`agent:control` is intentionally separate from interaction. Adding an agent to
+a channel never grants terminal or session control.
 
 ## How Permissions Are Resolved
 
@@ -252,6 +272,25 @@ const results = await getPermissionMap(
   [PERMISSIONS.PROJECT_EDIT, PERMISSIONS.PROJECT_DELETE],
 );
 ```
+
+### 6. Channel and registered-agent access
+
+Collaboration functions first require the relevant workspace permission, then
+apply resource membership:
+
+```ts
+await requireOrgPermission(
+  ctx,
+  channel.organizationId,
+  PERMISSIONS.CHANNEL_VIEW,
+);
+await requireChannelMember(ctx, channel, userId);
+```
+
+Public workspace channels may be joined by organization members. Private,
+direct, and group-direct channels always require an existing membership.
+Sending, moderation, membership management, agent interaction, and agent
+control each use their dedicated permissions.
 
 ## Backend Rules For New Features
 

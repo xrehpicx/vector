@@ -25,24 +25,31 @@ export function CreateWorkDialog({
   projectId,
   teamId,
   defaultTitle = '',
+  defaultWorkpad = '',
   trigger,
   open: controlledOpen,
   onOpenChange,
+  onCreated,
 }: {
   orgSlug: string;
   requestId?: Id<'requests'>;
   projectId?: Id<'projects'>;
   teamId?: Id<'teams'>;
   defaultTitle?: string;
+  defaultWorkpad?: string;
   trigger?: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onCreated?: (result: {
+    workId: Id<'issues'>;
+    workKey: string;
+  }) => Promise<void> | void;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const [title, setTitle] = useState(defaultTitle);
-  const [workpad, setWorkpad] = useState('');
+  const [workpad, setWorkpad] = useState(defaultWorkpad);
   const [owners, setOwners] = useState<Id<'users'>[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const createWork = useMutation(api.work.mutations.create);
@@ -63,6 +70,13 @@ export function CreateWorkDialog({
           requestIds: requestId ? [requestId] : undefined,
         },
       });
+      if (onCreated) {
+        try {
+          await onCreated(result);
+        } catch {
+          toast.error('Work created, but it could not be linked here.');
+        }
+      }
       toast.success(
         <Link href={`/${orgSlug}/work/${result.workKey}`}>
           Work {result.workKey} created
@@ -70,7 +84,7 @@ export function CreateWorkDialog({
       );
       setOpen(false);
       setTitle(defaultTitle);
-      setWorkpad('');
+      setWorkpad(defaultWorkpad);
       setOwners([]);
     } catch (error) {
       toast.error(

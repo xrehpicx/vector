@@ -42,6 +42,20 @@ public enum VectorMobileInitialLoadPolicy: Sendable {
 
 @MainActor
 public final class VectorMobileViewModel: ObservableObject {
+  @Published public private(set) var collaborationChannels: [VectorChannelListItem] = []
+  @Published public private(set) var channelMessages: [VectorMessageView] = []
+  @Published public private(set) var threadMessages: [VectorMessageView] = []
+  @Published public private(set) var priorityMessages: [VectorPriorityInboxItem] = []
+  @Published public private(set) var savedMessages: [VectorMessageView] = []
+  @Published public private(set) var channelAgents: [VectorChannelAgentView] = []
+  @Published public private(set) var selectedChannelId: VectorID?
+  @Published public private(set) var selectedThreadRootId: VectorID?
+  @Published public private(set) var isLoadingCollaboration = false
+  @Published public private(set) var isLoadingChannel = false
+  @Published public private(set) var isLoadingSmartMessages = false
+  @Published public private(set) var isLoadingThread = false
+  @Published public private(set) var isSendingChannelMessage = false
+  @Published public private(set) var collaborationError: String?
   @Published public private(set) var requests: [VectorRequestRow] = []
   @Published public private(set) var work: [VectorWorkRow] = []
   @Published public private(set) var selectedRequest: VectorRequestDetail?
@@ -129,6 +143,12 @@ public final class VectorMobileViewModel: ObservableObject {
   private var inboxActivityPagination = PaginationState()
   // Loaded pages stay subscribed so cached tabs remain live when users switch back.
   private var issueListCancellables: [VectorIssueScope: [String: AnyCancellable]] = [:]
+  private var collaborationChannelsCancellable: AnyCancellable?
+  private var channelMessagesCancellable: AnyCancellable?
+  private var threadMessagesCancellable: AnyCancellable?
+  private var priorityMessagesCancellable: AnyCancellable?
+  private var savedMessagesCancellable: AnyCancellable?
+  private var channelAgentsCancellable: AnyCancellable?
   private var requestListCancellable: AnyCancellable?
   private var workListCancellable: AnyCancellable?
   private var requestDetailCancellable: AnyCancellable?
@@ -222,6 +242,7 @@ public final class VectorMobileViewModel: ObservableObject {
 
   public func refreshPrimarySurfaces() {
     errorMessage = nil
+    loadCollaboration()
     refreshRequests()
     refreshWork()
     subscribeToInboxNotificationsIfNeeded()
@@ -230,6 +251,7 @@ public final class VectorMobileViewModel: ObservableObject {
 
   public func refresh() {
     errorMessage = nil
+    loadCollaboration()
     refreshRequests()
     refreshWork()
     subscribeToIssuesIfNeeded(scope: issueScope)
@@ -252,6 +274,256 @@ public final class VectorMobileViewModel: ObservableObject {
     subscribeToProjectsIfNeeded(scope: projectScope)
     subscribeToTeamsIfNeeded(scope: projectScope)
     subscribeToDocumentsIfNeeded()
+  }
+
+  public func loadCollaboration() {
+    collaborationChannelsCancellable?.cancel()
+    isLoadingCollaboration = collaborationChannels.isEmpty
+    collaborationError = nil
+    collaborationChannelsCancellable = repository
+      .collaborationChannels(orgSlug: configuration.orgSlug)
+      .receive(on: DispatchQueue.main)
+      .sink(
+        receiveCompletion: { [weak self] completion in
+          guard let self else { return }
+          isLoadingCollaboration = false
+          if case let .failure(error) = completion {
+            collaborationError = error.localizedDescription
+          }
+        },
+        receiveValue: { [weak self] channels in
+          guard let self else { return }
+          collaborationChannels = channels
+          isLoadingCollaboration = false
+        }
+      )
+    loadSmartMessages()
+  }
+
+  public func loadSmartMessages() {
+    priorityMessagesCancellable?.cancel()
+    savedMessagesCancellable?.cancel()
+    isLoadingSmartMessages = priorityMessages.isEmpty && savedMessages.isEmpty
+
+    priorityMessagesCancellable = repository
+      .priorityMessages(orgSlug: configuration.orgSlug)
+      .receive(on: DispatchQueue.main)
+      .sink(
+        receiveCompletion: { [weak self] completion in
+          if case let .failure(error) = completion {
+            self?.collaborationError = error.localizedDescription
+          }
+          self?.isLoadingSmartMessages = false
+        },
+        receiveValue: { [weak self] messages in
+          self?.priorityMessages = messages
+          self?.isLoadingSmartMessages = false
+        }
+      )
+
+    savedMessagesCancellable = repository
+      .savedMessages(orgSlug: configuration.orgSlug)
+      .receive(on: DispatchQueue.main)
+      .sink(
+        receiveCompletion: { [weak self] completion in
+          if case let .failure(error) = completion {
+            self?.collaborationError = error.localizedDescription
+          }
+          self?.isLoadingSmartMessages = false
+        },
+        receiveValue: { [weak self] messages in
+          self?.savedMessages = messages
+          self?.isLoadingSmartMessages = false
+        }
+      )
+  }
+
+  public func openChannel(_ channel: VectorChannelListItem) {
+    guard selectedChannelId != channel.id || channelMessagesCancellable == nil else { return }
+    selectedChannelId = channel.id
+    channelMessages = []
+    channelAgents = []
+    isLoadingChannel = true
+    collaborationError = nil
+    channelMessagesCancellable?.cancel()
+    channelAgentsCancellable?.cancel()
+
+    channelMessagesCancellable = repository
+      .channelMessages(channelId: channel.id, pageSize: 50, cursor: nil)
+      .receive(on: DispatchQueue.main)
+      .sink(
+        receiveCompletion: { [weak self] completion in
+          guard let self else { return }
+          isLoadingChannel = false
+          if case let .failure(error) = completion {
+            collaborationError = error.localizedDescription
+          }
+        },
+        receiveValue: { [weak self] page in
+          guard let self else { return }
+          channelMessages = page.page.sorted {
+            $0.message.createdAt < $1.message.createdAt
+          }
+          isLoadingChannel = false
+          if let latestMessageId = channelMessages.last?.id {
+            Task {
+              try? await repository.markChannelRead(
+                channelId: channel.id,
+                messageId: latestMessageId
+              )
+            }
+          }
+        }
+      )
+
+    channelAgentsCancellable = repository
+      .channelAgents(channelId: channel.id)
+      .receive(on: DispatchQueue.main)
+      .sink(
+        receiveCompletion: { [weak self] completion in
+          if case let .failure(error) = completion {
+            self?.collaborationError = error.localizedDescription
+          }
+        },
+        receiveValue: { [weak self] agents in
+          self?.channelAgents = agents
+        }
+      )
+  }
+
+  public func attachmentURL(_ attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error> {
+    repository.attachmentURL(attachmentId: attachmentId)
+  }
+
+  public func openThread(rootMessageId: VectorID) {
+    guard selectedThreadRootId != rootMessageId || threadMessagesCancellable == nil else { return }
+    selectedThreadRootId = rootMessageId
+    threadMessages = []
+    isLoadingThread = true
+    threadMessagesCancellable?.cancel()
+    threadMessagesCancellable = repository
+      .channelThread(rootMessageId: rootMessageId, pageSize: 50, cursor: nil)
+      .receive(on: DispatchQueue.main)
+      .sink(
+        receiveCompletion: { [weak self] completion in
+          self?.isLoadingThread = false
+          if case let .failure(error) = completion {
+            self?.collaborationError = error.localizedDescription
+          }
+        },
+        receiveValue: { [weak self] page in
+          self?.threadMessages = page.page.sorted {
+            $0.message.createdAt < $1.message.createdAt
+          }
+          self?.isLoadingThread = false
+        }
+      )
+  }
+
+  public func sendChannelMessage(
+    body: String,
+    attachments: [VectorDraftAttachment],
+    threadRootId: VectorID? = nil,
+    replyToMessageId: VectorID? = nil
+  ) async -> Bool {
+    let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let channelId = selectedChannelId,
+          (!trimmedBody.isEmpty || !attachments.isEmpty),
+          !isSendingChannelMessage
+    else { return false }
+
+    isSendingChannelMessage = true
+    collaborationError = nil
+    let mentionedAgents = channelAgents
+      .filter { agent in
+        trimmedBody.range(
+          of: "@\(agent.agent.handle)",
+          options: [.caseInsensitive, .diacriticInsensitive]
+        ) != nil
+      }
+      .map(\.agent.id)
+
+    do {
+      let result = try await repository.sendChannelMessage(
+        channelId: channelId,
+        body: trimmedBody,
+        mentionedAgentIds: mentionedAgents,
+        attachments: attachments,
+        threadRootId: threadRootId,
+        replyToMessageId: replyToMessageId
+      )
+      let optimisticMessage = VectorMessageView(
+        message: VectorChannelMessage(
+          id: result.messageId,
+          channelId: channelId,
+          actorKind: "user",
+          authorUserId: currentUser?.id,
+          body: trimmedBody,
+          threadRootId: threadRootId,
+          replyToMessageId: replyToMessageId,
+          mentionedAgentIds: mentionedAgents,
+          createdAt: Date().timeIntervalSince1970 * 1000
+        ),
+        authorUser: currentUser,
+        authorAgent: nil
+      )
+      if let threadRootId {
+        if !threadMessages.contains(where: { $0.id == result.messageId }) {
+          threadMessages.append(optimisticMessage)
+        }
+        if let rootIndex = channelMessages.firstIndex(where: { $0.id == threadRootId }) {
+          channelMessages[rootIndex] = channelMessages[rootIndex].withReplyIncrement()
+        }
+      } else if !channelMessages.contains(where: { $0.id == result.messageId }) {
+        channelMessages.append(optimisticMessage)
+      }
+      isSendingChannelMessage = false
+      return true
+    } catch {
+      collaborationError = error.localizedDescription
+      isSendingChannelMessage = false
+      return false
+    }
+  }
+
+  public func toggleSaved(_ message: VectorMessageView) async {
+    do {
+      let active = try await repository.toggleSavedMessage(messageId: message.id)
+      replaceMessage(message.id) { $0.withSaved(active) }
+      if active {
+        if !savedMessages.contains(where: { $0.id == message.id }) {
+          savedMessages.insert(message.withSaved(true), at: 0)
+        }
+      } else {
+        savedMessages.removeAll { $0.id == message.id }
+      }
+    } catch {
+      collaborationError = error.localizedDescription
+    }
+  }
+
+  private func replaceMessage(
+    _ messageId: VectorID,
+    transform: (VectorMessageView) -> VectorMessageView
+  ) {
+    if let index = channelMessages.firstIndex(where: { $0.id == messageId }) {
+      channelMessages[index] = transform(channelMessages[index])
+    }
+    if let index = threadMessages.firstIndex(where: { $0.id == messageId }) {
+      threadMessages[index] = transform(threadMessages[index])
+    }
+    if let index = savedMessages.firstIndex(where: { $0.id == messageId }) {
+      savedMessages[index] = transform(savedMessages[index])
+    }
+    if let index = priorityMessages.firstIndex(where: { $0.message.id == messageId }) {
+      let item = priorityMessages[index]
+      priorityMessages[index] = VectorPriorityInboxItem(
+        message: transform(item.message),
+        channel: item.channel,
+        reason: item.reason,
+        occurredAt: item.occurredAt
+      )
+    }
   }
 
   public func refreshRequests() {

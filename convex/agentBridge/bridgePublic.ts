@@ -61,16 +61,36 @@ export const getPendingCommands = query({
   args: {
     deviceId: v.id('agentDevices'),
     deviceSecret: v.string(),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await validateDeviceSecret(ctx, args.deviceId, args.deviceSecret);
 
-    const commands = await ctx.db
+    const pendingCommands = await ctx.db
       .query('agentCommands')
       .withIndex('by_device_status', q =>
         q.eq('deviceId', args.deviceId).eq('status', 'pending'),
       )
-      .collect();
+      .take(100);
+    const staleBefore = args.now === undefined ? undefined : args.now - 120_000;
+    const staleClaimedCommands =
+      staleBefore === undefined
+        ? []
+        : (
+            await ctx.db
+              .query('agentCommands')
+              .withIndex('by_device_status', q =>
+                q.eq('deviceId', args.deviceId).eq('status', 'claimed'),
+              )
+              .take(100)
+          ).filter(
+            command =>
+              command.collaborationRunId &&
+              (command.claimedAt ?? command.createdAt) <= staleBefore,
+          );
+    const commands = [...pendingCommands, ...staleClaimedCommands]
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, 100);
 
     return Promise.all(
       commands.map(async command => {
@@ -93,6 +113,8 @@ export const getPendingCommands = query({
           kind: command.kind,
           payload: command.payload,
           liveActivityId: command.liveActivityId,
+          collaborationRunId: command.collaborationRunId,
+          registeredAgentId: command.registeredAgentId,
           processId: resolvedProcessId,
           createdAt: command.createdAt,
           liveActivity: liveActivity
@@ -160,7 +182,11 @@ export const claimCommand = mutation({
       throw new ConvexError('COMMAND_NOT_FOUND');
     }
 
-    if (cmd.status !== 'pending') {
+    const reclaimingStaleCollaborationCommand =
+      cmd.status === 'claimed' &&
+      Boolean(cmd.collaborationRunId) &&
+      (cmd.claimedAt ?? cmd.createdAt) <= Date.now() - 120_000;
+    if (cmd.status !== 'pending' && !reclaimingStaleCollaborationCommand) {
       return false;
     }
 

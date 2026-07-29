@@ -3908,6 +3908,32 @@ function startLaunchAgent(vcliPath: string): void {
 }
 
 serviceCommand
+  .command('configure')
+  .description('Register this device without installing or starting a service')
+  .action(async (_options, command) => {
+    await selectExplicitBridgeProfile(command);
+    const config = await ensureBridgeConfig(command);
+    const globalOptions = command.optsWithGlobals() as GlobalOptions;
+    if (globalOptions.json) {
+      console.log(
+        JSON.stringify(
+          {
+            configured: true,
+            deviceId: config.deviceId,
+            displayName: config.displayName,
+            configPath: `${VECTOR_HOME}/bridge.json`,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    console.log(`Bridge device configured: ${config.displayName}`);
+    console.log(`Config: ${VECTOR_HOME}/bridge.json`);
+  });
+
+serviceCommand
   .command('start')
   .description('Start the bridge service via LaunchAgent (macOS) or foreground')
   .action(async (_options, command) => {
@@ -3963,7 +3989,10 @@ serviceCommand
       );
     }
 
-    if (osPlatform() === 'darwin') {
+    if (
+      osPlatform() === 'darwin' &&
+      process.env.VECTOR_DISABLE_MENU_BAR !== '1'
+    ) {
       await launchMenuBar();
     }
 

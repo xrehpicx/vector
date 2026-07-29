@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Poppins, Urbanist } from 'next/font/google';
 import './globals.css';
 import { TopLoaderProvider } from '@/providers/top-loader-provider';
@@ -46,6 +46,16 @@ export const metadata: Metadata = {
     ],
     apple: '/icons/vector-logo-180.png',
   },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' },
+  ],
 };
 
 export const dynamic = 'force-dynamic';

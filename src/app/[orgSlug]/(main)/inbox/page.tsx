@@ -157,16 +157,16 @@ export default function InboxPage() {
 
   return (
     <div className='flex min-h-full flex-col'>
-      <header className='flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b py-1 pr-1 pl-3'>
-        <div className='flex shrink-0 items-baseline gap-2'>
+      <header className='grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b p-2 sm:flex sm:min-h-10 sm:flex-wrap sm:py-1 sm:pr-1 sm:pl-3'>
+        <div className='flex min-w-0 items-baseline gap-2'>
           <h1 className='text-sm font-semibold'>Inbox</h1>
-          <span className='text-muted-foreground text-xs'>
+          <span className='text-muted-foreground truncate text-xs'>
             updates and action items
           </span>
         </div>
         <nav
           aria-label='Inbox filter'
-          className='flex min-w-0 flex-1 items-center gap-1 overflow-x-auto'
+          className='order-3 col-span-2 flex min-w-0 items-center gap-1 overflow-x-auto sm:order-none sm:col-span-1 sm:flex-1'
         >
           {filters.map(item => {
             const count = counts?.[item.value];
@@ -184,7 +184,7 @@ export default function InboxPage() {
                 variant='ghost'
                 size='sm'
                 className={cn(
-                  'h-7 shrink-0 gap-1.5 px-2 text-xs',
+                  'h-9 shrink-0 gap-1.5 px-2.5 text-xs sm:h-7 sm:px-2',
                   filter === item.value && 'bg-muted',
                 )}
                 onClick={() => setFilter(item.value)}
@@ -206,11 +206,11 @@ export default function InboxPage() {
             );
           })}
         </nav>
-        <div className='flex shrink-0 items-center gap-1'>
+        <div className='flex shrink-0 items-center justify-end gap-1'>
           <Button
             variant='ghost'
             size='sm'
-            className='h-7 gap-1.5 px-2 text-xs'
+            className='size-9 gap-1.5 px-0 text-xs sm:h-7 sm:w-auto sm:px-2'
             disabled={markingAllRead || !counts || counts.unread === 0}
             onClick={() => void handleMarkAllRead()}
           >
@@ -224,7 +224,10 @@ export default function InboxPage() {
           <Link
             href='/settings/notifications'
             aria-label='Inbox settings'
-            className={buttonVariants({ variant: 'outline', size: 'icon-sm' })}
+            className={cn(
+              buttonVariants({ variant: 'outline', size: 'icon-sm' }),
+              'size-9 sm:size-7',
+            )}
           >
             <Settings2 className='size-3.5' />
           </Link>

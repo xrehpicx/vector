@@ -1,6 +1,8 @@
 # Core Workspace Entities
 
-Vector coordinates delivery through Requests, Work, Tasks, teams, projects, documents, and views. These entities are native to Vector and form one connected graph rather than separate tools.
+Vector coordinates delivery through conversations, Requests, Work, Tasks,
+teams, projects, documents, views, and registered agents. These entities are
+native to Vector and form one connected graph rather than separate tools.
 
 The primary delivery path is:
 
@@ -15,7 +17,62 @@ Work (outcome and accountable execution context)
   └── Ownership, handoffs, attention, and activity
 ```
 
-Teams and projects organize that delivery, documents hold durable knowledge, and views provide reusable operational or public slices.
+Channels are the workspace's default shared surface. Teams and projects
+organize delivery, documents hold durable knowledge, and views provide reusable
+operational or public slices.
+
+## Channels and Messages
+
+A Channel is a durable conversation space for a team, project, topic, or direct
+conversation. Public channels are discoverable across the workspace; private
+channels and direct conversations are visible only to their members.
+
+Core semantics:
+
+- Every channel has a clear name, purpose, owner, membership, and archive state.
+- Messages can contain formatted text, images, video, audio, and files.
+- A message may start a lightweight thread so one topic can progress without
+  interrupting the main timeline.
+- Reactions, pins, saved messages, read state, and permission-safe search make
+  decisions and context recoverable.
+- Messages can link to or create Requests, Work, Tasks, Projects, and Documents.
+  A conversation does not replace those durable delivery entities.
+- Notification defaults prioritize direct messages, mentions, replies, and
+  followed threads. Ordinary channel traffic remains available without turning
+  every message into an inbox item.
+- Registered agents join channels explicitly and show their human owner. Their
+  wake policy is configured per channel as mentions only, every message, or off.
+
+Use Channels for coordination, decisions, handoffs, and shared context. Promote
+an ask to a Request, an accountable outcome to Work, or durable knowledge to a
+Document when it needs a stronger lifecycle.
+
+## Registered Agents
+
+A Registered Agent is a user-owned service identity that connects a channel to
+a local Codex, Claude, or other compatible coding runtime. It appears alongside
+people in conversation while retaining clear ownership and execution
+provenance.
+
+Core semantics:
+
+- The owner chooses a connected device, an approved workspace, and a default
+  working folder.
+- Channel membership and wake policy determine where and when the agent can
+  respond.
+- An interaction policy determines whether only the owner, selected people, or
+  all channel members may trigger it.
+- Connectivity is derived from the selected local device and workspace rather
+  than a manually claimed online status.
+- Each trigger creates an auditable run. Conversation stays readable while
+  plans, tools, files, terminal activity, permissions, and errors remain
+  available in a run inspector.
+- Provider credentials stay on the owner's device. Channel access never grants
+  terminal control or expands the local folder boundary.
+
+Use a Registered Agent when a persistent, permissioned collaborator should be
+available from shared channels. Use a Work Session when execution belongs
+specifically to one Work item or Task.
 
 ## Requests
 
@@ -163,6 +220,8 @@ Reminder rules are durable schedules attached to a Request, Work, or Task. They 
 
 ## How the Entities Work Together
 
+- Channels hold the workspace's shared coordination and can link or create
+  delivery entities.
 - Requests define the desired result and requester review.
 - Work holds accountable execution and the focused human/agent context.
 - Tasks add optional independent tracking without bloating top-level views.
@@ -170,6 +229,8 @@ Reminder rules are durable schedules attached to a Request, Work, or Task. They 
 - Projects group multiple Work outcomes into broader initiatives.
 - Documents retain durable knowledge.
 - Views organize and publish useful slices.
+- Registered Agents provide owned, permissioned local execution in channels;
+  Work Sessions provide execution attached to Work.
 - Notifications, reminders, handoffs, attention, and GitHub evidence connect changes back to the people who need to act.
 
 This connected model is Vector's product identity: a shared workspace for routing requests, supervising parallel human and agent execution, preserving accountability, and verifying outcomes.

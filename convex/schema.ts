@@ -35,6 +35,20 @@ import {
   workSessionAccessLevelValidator,
   workspaceLaunchPolicyValidator,
 } from './_shared/agentBridge';
+import {
+  agentInteractionPolicyValidator,
+  agentWakeModeValidator,
+  attachmentKindValidator,
+  channelKindValidator,
+  channelMemberRoleValidator,
+  channelNotificationModeValidator,
+  collaborationEntityTypeValidator,
+  collaborationRunEventKindValidator,
+  collaborationRunStatusValidator,
+  messageActorKindValidator,
+  messageFormatValidator,
+  registeredAgentStatusValidator,
+} from './_shared/collaboration';
 import { PERMISSION_VALUES, SYSTEM_ROLE_KEYS } from './_shared/permissions';
 import {
   actorOriginKindValidator,
@@ -1611,6 +1625,273 @@ export default defineSchema({
     .index('by_user_token_and_environment', ['userId', 'token', 'environment']),
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // Collaboration
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  channels: defineTable({
+    organizationId: v.id('organizations'),
+    kind: channelKindValidator,
+    name: v.string(),
+    slug: v.string(),
+    topic: v.optional(v.string()),
+    description: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    createdByUserId: v.id('users'),
+    isDefault: v.boolean(),
+    archivedAt: v.optional(v.number()),
+    lastMessageId: v.optional(v.id('channelMessages')),
+    lastMessageAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_organization_id', ['organizationId'])
+    .index('by_organization_id_and_kind', ['organizationId', 'kind'])
+    .index('by_organization_id_and_slug', ['organizationId', 'slug'])
+    .index('by_organization_id_and_is_default', ['organizationId', 'isDefault'])
+    .index('by_organization_id_and_last_message_at', [
+      'organizationId',
+      'lastMessageAt',
+    ])
+    .searchIndex('search_name', {
+      searchField: 'name',
+      filterFields: ['organizationId', 'kind'],
+    }),
+
+  channelMembers: defineTable({
+    organizationId: v.id('organizations'),
+    channelId: v.id('channels'),
+    userId: v.id('users'),
+    role: channelMemberRoleValidator,
+    notificationMode: channelNotificationModeValidator,
+    lastReadAt: v.optional(v.number()),
+    lastReadMessageId: v.optional(v.id('channelMessages')),
+    favoriteAt: v.optional(v.number()),
+    sortOrder: v.optional(v.number()),
+    joinedAt: v.number(),
+    hiddenAt: v.optional(v.number()),
+  })
+    .index('by_channel_id', ['channelId'])
+    .index('by_user_id', ['userId'])
+    .index('by_channel_id_and_user_id', ['channelId', 'userId'])
+    .index('by_organization_id_and_user_id', ['organizationId', 'userId']),
+
+  channelMessages: defineTable({
+    organizationId: v.id('organizations'),
+    channelId: v.id('channels'),
+    actorKind: messageActorKindValidator,
+    authorUserId: v.optional(v.id('users')),
+    authorAgentId: v.optional(v.id('registeredAgents')),
+    body: v.string(),
+    format: messageFormatValidator,
+    threadRootId: v.optional(v.id('channelMessages')),
+    replyToMessageId: v.optional(v.id('channelMessages')),
+    clientMessageId: v.optional(v.string()),
+    mentionedUserIds: v.array(v.id('users')),
+    mentionedAgentIds: v.array(v.id('registeredAgents')),
+    replyCount: v.number(),
+    lastReplyAt: v.optional(v.number()),
+    resolvedAt: v.optional(v.number()),
+    resolvedByUserId: v.optional(v.id('users')),
+    editedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index('by_channel_id_and_created_at', ['channelId', 'createdAt'])
+    .index('by_channel_id_and_thread_root_id_and_created_at', [
+      'channelId',
+      'threadRootId',
+      'createdAt',
+    ])
+    .index('by_thread_root_id_and_created_at', ['threadRootId', 'createdAt'])
+    .index('by_author_user_id_and_created_at', ['authorUserId', 'createdAt'])
+    .index('by_author_agent_id_and_created_at', ['authorAgentId', 'createdAt'])
+    .index('by_channel_id_and_client_message_id', [
+      'channelId',
+      'clientMessageId',
+    ])
+    .searchIndex('search_body', {
+      searchField: 'body',
+      filterFields: ['organizationId', 'channelId', 'actorKind'],
+    }),
+
+  messageAttachments: defineTable({
+    organizationId: v.id('organizations'),
+    channelId: v.id('channels'),
+    messageId: v.id('channelMessages'),
+    storageId: v.id('_storage'),
+    kind: attachmentKindValidator,
+    name: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    duration: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index('by_message_id', ['messageId'])
+    .index('by_channel_id_and_created_at', ['channelId', 'createdAt'])
+    .index('by_storage_id', ['storageId'])
+    .searchIndex('search_name', {
+      searchField: 'name',
+      filterFields: ['organizationId', 'channelId', 'kind'],
+    }),
+
+  messageReactions: defineTable({
+    organizationId: v.id('organizations'),
+    channelId: v.id('channels'),
+    messageId: v.id('channelMessages'),
+    userId: v.id('users'),
+    emoji: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_message_id', ['messageId'])
+    .index('by_message_id_and_emoji', ['messageId', 'emoji'])
+    .index('by_message_id_and_user_id_and_emoji', [
+      'messageId',
+      'userId',
+      'emoji',
+    ])
+    .index('by_user_id', ['userId']),
+
+  messagePins: defineTable({
+    organizationId: v.id('organizations'),
+    channelId: v.id('channels'),
+    messageId: v.id('channelMessages'),
+    pinnedByUserId: v.id('users'),
+    createdAt: v.number(),
+  })
+    .index('by_channel_id', ['channelId'])
+    .index('by_message_id', ['messageId']),
+
+  savedMessages: defineTable({
+    organizationId: v.id('organizations'),
+    messageId: v.id('channelMessages'),
+    userId: v.id('users'),
+    createdAt: v.number(),
+  })
+    .index('by_user_id', ['userId'])
+    .index('by_user_id_and_message_id', ['userId', 'messageId']),
+
+  threadFollowers: defineTable({
+    organizationId: v.id('organizations'),
+    channelId: v.id('channels'),
+    threadRootId: v.id('channelMessages'),
+    userId: v.id('users'),
+    lastReadAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index('by_thread_root_id', ['threadRootId'])
+    .index('by_user_id', ['userId'])
+    .index('by_user_id_and_thread_root_id', ['userId', 'threadRootId'])
+    .index('by_channel_id_and_user_id', ['channelId', 'userId']),
+
+  messageEntityLinks: defineTable({
+    organizationId: v.id('organizations'),
+    messageId: v.id('channelMessages'),
+    entityType: collaborationEntityTypeValidator,
+    entityId: v.string(),
+    linkedByUserId: v.id('users'),
+    createdAt: v.number(),
+  })
+    .index('by_message_id', ['messageId'])
+    .index('by_entity_type_and_entity_id', ['entityType', 'entityId'])
+    .index('by_organization_id', ['organizationId']),
+
+  registeredAgents: defineTable({
+    organizationId: v.id('organizations'),
+    ownerUserId: v.id('users'),
+    name: v.string(),
+    handle: v.string(),
+    description: v.optional(v.string()),
+    avatar: v.optional(v.string()),
+    provider: agentProviderValidator,
+    deviceId: v.id('agentDevices'),
+    workspaceId: v.id('deviceWorkspaces'),
+    defaultFolder: v.string(),
+    model: v.optional(v.string()),
+    permissionMode: agentPermissionModeValidator,
+    thinkingLevel: v.optional(agentThinkingLevelValidator),
+    interactionPolicy: agentInteractionPolicyValidator,
+    lifecycleStatus: registeredAgentStatusValidator,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_organization_id', ['organizationId'])
+    .index('by_organization_id_and_handle', ['organizationId', 'handle'])
+    .index('by_owner_user_id', ['ownerUserId'])
+    .index('by_device_id', ['deviceId'])
+    .index('by_workspace_id', ['workspaceId']),
+
+  agentChannelMemberships: defineTable({
+    organizationId: v.id('organizations'),
+    channelId: v.id('channels'),
+    agentId: v.id('registeredAgents'),
+    addedByUserId: v.id('users'),
+    wakeMode: agentWakeModeValidator,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_channel_id', ['channelId'])
+    .index('by_agent_id', ['agentId'])
+    .index('by_channel_id_and_agent_id', ['channelId', 'agentId']),
+
+  agentAccessGrants: defineTable({
+    organizationId: v.id('organizations'),
+    agentId: v.id('registeredAgents'),
+    userId: v.id('users'),
+    canInteract: v.boolean(),
+    canControl: v.boolean(),
+    grantedByUserId: v.id('users'),
+    createdAt: v.number(),
+  })
+    .index('by_agent_id', ['agentId'])
+    .index('by_agent_id_and_user_id', ['agentId', 'userId'])
+    .index('by_user_id', ['userId']),
+
+  collaborationAgentRuns: defineTable({
+    organizationId: v.id('organizations'),
+    agentId: v.id('registeredAgents'),
+    channelId: v.id('channels'),
+    triggerMessageId: v.id('channelMessages'),
+    threadRootId: v.optional(v.id('channelMessages')),
+    requestedByUserId: v.id('users'),
+    deviceId: v.id('agentDevices'),
+    workspaceId: v.id('deviceWorkspaces'),
+    processId: v.optional(v.id('agentProcesses')),
+    sessionId: v.optional(v.string()),
+    status: collaborationRunStatusValidator,
+    currentActivity: v.optional(v.string()),
+    latestSummary: v.optional(v.string()),
+    finalMessageId: v.optional(v.id('channelMessages')),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_agent_id', ['agentId'])
+    .index('by_agent_id_and_status', ['agentId', 'status'])
+    .index('by_channel_id_and_created_at', ['channelId', 'createdAt'])
+    .index('by_trigger_message_id_and_agent_id', [
+      'triggerMessageId',
+      'agentId',
+    ])
+    .index('by_device_id_and_status', ['deviceId', 'status']),
+
+  collaborationRunEvents: defineTable({
+    runId: v.id('collaborationAgentRuns'),
+    sourceId: v.optional(v.string()),
+    kind: collaborationRunEventKindValidator,
+    title: v.string(),
+    body: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index('by_run_id_and_created_at', ['runId', 'createdAt'])
+    .index('by_run_id_and_source_id', ['runId', 'sourceId']),
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // Agent Device Bridge
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1856,6 +2137,8 @@ export default defineSchema({
     deviceId: v.id('agentDevices'),
     processId: v.optional(v.id('agentProcesses')),
     liveActivityId: v.optional(v.id('issueLiveActivities')),
+    collaborationRunId: v.optional(v.id('collaborationAgentRuns')),
+    registeredAgentId: v.optional(v.id('registeredAgents')),
     senderUserId: v.id('users'),
     kind: agentCommandKindValidator,
     payload: v.optional(v.any()),
@@ -1867,6 +2150,7 @@ export default defineSchema({
     .index('by_device', ['deviceId'])
     .index('by_device_status', ['deviceId', 'status'])
     .index('by_live_activity', ['liveActivityId'])
+    .index('by_collaboration_run_id', ['collaborationRunId'])
     .index('by_process', ['processId']),
 
   // User status (Discord-like presence + custom status)

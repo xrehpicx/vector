@@ -6,6 +6,23 @@ export const PERMISSIONS = {
   ORG_MANAGE_MEMBERS: 'org:manage:members',
   ORG_MANAGE_ROLES: 'org:manage:roles',
 
+  // Collaboration Permissions
+  CHANNEL_VIEW: 'channel:view',
+  CHANNEL_CREATE: 'channel:create',
+  CHANNEL_EDIT: 'channel:edit',
+  CHANNEL_ARCHIVE: 'channel:archive',
+  CHANNEL_MANAGE_MEMBERS: 'channel:manage:members',
+  CHANNEL_MESSAGE_SEND: 'channel:message:send',
+  CHANNEL_MESSAGE_MODERATE: 'channel:message:moderate',
+
+  // Registered Agent Permissions
+  AGENT_VIEW: 'agent:view',
+  AGENT_CREATE: 'agent:create',
+  AGENT_EDIT_OWN: 'agent:edit:own',
+  AGENT_MANAGE: 'agent:manage',
+  AGENT_INTERACT: 'agent:interact',
+  AGENT_CONTROL: 'agent:control',
+
   // Project Permissions
   PROJECT_CREATE: 'project:create',
   PROJECT_VIEW: 'project:view',
@@ -56,6 +73,8 @@ export const PERMISSIONS = {
   PROJECT_ALL: 'project:*',
   DOCUMENT_ALL: 'document:*',
   VIEW_ALL: 'view:*',
+  CHANNEL_ALL: 'channel:*',
+  AGENT_ALL: 'agent:*',
 } as const;
 
 // Helper type for permission values
@@ -110,6 +129,22 @@ export const PERMISSION_DEPENDENCIES: Partial<
   [PERMISSIONS.ORG_MANAGE_BILLING]: [PERMISSIONS.ORG_VIEW],
   [PERMISSIONS.ORG_MANAGE_MEMBERS]: [PERMISSIONS.ORG_VIEW],
   [PERMISSIONS.ORG_MANAGE_ROLES]: [PERMISSIONS.ORG_VIEW],
+
+  // Collaboration.
+  [PERMISSIONS.CHANNEL_CREATE]: [PERMISSIONS.CHANNEL_VIEW],
+  [PERMISSIONS.CHANNEL_EDIT]: [PERMISSIONS.CHANNEL_VIEW],
+  [PERMISSIONS.CHANNEL_ARCHIVE]: [PERMISSIONS.CHANNEL_VIEW],
+  [PERMISSIONS.CHANNEL_MANAGE_MEMBERS]: [PERMISSIONS.CHANNEL_VIEW],
+  [PERMISSIONS.CHANNEL_MESSAGE_SEND]: [PERMISSIONS.CHANNEL_VIEW],
+  [PERMISSIONS.CHANNEL_MESSAGE_MODERATE]: [PERMISSIONS.CHANNEL_VIEW],
+  [PERMISSIONS.AGENT_CREATE]: [PERMISSIONS.AGENT_VIEW],
+  [PERMISSIONS.AGENT_EDIT_OWN]: [PERMISSIONS.AGENT_VIEW],
+  [PERMISSIONS.AGENT_MANAGE]: [PERMISSIONS.AGENT_VIEW],
+  [PERMISSIONS.AGENT_INTERACT]: [
+    PERMISSIONS.AGENT_VIEW,
+    PERMISSIONS.CHANNEL_VIEW,
+  ],
+  [PERMISSIONS.AGENT_CONTROL]: [PERMISSIONS.AGENT_VIEW],
 
   // Any project action implies viewing projects.
   [PERMISSIONS.PROJECT_CREATE]: [PERMISSIONS.PROJECT_VIEW],
@@ -212,6 +247,10 @@ export const BUILTIN_ROLE_PERMISSIONS: Record<BuiltinRole, Permission[]> = {
     PERMISSIONS.ORG_MANAGE_MEMBERS,
     PERMISSIONS.ORG_MANAGE_ROLES,
 
+    // Collaboration
+    PERMISSIONS.CHANNEL_ALL,
+    PERMISSIONS.AGENT_ALL,
+
     // Projects
     PERMISSIONS.PROJECT_VIEW,
     PERMISSIONS.PROJECT_CREATE,
@@ -259,6 +298,16 @@ export const BUILTIN_ROLE_PERMISSIONS: Record<BuiltinRole, Permission[]> = {
   // Member gets essential read / limited write access
   member: [
     PERMISSIONS.ORG_VIEW,
+
+    // Collaboration
+    PERMISSIONS.CHANNEL_VIEW,
+    PERMISSIONS.CHANNEL_CREATE,
+    PERMISSIONS.CHANNEL_EDIT,
+    PERMISSIONS.CHANNEL_MESSAGE_SEND,
+    PERMISSIONS.AGENT_VIEW,
+    PERMISSIONS.AGENT_CREATE,
+    PERMISSIONS.AGENT_EDIT_OWN,
+    PERMISSIONS.AGENT_INTERACT,
 
     // Projects
     PERMISSIONS.PROJECT_VIEW,

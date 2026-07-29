@@ -5,7 +5,7 @@ import { OrgSetupForm } from '@/components/organization';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useRouter } from 'nextjs-toploader/app';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -69,7 +69,7 @@ function PendingInvitesList() {
       await acceptInvite({ inviteId: inv._id });
       toast.success(`Joined ${inv.organization?.name ?? 'workspace'}`);
       if (inv.organization?.slug) {
-        router.push(`/${inv.organization.slug}/requests`);
+        router.push(`/${inv.organization.slug}/channels`);
         return;
       }
       router.push('/');

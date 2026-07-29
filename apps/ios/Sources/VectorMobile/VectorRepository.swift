@@ -12,6 +12,10 @@ private struct VectorDelegateSessionResponse: Decodable {
   let liveActivityId: VectorID
 }
 
+private struct VectorStorageUploadResponse: Decodable {
+  let storageId: VectorID
+}
+
 public enum VectorConvexFunctions {
   public static let getOrganizations = "users:getOrganizations"
   public static let listRequestsPage = "requests/queries:list"
@@ -76,6 +80,17 @@ public enum VectorConvexFunctions {
   public static let updateNotificationPreferences = "notifications/mutations:updatePreferences"
   public static let upsertMobilePushToken = "notifications/mutations:upsertMobilePushToken"
   public static let removeMobilePushToken = "notifications/mutations:removeMobilePushToken"
+  public static let listCollaborationChannels = "collaboration/channels:list"
+  public static let listChannelMessages = "collaboration/messages:listChannel"
+  public static let listChannelThread = "collaboration/messages:listThread"
+  public static let listPriorityMessages = "collaboration/messages:listPriorityInbox"
+  public static let listSavedMessages = "collaboration/messages:listSaved"
+  public static let listChannelAgents = "collaboration/agents:listChannelMemberships"
+  public static let sendChannelMessage = "collaboration/messages:send"
+  public static let toggleSavedMessage = "collaboration/messages:toggleSaved"
+  public static let generateChannelUploadURL = "collaboration/messages:generateUploadUrl"
+  public static let getChannelAttachmentURL = "collaboration/messages:getAttachmentUrl"
+  public static let markChannelRead = "collaboration/messages:markRead"
 }
 
 enum VectorConvexArguments {
@@ -170,6 +185,31 @@ public enum VectorIssueLayoutMode: String, CaseIterable, Identifiable {
 
 @MainActor
 public protocol VectorMobileRepository {
+  func collaborationChannels(orgSlug: String) -> AnyPublisher<[VectorChannelListItem], Error>
+  func channelMessages(
+    channelId: VectorID,
+    pageSize: Int,
+    cursor: String?
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error>
+  func channelThread(
+    rootMessageId: VectorID,
+    pageSize: Int,
+    cursor: String?
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error>
+  func priorityMessages(orgSlug: String) -> AnyPublisher<[VectorPriorityInboxItem], Error>
+  func savedMessages(orgSlug: String) -> AnyPublisher<[VectorMessageView], Error>
+  func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error>
+  func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error>
+  func sendChannelMessage(
+    channelId: VectorID,
+    body: String,
+    mentionedAgentIds: [VectorID],
+    attachments: [VectorDraftAttachment],
+    threadRootId: VectorID?,
+    replyToMessageId: VectorID?
+  ) async throws -> VectorSendMessageResult
+  func toggleSavedMessage(messageId: VectorID) async throws -> Bool
+  func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws
   func requestsPage(orgSlug: String, scope: VectorRequestScope, pageSize: Int, cursor: String?) -> AnyPublisher<VectorPaginatedPage<VectorRequestRow>, Error>
   func request(orgSlug: String, key: String) -> AnyPublisher<VectorRequestDetail?, Error>
   func requestCreation(orgSlug: String, clientRequestId: String) -> AnyPublisher<VectorCreateRequestResult?, Error>
@@ -241,6 +281,71 @@ public protocol VectorMobileRepository {
 }
 
 public extension VectorMobileRepository {
+  func collaborationChannels(orgSlug: String) -> AnyPublisher<[VectorChannelListItem], Error> {
+    Just([])
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  func channelMessages(
+    channelId: VectorID,
+    pageSize: Int,
+    cursor: String?
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error> {
+    Just(VectorPaginatedPage<VectorMessageView>(page: [], isDone: true))
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  func channelThread(
+    rootMessageId: VectorID,
+    pageSize: Int,
+    cursor: String?
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error> {
+    Just(VectorPaginatedPage<VectorMessageView>(page: [], isDone: true))
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  func priorityMessages(orgSlug: String) -> AnyPublisher<[VectorPriorityInboxItem], Error> {
+    Just([])
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  func savedMessages(orgSlug: String) -> AnyPublisher<[VectorMessageView], Error> {
+    Just([])
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error> {
+    Just([])
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error> {
+    Just<VectorAttachmentURL?>(nil)
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  func sendChannelMessage(
+    channelId: VectorID,
+    body: String,
+    mentionedAgentIds: [VectorID],
+    attachments: [VectorDraftAttachment],
+    threadRootId: VectorID?,
+    replyToMessageId: VectorID?
+  ) async throws -> VectorSendMessageResult {
+    throw VectorMobileError.validation("Messaging is unavailable in this repository.")
+  }
+
+  func toggleSavedMessage(messageId: VectorID) async throws -> Bool { false }
+
+  func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws {}
+
   func requestsPage(
     orgSlug: String,
     scope: VectorRequestScope,
@@ -375,6 +480,180 @@ public final class ConvexVectorRepository: VectorMobileRepository {
 
   public convenience init(configuration: VectorMobileConfiguration) {
     self.init(client: ConvexClient(deploymentUrl: configuration.convexDeploymentURL.absoluteString))
+  }
+
+  public func collaborationChannels(orgSlug: String) -> AnyPublisher<[VectorChannelListItem], Error> {
+    client
+      .subscribe(
+        to: VectorConvexFunctions.listCollaborationChannels,
+        with: [
+          "orgSlug": orgSlug,
+          "limit": 100.0,
+        ],
+        yielding: [VectorChannelListItem].self
+      )
+      .mapError { $0 as Error }
+      .eraseToAnyPublisher()
+  }
+
+  public func channelMessages(
+    channelId: VectorID,
+    pageSize: Int = 50,
+    cursor: String? = nil
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error> {
+    client
+      .subscribe(
+        to: VectorConvexFunctions.listChannelMessages,
+        with: [
+          "channelId": channelId,
+          "paginationOpts": VectorConvexArguments.pagination(numItems: pageSize, cursor: cursor),
+        ],
+        yielding: VectorPaginatedPage<VectorMessageView>.self
+      )
+      .mapError { $0 as Error }
+      .eraseToAnyPublisher()
+  }
+
+  public func channelThread(
+    rootMessageId: VectorID,
+    pageSize: Int = 50,
+    cursor: String? = nil
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error> {
+    client
+      .subscribe(
+        to: VectorConvexFunctions.listChannelThread,
+        with: [
+          "threadRootId": rootMessageId,
+          "paginationOpts": VectorConvexArguments.pagination(numItems: pageSize, cursor: cursor),
+        ],
+        yielding: VectorPaginatedPage<VectorMessageView>.self
+      )
+      .mapError { $0 as Error }
+      .eraseToAnyPublisher()
+  }
+
+  public func priorityMessages(orgSlug: String) -> AnyPublisher<[VectorPriorityInboxItem], Error> {
+    client
+      .subscribe(
+        to: VectorConvexFunctions.listPriorityMessages,
+        with: [
+          "orgSlug": orgSlug,
+          "limit": 100.0,
+        ],
+        yielding: [VectorPriorityInboxItem].self
+      )
+      .mapError { $0 as Error }
+      .eraseToAnyPublisher()
+  }
+
+  public func savedMessages(orgSlug: String) -> AnyPublisher<[VectorMessageView], Error> {
+    client
+      .subscribe(
+        to: VectorConvexFunctions.listSavedMessages,
+        with: [
+          "orgSlug": orgSlug,
+          "limit": 100.0,
+        ],
+        yielding: [VectorMessageView].self
+      )
+      .mapError { $0 as Error }
+      .eraseToAnyPublisher()
+  }
+
+  public func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error> {
+    client
+      .subscribe(
+        to: VectorConvexFunctions.listChannelAgents,
+        with: [
+          "channelId": channelId,
+          "limit": 50.0,
+        ],
+        yielding: [VectorChannelAgentView].self
+      )
+      .mapError { $0 as Error }
+      .eraseToAnyPublisher()
+  }
+
+  public func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error> {
+    client
+      .subscribe(
+        to: VectorConvexFunctions.getChannelAttachmentURL,
+        with: ["attachmentId": attachmentId],
+        yielding: VectorAttachmentURL?.self
+      )
+      .mapError { $0 as Error }
+      .eraseToAnyPublisher()
+  }
+
+  public func sendChannelMessage(
+    channelId: VectorID,
+    body: String,
+    mentionedAgentIds: [VectorID],
+    attachments: [VectorDraftAttachment],
+    threadRootId: VectorID? = nil,
+    replyToMessageId: VectorID? = nil
+  ) async throws -> VectorSendMessageResult {
+    var uploadedAttachments: [[String: ConvexEncodable?]] = []
+    for attachment in attachments {
+      let uploadURL: String = try await client.mutation(
+        VectorConvexFunctions.generateChannelUploadURL,
+        with: ["channelId": channelId]
+      )
+      guard let url = URL(string: uploadURL) else {
+        throw VectorMobileError.validation("Vector returned an invalid upload URL.")
+      }
+
+      var request = URLRequest(url: url)
+      request.httpMethod = "POST"
+      request.setValue(attachment.contentType, forHTTPHeaderField: "Content-Type")
+      let (data, response) = try await URLSession.shared.upload(for: request, from: attachment.data)
+      guard let httpResponse = response as? HTTPURLResponse,
+            (200..<300).contains(httpResponse.statusCode)
+      else {
+        throw VectorMobileError.validation("The attachment could not be uploaded.")
+      }
+      let result = try JSONDecoder().decode(VectorStorageUploadResponse.self, from: data)
+      uploadedAttachments.append([
+        "storageId": result.storageId,
+        "kind": attachment.kind,
+        "name": attachment.name,
+        "contentType": attachment.contentType,
+        "size": Double(attachment.data.count),
+      ])
+    }
+
+    let attachmentArgs = uploadedAttachments.map { $0 as ConvexEncodable? }
+    return try await client.mutation(
+      VectorConvexFunctions.sendChannelMessage,
+      with: [
+        "channelId": channelId,
+        "body": body,
+        "format": "markdown",
+        "clientMessageId": UUID().uuidString.lowercased(),
+        "mentionedAgentIds": mentionedAgentIds.map { $0 as ConvexEncodable? },
+        "attachments": attachmentArgs,
+        "threadRootId": threadRootId,
+        "replyToMessageId": replyToMessageId,
+      ]
+    )
+  }
+
+  public func toggleSavedMessage(messageId: VectorID) async throws -> Bool {
+    let result: VectorToggleMessageResult = try await client.mutation(
+      VectorConvexFunctions.toggleSavedMessage,
+      with: ["messageId": messageId]
+    )
+    return result.active
+  }
+
+  public func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws {
+    let _: VectorID = try await client.mutation(
+      VectorConvexFunctions.markChannelRead,
+      with: [
+        "channelId": channelId,
+        "messageId": messageId,
+      ]
+    )
   }
 
   public func requestsPage(
@@ -1082,6 +1361,90 @@ public final class ConvexVectorRepository: VectorMobileRepository {
 @MainActor
 public final class MockVectorRepository: VectorMobileRepository {
   public init() {}
+
+  public func collaborationChannels(orgSlug: String) -> AnyPublisher<[VectorChannelListItem], Error> {
+    Just(VectorMockData.collaborationChannels)
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  public func channelMessages(
+    channelId: VectorID,
+    pageSize: Int,
+    cursor: String?
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error> {
+    let messages = VectorMockData.collaborationMessages.filter {
+      $0.message.channelId == channelId && $0.message.threadRootId == nil
+    }
+    return mockPage(messages, pageSize: pageSize, cursor: cursor)
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  public func channelThread(
+    rootMessageId: VectorID,
+    pageSize: Int,
+    cursor: String?
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error> {
+    let messages = VectorMockData.collaborationMessages.filter {
+      $0.message.threadRootId == rootMessageId
+    }
+    return mockPage(messages, pageSize: pageSize, cursor: cursor)
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  public func priorityMessages(orgSlug: String) -> AnyPublisher<[VectorPriorityInboxItem], Error> {
+    Just(VectorMockData.collaborationPriorityMessages)
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  public func savedMessages(orgSlug: String) -> AnyPublisher<[VectorMessageView], Error> {
+    Just(VectorMockData.collaborationMessages.filter(\.saved))
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  public func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error> {
+    Just(
+      VectorMockData.collaborationChannelAgents.filter {
+        $0.membership.channelId == channelId
+      }
+    )
+    .setFailureType(to: Error.self)
+    .eraseToAnyPublisher()
+  }
+
+  public func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error> {
+    let attachment = VectorMockData.collaborationMessages
+      .flatMap(\.attachments)
+      .first { $0.id == attachmentId }
+    let url = attachment.map {
+      VectorAttachmentURL(
+        attachment: $0,
+        url: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8"
+      )
+    }
+    return Just(url)
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
+  public func sendChannelMessage(
+    channelId: VectorID,
+    body: String,
+    mentionedAgentIds: [VectorID],
+    attachments: [VectorDraftAttachment],
+    threadRootId: VectorID?,
+    replyToMessageId: VectorID?
+  ) async throws -> VectorSendMessageResult {
+    VectorSendMessageResult(messageId: "mock-\(UUID().uuidString)", runIds: [])
+  }
+
+  public func toggleSavedMessage(messageId: VectorID) async throws -> Bool { true }
+
+  public func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws {}
 
   public func requestsPage(
     orgSlug: String,

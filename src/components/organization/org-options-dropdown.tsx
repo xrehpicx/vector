@@ -24,6 +24,7 @@ interface OrgOptionsDropdownProps {
   currentOrgName: string;
   currentOrgLogo?: string | null;
   organizations?: Organization[];
+  compact?: boolean;
 }
 
 export function OrgOptionsDropdown({
@@ -31,6 +32,7 @@ export function OrgOptionsDropdown({
   currentOrgName,
   currentOrgLogo,
   organizations = [],
+  compact = false,
 }: OrgOptionsDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
@@ -42,7 +44,7 @@ export function OrgOptionsDropdown({
 
   const handleOrgSwitch = (orgSlug: string) => {
     if (orgSlug !== currentOrgSlug) {
-      window.location.href = `/${orgSlug}/requests`;
+      window.location.href = `/${orgSlug}/channels`;
     }
     setIsOpen(false);
   };
@@ -60,10 +62,21 @@ export function OrgOptionsDropdown({
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <button
-          className='bg-background hover:bg-accent/50 group flex w-full items-center justify-between rounded-md border p-1 text-left transition-colors'
+          className={`bg-background hover:bg-accent/50 group flex items-center rounded-md border p-1 text-left transition-colors ${
+            compact ? 'size-9 justify-center' : 'w-full justify-between'
+          }`}
           aria-expanded={isOpen}
+          aria-label={
+            compact
+              ? `Switch workspace. Current workspace: ${currentOrgName}`
+              : undefined
+          }
         >
-          <div className='flex min-w-0 flex-1 items-center gap-2'>
+          <div
+            className={`flex min-w-0 items-center gap-2 ${
+              compact ? 'justify-center' : 'flex-1'
+            }`}
+          >
             {currentOrgLogo ? (
               <img
                 src={`/api/files/${currentOrgLogo}`}
@@ -75,11 +88,15 @@ export function OrgOptionsDropdown({
                 {currentOrgName.charAt(0).toUpperCase()}
               </div>
             )}
-            <span className='truncate text-sm font-medium'>
-              {currentOrgName}
-            </span>
+            {!compact ? (
+              <span className='truncate text-sm font-medium'>
+                {currentOrgName}
+              </span>
+            ) : null}
           </div>
-          <ChevronsUpDown className='size-3 shrink-0 opacity-60 transition-opacity group-hover:opacity-100' />
+          {!compact ? (
+            <ChevronsUpDown className='size-3 shrink-0 opacity-60 transition-opacity group-hover:opacity-100' />
+          ) : null}
         </button>
       </DropdownMenuTrigger>
 

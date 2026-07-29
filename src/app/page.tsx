@@ -172,7 +172,7 @@ export default function Home() {
 
     // Authenticated users only go to workspaces they are members of.
     if (hasOrganizations && userOrgs?.[0]?.slug) {
-      router.replace(`/${userOrgs[0].slug}/requests`);
+      router.replace(`/${userOrgs[0].slug}/channels`);
       return;
     }
 
