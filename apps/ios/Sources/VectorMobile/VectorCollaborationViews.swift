@@ -955,7 +955,7 @@ private struct MobileMessageRow: View {
           }
         }
       }
-      .presentationDetents([.medium, .large])
+      .presentationDetents([.height(220)])
     }
     .alert(item: $reminderNotice) { notice in
       Alert(
