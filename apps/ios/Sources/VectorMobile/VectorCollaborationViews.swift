@@ -425,7 +425,7 @@ struct MobileChannelScreen: View {
       MobileMessageTimeline(viewModel: viewModel)
 
       MobileMessageComposer(viewModel: viewModel)
-        .background(.bar)
+        .background(VectorTheme.surfaceBackground)
         .overlay(alignment: .top) {
           Divider()
         }
@@ -555,7 +555,7 @@ private struct MobileThreadScreen: View {
         threadRootId: rootMessage.id,
         replyToMessageId: viewModel.threadMessages.last?.id ?? rootMessage.id
       )
-      .background(.bar)
+      .background(VectorTheme.surfaceBackground)
       .overlay(alignment: .top) { Divider() }
     }
     .navigationTitle("Thread")
@@ -1000,7 +1000,24 @@ private struct MobileMessageComposer: View {
           .textFieldStyle(.plain)
           .padding(.horizontal, 12)
           .padding(.vertical, 9)
-          .background(VectorTheme.inputBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+          .background(
+            VectorTheme.surfaceBackground,
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+          )
+          .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+              .stroke(
+                isFocused ? VectorTheme.accent : VectorTheme.border.opacity(0.82),
+                lineWidth: isFocused ? 1.5 : 1
+              )
+          }
+          .shadow(
+            color: isFocused ? VectorTheme.accent.opacity(0.16) : Color.black.opacity(0.04),
+            radius: isFocused ? 8 : 3,
+            x: 0,
+            y: isFocused ? 2 : 1
+          )
+          .animation(.easeOut(duration: 0.16), value: isFocused)
 
         Button {
           send()

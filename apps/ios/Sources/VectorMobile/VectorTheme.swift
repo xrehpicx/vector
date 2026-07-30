@@ -4,11 +4,13 @@ enum VectorTheme {
   static let mutedText = Color.secondary
 
   #if os(iOS)
+  static let surfaceBackground = Color(.systemBackground)
   static let rowBackground = Color(.secondarySystemGroupedBackground)
   static let groupedBackground = Color(.systemGroupedBackground)
   static let inputBackground = Color(.tertiarySystemGroupedBackground)
   static let border = Color(uiColor: .separator)
   #else
+  static let surfaceBackground = Color(nsColor: .windowBackgroundColor)
   static let rowBackground = Color(nsColor: .controlBackgroundColor)
   static let groupedBackground = Color(nsColor: .windowBackgroundColor)
   static let inputBackground = Color(nsColor: .textBackgroundColor)
