@@ -41,6 +41,7 @@ import type {
   SendCollaborationMessageInput,
 } from '@/components/collaboration/types';
 import type { CreateConversationValue } from '@/components/collaboration/channel-dialogs';
+import { resolveMemberPresence } from '@/components/collaboration/member-presence';
 
 function attachmentKind(file: File): 'image' | 'video' | 'audio' | 'file' {
   if (file.type.startsWith('image/')) return 'image';
@@ -248,6 +249,25 @@ function ActiveChannel({
     { initialNumItems: 50 },
   );
   const presenceStates = usePresence(api.presence, roomId, currentUser.id);
+  const channelUserIds = useMemo(
+    () =>
+      (channelMemberRows ?? []).flatMap(row =>
+        row.user ? [row.user._id] : [],
+      ),
+    [channelMemberRows],
+  );
+  const memberStatuses = useCachedQuery(api.status.getStatuses, {
+    userIds: channelUserIds,
+  });
+  const liveUserIds = useMemo(() => {
+    const userIds = new Set(
+      (presenceStates ?? [])
+        .filter(state => state.online)
+        .map(state => state.userId),
+    );
+    userIds.add(currentUser.id);
+    return userIds;
+  }, [currentUser.id, presenceStates]);
 
   const createChannel = useMutation(api.collaboration.channels.create);
   const joinChannel = useMutation(api.collaboration.channels.join);
@@ -402,8 +422,23 @@ function ActiveChannel({
     () =>
       (channelMemberRows ?? [])
         .flatMap(row => (row.user ? [row.user] : []))
-        .map(user => toCollaborationUser(user, currentUser.id)),
-    [channelMemberRows, currentUser.id],
+        .map(user => {
+          const member = toCollaborationUser(user, currentUser.id);
+          const savedStatus = memberStatuses?.[String(user._id)];
+
+          return {
+            ...member,
+            presence: resolveMemberPresence({
+              savedPresence: savedStatus?.presence,
+              isLive: liveUserIds.has(String(user._id)),
+            }),
+            status:
+              [savedStatus?.customEmoji, savedStatus?.customText]
+                .filter(Boolean)
+                .join(' ') || undefined,
+          };
+        }),
+    [channelMemberRows, currentUser.id, liveUserIds, memberStatuses],
   );
   const channelAgents = useMemo(
     () =>
