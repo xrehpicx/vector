@@ -613,6 +613,38 @@ private struct MobileThreadScreen: View {
   }
 }
 
+enum VectorMessageSwipeStartingState {
+  case closed
+  case actionsOpen
+}
+
+enum VectorMessageSwipeOutcome: Equatable {
+  case closed
+  case actionsOpen
+  case reply
+}
+
+struct VectorMessageSwipeResolver {
+  static func resolve(
+    startingState: VectorMessageSwipeStartingState,
+    translation: CGFloat,
+    predictedTranslation: CGFloat
+  ) -> VectorMessageSwipeOutcome {
+    if startingState == .actionsOpen {
+      return translation >= 20 || predictedTranslation >= 40
+        ? .closed
+        : .actionsOpen
+    }
+    if translation >= 40 && predictedTranslation >= 68 {
+      return .reply
+    }
+    if translation <= -40 && predictedTranslation <= -64 {
+      return .actionsOpen
+    }
+    return .closed
+  }
+}
+
 private struct MobileMessageRow: View {
   let message: VectorMessageView
   @ObservedObject var viewModel: VectorMobileViewModel
@@ -623,6 +655,8 @@ private struct MobileMessageRow: View {
   @State private var isShowingThread = false
   @State private var swipeOffset: CGFloat = 0
   @State private var isSwipeOpen = false
+  @State private var swipeGestureAxis: MobileSwipeGestureAxis?
+  @State private var swipeGestureStartedOpen: Bool?
   @State private var isShowingReminderOptions = false
   @State private var isShowingCustomReminder = false
   @State private var customReminderDate = Date().addingTimeInterval(60 * 60)
@@ -1064,7 +1098,12 @@ private struct MobileMessageRow: View {
       .accessibilityHidden(!isSwipeOpen)
     }
     .frame(maxHeight: .infinity)
-    .background(VectorTheme.rowBackground)
+    .background {
+      ZStack {
+        VectorTheme.rowBackground
+        VectorTheme.accent.opacity(0.045)
+      }
+    }
     .overlay(alignment: .top) {
       Rectangle()
         .fill(VectorTheme.border.opacity(0.18))
@@ -1132,51 +1171,82 @@ private struct MobileMessageRow: View {
   private var messageSwipeGesture: some Gesture {
     DragGesture(minimumDistance: 12)
       .onChanged { value in
-        guard abs(value.translation.width) > abs(value.translation.height) else { return }
-        updateSwipeOffset(value.translation.width)
+        if swipeGestureAxis == nil {
+          swipeGestureAxis = abs(value.translation.width) > abs(value.translation.height)
+            ? .horizontal
+            : .vertical
+          swipeGestureStartedOpen = isSwipeOpen
+        }
+        guard swipeGestureAxis == .horizontal else { return }
+        updateSwipeOffset(
+          value.translation.width,
+          startedOpen: swipeGestureStartedOpen ?? isSwipeOpen
+        )
       }
       .onEnded { value in
-        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+        let axis = swipeGestureAxis
+        let startedOpen = swipeGestureStartedOpen ?? isSwipeOpen
+        swipeGestureAxis = nil
+        swipeGestureStartedOpen = nil
+        guard axis == .horizontal else {
+          settleSwipe(at: isSwipeOpen ? -trailingSwipeWidth : 0)
+          return
+        }
         finishSwipe(
           value.translation.width,
-          value.predictedEndTranslation.width - value.translation.width
+          value.predictedEndTranslation.width,
+          startedOpen: startedOpen
         )
       }
   }
 
-  private func updateSwipeOffset(_ translationWidth: CGFloat) {
-    let startingOffset: CGFloat = isSwipeOpen ? -trailingSwipeWidth : 0
-    let maximumRightOffset: CGFloat = canSwipeToReply ? 84 : 0
+  private func updateSwipeOffset(
+    _ translationWidth: CGFloat,
+    startedOpen: Bool
+  ) {
+    let startingOffset: CGFloat = startedOpen ? -trailingSwipeWidth : 0
+    let maximumRightOffset: CGFloat = startedOpen ? 0 : canSwipeToReply ? 84 : 0
     swipeOffset = min(
       maximumRightOffset,
       max(-trailingSwipeWidth, startingOffset + translationWidth)
     )
   }
 
-  private func finishSwipe(_ translationWidth: CGFloat, _ velocityWidth: CGFloat) {
-    let projectedTranslation = translationWidth + (velocityWidth * 0.14)
-    let shouldReply = canSwipeToReply
-      && (swipeOffset >= 58 || projectedTranslation >= 82)
-    if shouldReply {
-      withAnimation(.snappy(duration: 0.18)) {
+  private func finishSwipe(
+    _ translationWidth: CGFloat,
+    _ predictedTranslation: CGFloat,
+    startedOpen: Bool
+  ) {
+    let startingState: VectorMessageSwipeStartingState = startedOpen
+      ? .actionsOpen
+      : .closed
+    let outcome = VectorMessageSwipeResolver.resolve(
+      startingState: startingState,
+      translation: translationWidth,
+      predictedTranslation: predictedTranslation
+    )
+    if outcome == .reply, canSwipeToReply {
+      withAnimation(.spring(response: 0.25, dampingFraction: 0.84)) {
         isSwipeOpen = false
         swipeOffset = 0
       }
       activateReply()
       return
     }
-    let shouldOpen = swipeOffset < -48 || projectedTranslation < -72
-    withAnimation(.snappy(duration: 0.22)) {
-      isSwipeOpen = shouldOpen
-      swipeOffset = shouldOpen ? -trailingSwipeWidth : 0
+    let shouldOpen = outcome == .actionsOpen
+    isSwipeOpen = shouldOpen
+    settleSwipe(at: shouldOpen ? -trailingSwipeWidth : 0)
+  }
+
+  private func settleSwipe(at offset: CGFloat) {
+    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+      swipeOffset = offset
     }
   }
 
   private func closeSwipeActions() {
-    withAnimation(.snappy(duration: 0.2)) {
-      isSwipeOpen = false
-      swipeOffset = 0
-    }
+    isSwipeOpen = false
+    settleSwipe(at: 0)
   }
 
   private func activateReply() {
@@ -1186,6 +1256,11 @@ private struct MobileMessageRow: View {
       isShowingThread = true
     }
   }
+}
+
+private enum MobileSwipeGestureAxis {
+  case horizontal
+  case vertical
 }
 
 private struct MobileReminderNotice: Identifiable {
@@ -1881,7 +1956,14 @@ private struct MobileMessageComposer: View {
       }
     }
     .onDisappear {
+      isFocused = false
       voiceRecorder.discard()
+    }
+    .onAppear {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        guard voiceRecorder.phase == .idle else { return }
+        isFocused = true
+      }
     }
   }
 
@@ -2031,6 +2113,7 @@ private struct MobileMessageComposer: View {
       VectorStickerTextEditor(
         text: $bodyText,
         isFocused: isFocused,
+        autoFocus: true,
         onFocusChange: { isFocused = $0 },
         onSticker: addNativeSticker
       )

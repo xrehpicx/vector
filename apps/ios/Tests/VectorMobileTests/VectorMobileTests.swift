@@ -102,6 +102,87 @@ final class VectorMobileTests: XCTestCase {
     )
   }
 
+  func testTextEditorDoesNotResignWhileNativeFocusPropagates() {
+    XCTAssertEqual(
+      VectorTextEditorFocusAction.resolve(
+        previouslyRequested: false,
+        requested: false,
+        isFirstResponder: true
+      ),
+      .none
+    )
+    XCTAssertEqual(
+      VectorTextEditorFocusAction.resolve(
+        previouslyRequested: false,
+        requested: true,
+        isFirstResponder: false
+      ),
+      .becomeFirstResponder
+    )
+    XCTAssertEqual(
+      VectorTextEditorFocusAction.resolve(
+        previouslyRequested: true,
+        requested: false,
+        isFirstResponder: true
+      ),
+      .resignFirstResponder
+    )
+  }
+
+  func testMessageSwipeReversalClosesWithoutReplying() {
+    XCTAssertEqual(
+      VectorMessageSwipeResolver.resolve(
+        startingState: .closed,
+        translation: 12,
+        predictedTranslation: -18
+      ),
+      .closed
+    )
+    XCTAssertEqual(
+      VectorMessageSwipeResolver.resolve(
+        startingState: .actionsOpen,
+        translation: 24,
+        predictedTranslation: 31
+      ),
+      .closed
+    )
+    XCTAssertEqual(
+      VectorMessageSwipeResolver.resolve(
+        startingState: .actionsOpen,
+        translation: 220,
+        predictedTranslation: 260
+      ),
+      .closed
+    )
+    XCTAssertEqual(
+      VectorMessageSwipeResolver.resolve(
+        startingState: .actionsOpen,
+        translation: 8,
+        predictedTranslation: 16
+      ),
+      .actionsOpen
+    )
+  }
+
+  func testMessageSwipeRequiresCommittedDirection() {
+    XCTAssertEqual(
+      VectorMessageSwipeResolver.resolve(
+        startingState: .closed,
+        translation: 54,
+        predictedTranslation: 92
+      ),
+      .reply
+    )
+    XCTAssertEqual(
+      VectorMessageSwipeResolver.resolve(
+        startingState: .closed,
+        translation: -52,
+        predictedTranslation: -88
+      ),
+      .actionsOpen
+    )
+  }
+
   @MainActor
   func testVoiceMeterNormalizationStaysAudibleAndBounded() {
     XCTAssertEqual(VectorVoiceRecorder.normalizedLevel(decibels: -80), 0.08)

@@ -1,5 +1,25 @@
 import SwiftUI
 
+enum VectorTextEditorFocusAction: Equatable {
+  case none
+  case becomeFirstResponder
+  case resignFirstResponder
+
+  static func resolve(
+    previouslyRequested: Bool,
+    requested: Bool,
+    isFirstResponder: Bool
+  ) -> Self {
+    if requested, !isFirstResponder {
+      return .becomeFirstResponder
+    }
+    if previouslyRequested, !requested, isFirstResponder {
+      return .resignFirstResponder
+    }
+    return .none
+  }
+}
+
 struct VectorRichTextCommand: Equatable {
   let id = UUID()
   let action: MarkdownFormatAction
@@ -34,6 +54,7 @@ import UniformTypeIdentifiers
 struct VectorStickerTextEditor: View {
   @Binding var text: String
   var isFocused = false
+  var autoFocus = false
   var onFocusChange: (Bool) -> Void = { _ in }
   var onSticker: (Data, String, String) -> Void
   @State private var measuredHeight: CGFloat = 40
@@ -49,6 +70,7 @@ struct VectorStickerTextEditor: View {
       VectorStickerTextViewRepresentable(
         text: $text,
         isFocused: isFocused,
+        autoFocus: autoFocus,
         onFocusChange: onFocusChange,
         onHeightChange: { measuredHeight = $0 },
         onSticker: onSticker
@@ -62,6 +84,7 @@ struct VectorStickerTextEditor: View {
 private struct VectorStickerTextViewRepresentable: UIViewRepresentable {
   @Binding var text: String
   let isFocused: Bool
+  let autoFocus: Bool
   let onFocusChange: (Bool) -> Void
   let onHeightChange: (CGFloat) -> Void
   let onSticker: (Data, String, String) -> Void
@@ -81,6 +104,8 @@ private struct VectorStickerTextViewRepresentable: UIViewRepresentable {
     textView.alwaysBounceVertical = false
     textView.supportsAdaptiveImageGlyph = true
     textView.text = text
+    textView.shouldBecomeFirstResponderWhenAvailable = isFocused
+    textView.autoFocusPending = autoFocus
     DispatchQueue.main.async {
       textView.reportHeight()
     }
@@ -89,7 +114,10 @@ private struct VectorStickerTextViewRepresentable: UIViewRepresentable {
 
   func updateUIView(_ textView: UITextView, context: Context) {
     context.coordinator.parent = self
-    (textView as? VectorStickerUITextView)?.onHeightChange = onHeightChange
+    if let stickerTextView = textView as? VectorStickerUITextView {
+      stickerTextView.onHeightChange = onHeightChange
+      stickerTextView.shouldBecomeFirstResponderWhenAvailable = isFocused
+    }
     if textView.attributedText.string != text,
        !context.coordinator.isExtractingSticker
     {
@@ -101,9 +129,15 @@ private struct VectorStickerTextViewRepresentable: UIViewRepresentable {
       )
       (textView as? VectorStickerUITextView)?.reportHeight()
     }
-    if isFocused && !textView.isFirstResponder {
+    let focusAction = VectorTextEditorFocusAction.resolve(
+      previouslyRequested: context.coordinator.lastRenderedFocusState,
+      requested: isFocused,
+      isFirstResponder: textView.isFirstResponder
+    )
+    context.coordinator.lastRenderedFocusState = isFocused
+    if focusAction == .becomeFirstResponder {
       textView.becomeFirstResponder()
-    } else if !isFocused && textView.isFirstResponder {
+    } else if focusAction == .resignFirstResponder {
       textView.resignFirstResponder()
     }
   }
@@ -127,9 +161,12 @@ private struct VectorStickerTextViewRepresentable: UIViewRepresentable {
   final class Coordinator: NSObject, UITextViewDelegate {
     var parent: VectorStickerTextViewRepresentable
     var isExtractingSticker = false
+    var lastRenderedFocusState: Bool
+    private var pendingBlurWorkItem: DispatchWorkItem?
 
     init(parent: VectorStickerTextViewRepresentable) {
       self.parent = parent
+      self.lastRenderedFocusState = parent.isFocused
     }
 
     func textViewDidChange(_ textView: UITextView) {
@@ -174,18 +211,51 @@ private struct VectorStickerTextViewRepresentable: UIViewRepresentable {
     }
 
     func textViewDidBeginEditing(_ textView: UITextView) {
+      pendingBlurWorkItem?.cancel()
+      pendingBlurWorkItem = nil
       parent.onFocusChange(true)
     }
 
     func textViewDidEndEditing(_ textView: UITextView) {
-      parent.onFocusChange(false)
+      let workItem = DispatchWorkItem { [weak self, weak textView] in
+        guard
+          let self,
+          let textView,
+          self.parent.isFocused,
+          textView.window != nil,
+          !textView.isFirstResponder
+        else {
+          return
+        }
+        self.parent.onFocusChange(false)
+      }
+      pendingBlurWorkItem = workItem
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
     }
   }
 }
 
 private final class VectorStickerUITextView: UITextView {
   var onHeightChange: ((CGFloat) -> Void)?
+  var shouldBecomeFirstResponderWhenAvailable = false
+  var autoFocusPending = false
   private var lastReportedHeight: CGFloat = 0
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    let shouldFocus = shouldBecomeFirstResponderWhenAvailable || autoFocusPending
+    guard window != nil, shouldFocus else { return }
+    autoFocusPending = false
+    DispatchQueue.main.async { [weak self] in
+      guard
+        let self,
+        self.window != nil,
+        shouldFocus || self.shouldBecomeFirstResponderWhenAvailable,
+        !self.isFirstResponder
+      else { return }
+      self.becomeFirstResponder()
+    }
+  }
 
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -857,6 +927,7 @@ private extension NSAttributedString.Key {
 struct VectorStickerTextEditor: View {
   @Binding var text: String
   var isFocused = false
+  var autoFocus = false
   var onFocusChange: (Bool) -> Void = { _ in }
   var onSticker: (Data, String, String) -> Void
 
