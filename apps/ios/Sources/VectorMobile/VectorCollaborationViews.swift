@@ -116,6 +116,14 @@ struct MobileConversationHomeScreen: View {
                 } label: {
                   MobileChannelRow(item: item)
                 }
+                .listRowSeparator(.hidden)
+                .overlay(alignment: .bottom) {
+                  Rectangle()
+                    .fill(VectorTheme.border.opacity(0.28))
+                    .frame(height: 0.5)
+                    .padding(.horizontal, -16)
+                    .allowsHitTesting(false)
+                }
               }
             }
           }
