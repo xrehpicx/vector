@@ -69,7 +69,7 @@ struct MobileConversationHomeScreen: View {
           if !directOnly {
             Section {
               ScrollView(.horizontal) {
-                HStack(spacing: 10) {
+                HStack(spacing: 6) {
                   ForEach(MobileSmartMessageMode.allCases) { mode in
                     NavigationLink {
                       MobileSmartMessagesScreen(mode: mode, viewModel: viewModel)
@@ -88,10 +88,10 @@ struct MobileConversationHomeScreen: View {
                   }
                   .buttonStyle(.plain)
                 }
-                .padding(.vertical, 2)
               }
               .scrollIndicators(.hidden)
-              .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 0))
+              .listRowInsets(EdgeInsets(top: 3, leading: 16, bottom: 3, trailing: 0))
+              .listRowSeparator(.hidden)
             }
           }
 
@@ -155,7 +155,7 @@ private struct MobileConversationShortcutLabel: View {
   let systemImage: String
 
   var body: some View {
-    HStack(spacing: 7) {
+    HStack(spacing: 6) {
       Image(systemName: systemImage)
         .font(.subheadline.weight(.medium))
         .foregroundStyle(.secondary)
@@ -163,9 +163,9 @@ private struct MobileConversationShortcutLabel: View {
         .font(.subheadline.weight(.semibold))
         .foregroundStyle(.primary)
     }
-    .padding(.horizontal, 13)
-    .frame(minHeight: 42)
-    .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .padding(.horizontal, 11)
+    .frame(minHeight: 38)
+    .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
   }
 }
 
