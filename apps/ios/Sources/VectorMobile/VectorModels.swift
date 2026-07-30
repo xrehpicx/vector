@@ -360,6 +360,31 @@ public struct VectorUser: Decodable, Equatable, Identifiable {
   public var displayName: String {
     name ?? email ?? "Unknown user"
   }
+
+  public var mentionHandle: String {
+    if let email,
+       let prefix = email.split(separator: "@", maxSplits: 1).first
+    {
+      let emailPrefix = String(prefix)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      if emailPrefix.isEmpty {
+        return normalizedMentionHandle(from: displayName)
+      }
+      return emailPrefix.lowercased()
+    }
+
+    return normalizedMentionHandle(from: displayName)
+  }
+
+  private func normalizedMentionHandle(from value: String) -> String {
+    let normalized = value
+      .lowercased()
+      .unicodeScalars
+      .map { CharacterSet.alphanumerics.contains($0) ? Character($0) : "-" }
+    return String(normalized)
+      .split(separator: "-", omittingEmptySubsequences: true)
+      .joined(separator: "-")
+  }
 }
 
 public struct VectorState: Decodable, Equatable, Identifiable {

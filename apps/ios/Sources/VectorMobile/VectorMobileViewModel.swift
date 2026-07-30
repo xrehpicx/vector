@@ -47,6 +47,7 @@ public final class VectorMobileViewModel: ObservableObject {
   @Published public private(set) var threadMessages: [VectorMessageView] = []
   @Published public private(set) var priorityMessages: [VectorPriorityInboxItem] = []
   @Published public private(set) var savedMessages: [VectorMessageView] = []
+  @Published public private(set) var channelMembers: [VectorChannelMemberView] = []
   @Published public private(set) var channelAgents: [VectorChannelAgentView] = []
   @Published public private(set) var selectedChannelId: VectorID?
   @Published public private(set) var selectedThreadRootId: VectorID?
@@ -55,6 +56,7 @@ public final class VectorMobileViewModel: ObservableObject {
   @Published public private(set) var isLoadingSmartMessages = false
   @Published public private(set) var isLoadingThread = false
   @Published public private(set) var isSendingChannelMessage = false
+  @Published public private(set) var messageDeliveryStates: [VectorID: VectorMessageDeliveryState] = [:]
   @Published public private(set) var collaborationError: String?
   @Published public private(set) var requests: [VectorRequestRow] = []
   @Published public private(set) var work: [VectorWorkRow] = []
@@ -148,6 +150,7 @@ public final class VectorMobileViewModel: ObservableObject {
   private var threadMessagesCancellable: AnyCancellable?
   private var priorityMessagesCancellable: AnyCancellable?
   private var savedMessagesCancellable: AnyCancellable?
+  private var channelMembersCancellable: AnyCancellable?
   private var channelAgentsCancellable: AnyCancellable?
   private var requestListCancellable: AnyCancellable?
   private var workListCancellable: AnyCancellable?
@@ -180,10 +183,12 @@ public final class VectorMobileViewModel: ObservableObject {
   private var authenticatedUser: VectorAuthenticatedUser?
   private var subscribedComments: [VectorComment] = []
   private var pendingComments: [VectorID: VectorComment] = [:]
+  private var pendingChannelMessages: [String: PendingChannelMessage] = [:]
   private var userStatusMutationSequence = 0
   private var optimisticUserStatusGuard: OptimisticUserStatusGuard?
   private let requestCreationTimeout: Duration
   private let mutationTimeout: Duration
+  private let messageSendTimeout: Duration
   private var requestCreationAttemptId: UUID?
   private var requestCreationOperationTask: Task<Void, Never>?
   private var requestCreationTimeoutTask: Task<Void, Never>?
@@ -215,6 +220,18 @@ public final class VectorMobileViewModel: ObservableObject {
     let confirmationMode: ConfirmationMode
   }
 
+  private struct PendingChannelMessage {
+    let clientMessageId: String
+    let channelId: VectorID
+    let body: String
+    let mentionedUserIds: [VectorID]
+    let mentionedAgentIds: [VectorID]
+    let attachments: [VectorDraftAttachment]
+    let threadRootId: VectorID?
+    let replyToMessageId: VectorID?
+    var message: VectorMessageView
+  }
+
   private struct PaginationState {
     var continueCursor: String?
     var isDone = false
@@ -226,12 +243,14 @@ public final class VectorMobileViewModel: ObservableObject {
     repository: VectorMobileRepository = MockVectorRepository(),
     initialLoadPolicy: VectorMobileInitialLoadPolicy = .allSurfaces,
     requestCreationTimeout: Duration = .seconds(20),
-    mutationTimeout: Duration = .seconds(20)
+    mutationTimeout: Duration = .seconds(20),
+    messageSendTimeout: Duration = .seconds(8)
   ) {
     self.configuration = configuration
     self.repository = repository
     self.requestCreationTimeout = requestCreationTimeout
     self.mutationTimeout = mutationTimeout
+    self.messageSendTimeout = messageSendTimeout
     switch initialLoadPolicy {
     case .primarySurfaces:
       refreshPrimarySurfaces()
@@ -342,10 +361,12 @@ public final class VectorMobileViewModel: ObservableObject {
     guard selectedChannelId != channel.id || channelMessagesCancellable == nil else { return }
     selectedChannelId = channel.id
     channelMessages = []
+    channelMembers = []
     channelAgents = []
     isLoadingChannel = true
     collaborationError = nil
     channelMessagesCancellable?.cancel()
+    channelMembersCancellable?.cancel()
     channelAgentsCancellable?.cancel()
 
     channelMessagesCancellable = repository
@@ -361,9 +382,7 @@ public final class VectorMobileViewModel: ObservableObject {
         },
         receiveValue: { [weak self] page in
           guard let self else { return }
-          channelMessages = page.page.sorted {
-            $0.message.createdAt < $1.message.createdAt
-          }
+          mergeChannelMessages(page.page, channelId: channel.id)
           isLoadingChannel = false
           if let latestMessageId = channelMessages.last?.id {
             Task {
@@ -373,6 +392,20 @@ public final class VectorMobileViewModel: ObservableObject {
               )
             }
           }
+        }
+      )
+
+    channelMembersCancellable = repository
+      .channelMembers(channelId: channel.id)
+      .receive(on: DispatchQueue.main)
+      .sink(
+        receiveCompletion: { [weak self] completion in
+          if case let .failure(error) = completion {
+            self?.collaborationError = error.localizedDescription
+          }
+        },
+        receiveValue: { [weak self] members in
+          self?.channelMembers = members
         }
       )
 
@@ -412,9 +445,7 @@ public final class VectorMobileViewModel: ObservableObject {
           }
         },
         receiveValue: { [weak self] page in
-          self?.threadMessages = page.page.sorted {
-            $0.message.createdAt < $1.message.createdAt
-          }
+          self?.mergeThreadMessages(page.page, rootMessageId: rootMessageId)
           self?.isLoadingThread = false
         }
       )
@@ -428,12 +459,19 @@ public final class VectorMobileViewModel: ObservableObject {
   ) async -> Bool {
     let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let channelId = selectedChannelId,
-          (!trimmedBody.isEmpty || !attachments.isEmpty),
-          !isSendingChannelMessage
+          !trimmedBody.isEmpty || !attachments.isEmpty
     else { return false }
 
-    isSendingChannelMessage = true
     collaborationError = nil
+    let mentionedUsers = channelMembers
+      .compactMap(\.user)
+      .filter { user in
+        trimmedBody.range(
+          of: "@\(user.mentionHandle)",
+          options: [.caseInsensitive, .diacriticInsensitive]
+        ) != nil
+      }
+      .map(\.id)
     let mentionedAgents = channelAgents
       .filter { agent in
         trimmedBody.range(
@@ -442,47 +480,253 @@ public final class VectorMobileViewModel: ObservableObject {
         ) != nil
       }
       .map(\.agent.id)
-
-    do {
-      let result = try await repository.sendChannelMessage(
+    let clientMessageId = UUID().uuidString.lowercased()
+    let localMessageId = "pending:\(clientMessageId)"
+    let createdAt = Date().timeIntervalSince1970 * 1000
+    let optimisticAttachments = attachments.map {
+      VectorMessageAttachment(
+        id: "\(localMessageId):\($0.id.uuidString.lowercased())",
         channelId: channelId,
+        messageId: localMessageId,
+        storageId: "pending",
+        kind: $0.kind,
+        name: $0.name,
+        contentType: $0.contentType,
+        size: Double($0.data.count),
+        createdAt: createdAt
+      )
+    }
+    let optimisticMessage = VectorMessageView(
+      message: VectorChannelMessage(
+        id: localMessageId,
+        channelId: channelId,
+        actorKind: "user",
+        authorUserId: currentUser?.id,
         body: trimmedBody,
-        mentionedAgentIds: mentionedAgents,
-        attachments: attachments,
         threadRootId: threadRootId,
-        replyToMessageId: replyToMessageId
-      )
-      let optimisticMessage = VectorMessageView(
-        message: VectorChannelMessage(
-          id: result.messageId,
-          channelId: channelId,
-          actorKind: "user",
-          authorUserId: currentUser?.id,
-          body: trimmedBody,
-          threadRootId: threadRootId,
-          replyToMessageId: replyToMessageId,
-          mentionedAgentIds: mentionedAgents,
-          createdAt: Date().timeIntervalSince1970 * 1000
-        ),
-        authorUser: currentUser,
-        authorAgent: nil
-      )
-      if let threadRootId {
-        if !threadMessages.contains(where: { $0.id == result.messageId }) {
-          threadMessages.append(optimisticMessage)
-        }
-        if let rootIndex = channelMessages.firstIndex(where: { $0.id == threadRootId }) {
-          channelMessages[rootIndex] = channelMessages[rootIndex].withReplyIncrement()
-        }
-      } else if !channelMessages.contains(where: { $0.id == result.messageId }) {
-        channelMessages.append(optimisticMessage)
+        replyToMessageId: replyToMessageId,
+        clientMessageId: clientMessageId,
+        mentionedUserIds: mentionedUsers,
+        mentionedAgentIds: mentionedAgents,
+        createdAt: createdAt
+      ),
+      authorUser: currentUser,
+      authorAgent: nil,
+      attachments: optimisticAttachments
+    )
+    pendingChannelMessages[clientMessageId] = PendingChannelMessage(
+      clientMessageId: clientMessageId,
+      channelId: channelId,
+      body: trimmedBody,
+      mentionedUserIds: mentionedUsers,
+      mentionedAgentIds: mentionedAgents,
+      attachments: attachments,
+      threadRootId: threadRootId,
+      replyToMessageId: replyToMessageId,
+      message: optimisticMessage
+    )
+    messageDeliveryStates[localMessageId] = .sending
+    rebuildVisiblePendingMessages()
+    refreshChannelSendingState()
+    return await deliverPendingChannelMessage(clientMessageId: clientMessageId)
+  }
+
+  public func retryChannelMessage(_ messageId: VectorID) async {
+    guard let pending = pendingChannelMessages.values.first(where: {
+      $0.message.id == messageId
+    }) else { return }
+    messageDeliveryStates[messageId] = .sending
+    refreshChannelSendingState()
+    _ = await deliverPendingChannelMessage(clientMessageId: pending.clientMessageId)
+  }
+
+  public func messageDeliveryState(for messageId: VectorID) -> VectorMessageDeliveryState? {
+    messageDeliveryStates[messageId]
+  }
+
+  private func deliverPendingChannelMessage(clientMessageId: String) async -> Bool {
+    guard let pending = pendingChannelMessages[clientMessageId] else { return true }
+    var sendResult: VectorSendMessageResult?
+    do {
+      try await withMutationTimeout(timeout: messageSendTimeout) {
+        sendResult = try await self.repository.sendChannelMessage(
+          channelId: pending.channelId,
+          body: pending.body,
+          clientMessageId: pending.clientMessageId,
+          mentionedUserIds: pending.mentionedUserIds,
+          mentionedAgentIds: pending.mentionedAgentIds,
+          attachments: pending.attachments,
+          threadRootId: pending.threadRootId,
+          replyToMessageId: pending.replyToMessageId
+        )
       }
-      isSendingChannelMessage = false
+      guard let result = sendResult else {
+        throw VectorMobileError.validation("Vector could not confirm this message.")
+      }
+      if var latest = pendingChannelMessages[clientMessageId] {
+        let previousId = latest.message.id
+        latest.message = latest.message.replacingMessageID(result.messageId)
+        pendingChannelMessages[clientMessageId] = latest
+        messageDeliveryStates.removeValue(forKey: previousId)
+        messageDeliveryStates[result.messageId] = .sent
+        rebuildVisiblePendingMessages()
+      }
+      refreshChannelSendingState()
       return true
     } catch {
-      collaborationError = error.localizedDescription
-      isSendingChannelMessage = false
+      guard let latest = pendingChannelMessages[clientMessageId] else {
+        refreshChannelSendingState()
+        return false
+      }
+      let message = readableMessageSendError(error)
+      messageDeliveryStates[latest.message.id] = .failed(message)
+      refreshChannelSendingState()
       return false
+    }
+  }
+
+  private func readableMessageSendError(_ error: Error) -> String {
+    let raw = error.localizedDescription
+    if raw.contains("CHANNEL_MEMBERSHIP_REQUIRED") {
+      return "You’re no longer a member of this channel."
+    }
+    if raw.contains("FORBIDDEN") || raw.contains("PERMISSION") {
+      return "You don’t have permission to send here."
+    }
+    if raw.contains("session") || raw.contains("authenticated") || raw.contains("Unauthorized") {
+      return "Your session expired. Sign in again, then retry."
+    }
+    if raw.contains("could not confirm") {
+      return "Not sent. Check your connection and retry."
+    }
+    return "Not sent. Tap to retry."
+  }
+
+  private func refreshChannelSendingState() {
+    isSendingChannelMessage = messageDeliveryStates.values.contains(.sending)
+  }
+
+  private func mergeChannelMessages(
+    _ serverMessages: [VectorMessageView],
+    channelId: VectorID
+  ) {
+    reconcileConfirmedPendingMessages(serverMessages)
+    let pending = pendingChannelMessages.values
+      .filter { $0.channelId == channelId && $0.threadRootId == nil }
+      .map(\.message)
+    channelMessages = mergedMessages(serverMessages, pending: pending)
+  }
+
+  private func mergeThreadMessages(
+    _ serverMessages: [VectorMessageView],
+    rootMessageId: VectorID
+  ) {
+    reconcileConfirmedPendingMessages(serverMessages)
+    let pending = pendingChannelMessages.values
+      .filter { $0.threadRootId == rootMessageId }
+      .map(\.message)
+    threadMessages = mergedMessages(serverMessages, pending: pending)
+  }
+
+  private func rebuildVisiblePendingMessages() {
+    if let channelId = selectedChannelId {
+      let serverMessages = channelMessages.filter {
+        $0.message.clientMessageId == nil
+          || pendingChannelMessages[$0.message.clientMessageId ?? ""] == nil
+      }
+      let pending = pendingChannelMessages.values
+        .filter { $0.channelId == channelId && $0.threadRootId == nil }
+        .map(\.message)
+      channelMessages = mergedMessages(serverMessages, pending: pending)
+    }
+    if let rootMessageId = selectedThreadRootId {
+      let serverMessages = threadMessages.filter {
+        $0.message.clientMessageId == nil
+          || pendingChannelMessages[$0.message.clientMessageId ?? ""] == nil
+      }
+      let pending = pendingChannelMessages.values
+        .filter { $0.threadRootId == rootMessageId }
+        .map(\.message)
+      threadMessages = mergedMessages(serverMessages, pending: pending)
+    }
+  }
+
+  private func reconcileConfirmedPendingMessages(_ serverMessages: [VectorMessageView]) {
+    let confirmedClientMessageIds = Set(serverMessages.compactMap(\.message.clientMessageId))
+    for clientMessageId in confirmedClientMessageIds {
+      guard let pending = pendingChannelMessages.removeValue(forKey: clientMessageId) else {
+        continue
+      }
+      messageDeliveryStates.removeValue(forKey: pending.message.id)
+    }
+    refreshChannelSendingState()
+  }
+
+  private func mergedMessages(
+    _ serverMessages: [VectorMessageView],
+    pending: [VectorMessageView]
+  ) -> [VectorMessageView] {
+    let serverIds = Set(serverMessages.map(\.id))
+    return (serverMessages + pending.filter { !serverIds.contains($0.id) })
+      .sorted { $0.message.createdAt < $1.message.createdAt }
+  }
+
+  public func toggleReaction(_ message: VectorMessageView, emoji: String) async {
+    guard !message.id.hasPrefix("pending:"),
+          let userId = currentUser?.id
+    else { return }
+
+    let previousReactions = message.reactions
+    let existing = previousReactions.first {
+      $0.userId == userId && $0.emoji == emoji
+    }
+    let optimisticReactions: [VectorMessageReaction]
+    if let existing {
+      optimisticReactions = previousReactions.filter { $0.id != existing.id }
+    } else {
+      optimisticReactions = previousReactions + [
+        VectorMessageReaction(
+          id: "pending-reaction:\(UUID().uuidString.lowercased())",
+          userId: userId,
+          emoji: emoji,
+          createdAt: Date().timeIntervalSince1970 * 1000
+        ),
+      ]
+    }
+    replaceMessageReactions(message.id, reactions: optimisticReactions)
+
+    do {
+      _ = try await repository.toggleMessageReaction(
+        messageId: message.id,
+        emoji: emoji
+      )
+    } catch {
+      replaceMessageReactions(message.id, reactions: previousReactions)
+      collaborationError = "Reaction wasn’t saved. Try again."
+    }
+  }
+
+  private func replaceMessageReactions(
+    _ messageId: VectorID,
+    reactions: [VectorMessageReaction]
+  ) {
+    channelMessages = channelMessages.map {
+      $0.id == messageId ? $0.replacingReactions(reactions) : $0
+    }
+    threadMessages = threadMessages.map {
+      $0.id == messageId ? $0.replacingReactions(reactions) : $0
+    }
+    savedMessages = savedMessages.map {
+      $0.id == messageId ? $0.replacingReactions(reactions) : $0
+    }
+    priorityMessages = priorityMessages.map { item in
+      guard item.message.id == messageId else { return item }
+      return VectorPriorityInboxItem(
+        message: item.message.replacingReactions(reactions),
+        channel: item.channel,
+        reason: item.reason,
+        occurredAt: item.occurredAt
+      )
     }
   }
 
@@ -970,9 +1214,10 @@ public final class VectorMobileViewModel: ObservableObject {
   }
 
   private func withMutationTimeout(
+    timeout: Duration? = nil,
     _ operation: @MainActor @escaping () async throws -> Void
   ) async throws {
-    let timeout = mutationTimeout
+    let timeout = timeout ?? mutationTimeout
     let outcome: VectorMutationOutcome = await withCheckedContinuation { continuation in
       let race = VectorMutationRace(continuation: continuation)
       let operationTask = Task { @MainActor in

@@ -95,6 +95,24 @@ public struct VectorChannelMembership: Decodable, Equatable, Identifiable, Senda
   public let lastReadAt: Double?
   public let favoriteAt: Double?
 
+  public init(
+    id: VectorID,
+    channelId: VectorID,
+    userId: VectorID,
+    role: String = "member",
+    notificationMode: VectorChannelNotificationMode = .mentions,
+    lastReadAt: Double? = nil,
+    favoriteAt: Double? = nil
+  ) {
+    self.id = id
+    self.channelId = channelId
+    self.userId = userId
+    self.role = role
+    self.notificationMode = notificationMode
+    self.lastReadAt = lastReadAt
+    self.favoriteAt = favoriteAt
+  }
+
   private enum CodingKeys: String, CodingKey {
     case id = "_id"
     case channelId
@@ -140,6 +158,34 @@ public struct VectorMessageAttachment: Decodable, Equatable, Identifiable, Senda
   public let duration: Double?
   public let createdAt: Double
 
+  public init(
+    id: VectorID,
+    channelId: VectorID,
+    messageId: VectorID,
+    storageId: VectorID,
+    kind: String,
+    name: String,
+    contentType: String,
+    size: Double,
+    width: Double? = nil,
+    height: Double? = nil,
+    duration: Double? = nil,
+    createdAt: Double
+  ) {
+    self.id = id
+    self.channelId = channelId
+    self.messageId = messageId
+    self.storageId = storageId
+    self.kind = kind
+    self.name = name
+    self.contentType = contentType
+    self.size = size
+    self.width = width
+    self.height = height
+    self.duration = duration
+    self.createdAt = createdAt
+  }
+
   private enum CodingKeys: String, CodingKey {
     case id = "_id"
     case channelId
@@ -166,11 +212,35 @@ public struct VectorMessageReaction: Decodable, Equatable, Identifiable, Sendabl
   public let emoji: String
   public let createdAt: Double
 
+  public init(
+    id: VectorID,
+    userId: VectorID,
+    emoji: String,
+    createdAt: Double
+  ) {
+    self.id = id
+    self.userId = userId
+    self.emoji = emoji
+    self.createdAt = createdAt
+  }
+
   private enum CodingKeys: String, CodingKey {
     case id = "_id"
     case userId
     case emoji
     case createdAt
+  }
+}
+
+public struct VectorChannelMemberView: Decodable, Equatable, Identifiable {
+  public let membership: VectorChannelMembership
+  public let user: VectorUser?
+
+  public var id: VectorID { membership.id }
+
+  public init(membership: VectorChannelMembership, user: VectorUser?) {
+    self.membership = membership
+    self.user = user
   }
 }
 
@@ -250,6 +320,7 @@ public struct VectorChannelMessage: Decodable, Equatable, Identifiable, Sendable
   public let format: String
   public let threadRootId: VectorID?
   public let replyToMessageId: VectorID?
+  public let clientMessageId: String?
   public let mentionedUserIds: [VectorID]
   public let mentionedAgentIds: [VectorID]
   public let replyCount: Double
@@ -268,6 +339,7 @@ public struct VectorChannelMessage: Decodable, Equatable, Identifiable, Sendable
     format: String = "markdown",
     threadRootId: VectorID? = nil,
     replyToMessageId: VectorID? = nil,
+    clientMessageId: String? = nil,
     mentionedUserIds: [VectorID] = [],
     mentionedAgentIds: [VectorID] = [],
     replyCount: Double = 0,
@@ -285,6 +357,7 @@ public struct VectorChannelMessage: Decodable, Equatable, Identifiable, Sendable
     self.format = format
     self.threadRootId = threadRootId
     self.replyToMessageId = replyToMessageId
+    self.clientMessageId = clientMessageId
     self.mentionedUserIds = mentionedUserIds
     self.mentionedAgentIds = mentionedAgentIds
     self.replyCount = replyCount
@@ -304,6 +377,7 @@ public struct VectorChannelMessage: Decodable, Equatable, Identifiable, Sendable
     case format
     case threadRootId
     case replyToMessageId
+    case clientMessageId
     case mentionedUserIds
     case mentionedAgentIds
     case replyCount
@@ -367,6 +441,7 @@ public struct VectorMessageView: Decodable, Equatable, Identifiable {
         format: message.format,
         threadRootId: message.threadRootId,
         replyToMessageId: message.replyToMessageId,
+        clientMessageId: message.clientMessageId,
         mentionedUserIds: message.mentionedUserIds,
         mentionedAgentIds: message.mentionedAgentIds,
         replyCount: message.replyCount + 1,
@@ -383,6 +458,71 @@ public struct VectorMessageView: Decodable, Equatable, Identifiable {
       following: following
     )
   }
+
+  public func replacingMessageID(_ id: VectorID) -> VectorMessageView {
+    VectorMessageView(
+      message: VectorChannelMessage(
+        id: id,
+        channelId: message.channelId,
+        actorKind: message.actorKind,
+        authorUserId: message.authorUserId,
+        authorAgentId: message.authorAgentId,
+        body: message.body,
+        format: message.format,
+        threadRootId: message.threadRootId,
+        replyToMessageId: message.replyToMessageId,
+        clientMessageId: message.clientMessageId,
+        mentionedUserIds: message.mentionedUserIds,
+        mentionedAgentIds: message.mentionedAgentIds,
+        replyCount: message.replyCount,
+        lastReplyAt: message.lastReplyAt,
+        editedAt: message.editedAt,
+        deletedAt: message.deletedAt,
+        createdAt: message.createdAt
+      ),
+      authorUser: authorUser,
+      authorAgent: authorAgent,
+      attachments: attachments.map {
+        VectorMessageAttachment(
+          id: $0.id,
+          channelId: $0.channelId,
+          messageId: id,
+          storageId: $0.storageId,
+          kind: $0.kind,
+          name: $0.name,
+          contentType: $0.contentType,
+          size: $0.size,
+          width: $0.width,
+          height: $0.height,
+          duration: $0.duration,
+          createdAt: $0.createdAt
+        )
+      },
+      reactions: reactions,
+      saved: saved,
+      following: following
+    )
+  }
+
+  public func replacingReactions(
+    _ reactions: [VectorMessageReaction]
+  ) -> VectorMessageView {
+    VectorMessageView(
+      message: message,
+      authorUser: authorUser,
+      authorAgent: authorAgent,
+      attachments: attachments,
+      reactions: reactions,
+      saved: saved,
+      following: following
+    )
+  }
+}
+
+public enum VectorMessageDeliveryState: Equatable, Sendable {
+  case sending
+  case sent
+  case failed(String)
 }
 
 public struct VectorPriorityInboxItem: Decodable, Equatable, Identifiable {

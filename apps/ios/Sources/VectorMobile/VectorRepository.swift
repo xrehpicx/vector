@@ -85,8 +85,10 @@ public enum VectorConvexFunctions {
   public static let listChannelThread = "collaboration/messages:listThread"
   public static let listPriorityMessages = "collaboration/messages:listPriorityInbox"
   public static let listSavedMessages = "collaboration/messages:listSaved"
+  public static let listChannelMembers = "collaboration/channels:listMembers"
   public static let listChannelAgents = "collaboration/agents:listChannelMemberships"
   public static let sendChannelMessage = "collaboration/messages:send"
+  public static let toggleMessageReaction = "collaboration/messages:toggleReaction"
   public static let toggleSavedMessage = "collaboration/messages:toggleSaved"
   public static let generateChannelUploadURL = "collaboration/messages:generateUploadUrl"
   public static let getChannelAttachmentURL = "collaboration/messages:getAttachmentUrl"
@@ -134,6 +136,34 @@ enum VectorConvexArguments {
       "issueId": issueId,
       "teamId": teamId,
     ]
+  }
+
+  static func sendChannelMessage(
+    channelId: VectorID,
+    body: String,
+    clientMessageId: String,
+    mentionedUserIds: [VectorID],
+    mentionedAgentIds: [VectorID],
+    attachments: [[String: ConvexEncodable?]],
+    threadRootId: VectorID?,
+    replyToMessageId: VectorID?
+  ) -> [String: ConvexEncodable?] {
+    var args: [String: ConvexEncodable?] = [
+      "channelId": channelId,
+      "body": body,
+      "format": "markdown",
+      "clientMessageId": clientMessageId,
+      "mentionedUserIds": mentionedUserIds.map { $0 as ConvexEncodable? },
+      "mentionedAgentIds": mentionedAgentIds.map { $0 as ConvexEncodable? },
+      "attachments": attachments.map { $0 as ConvexEncodable? },
+    ]
+    if let threadRootId {
+      args["threadRootId"] = threadRootId
+    }
+    if let replyToMessageId {
+      args["replyToMessageId"] = replyToMessageId
+    }
+    return args
   }
 }
 
@@ -198,16 +228,20 @@ public protocol VectorMobileRepository {
   ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error>
   func priorityMessages(orgSlug: String) -> AnyPublisher<[VectorPriorityInboxItem], Error>
   func savedMessages(orgSlug: String) -> AnyPublisher<[VectorMessageView], Error>
+  func channelMembers(channelId: VectorID) -> AnyPublisher<[VectorChannelMemberView], Error>
   func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error>
   func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error>
   func sendChannelMessage(
     channelId: VectorID,
     body: String,
+    clientMessageId: String,
+    mentionedUserIds: [VectorID],
     mentionedAgentIds: [VectorID],
     attachments: [VectorDraftAttachment],
     threadRootId: VectorID?,
     replyToMessageId: VectorID?
   ) async throws -> VectorSendMessageResult
+  func toggleMessageReaction(messageId: VectorID, emoji: String) async throws -> Bool
   func toggleSavedMessage(messageId: VectorID) async throws -> Bool
   func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws
   func requestsPage(orgSlug: String, scope: VectorRequestScope, pageSize: Int, cursor: String?) -> AnyPublisher<VectorPaginatedPage<VectorRequestRow>, Error>
@@ -319,6 +353,12 @@ public extension VectorMobileRepository {
       .eraseToAnyPublisher()
   }
 
+  func channelMembers(channelId: VectorID) -> AnyPublisher<[VectorChannelMemberView], Error> {
+    Just([])
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
   func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error> {
     Just([])
       .setFailureType(to: Error.self)
@@ -334,12 +374,18 @@ public extension VectorMobileRepository {
   func sendChannelMessage(
     channelId: VectorID,
     body: String,
+    clientMessageId: String,
+    mentionedUserIds: [VectorID],
     mentionedAgentIds: [VectorID],
     attachments: [VectorDraftAttachment],
     threadRootId: VectorID?,
     replyToMessageId: VectorID?
   ) async throws -> VectorSendMessageResult {
     throw VectorMobileError.validation("Messaging is unavailable in this repository.")
+  }
+
+  func toggleMessageReaction(messageId: VectorID, emoji: String) async throws -> Bool {
+    throw VectorMobileError.validation("Reactions are unavailable in this repository.")
   }
 
   func toggleSavedMessage(messageId: VectorID) async throws -> Bool { false }
@@ -560,6 +606,20 @@ public final class ConvexVectorRepository: VectorMobileRepository {
       .eraseToAnyPublisher()
   }
 
+  public func channelMembers(channelId: VectorID) -> AnyPublisher<[VectorChannelMemberView], Error> {
+    client
+      .subscribe(
+        to: VectorConvexFunctions.listChannelMembers,
+        with: [
+          "channelId": channelId,
+          "limit": 100.0,
+        ],
+        yielding: [VectorChannelMemberView].self
+      )
+      .mapError { $0 as Error }
+      .eraseToAnyPublisher()
+  }
+
   public func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error> {
     client
       .subscribe(
@@ -588,6 +648,8 @@ public final class ConvexVectorRepository: VectorMobileRepository {
   public func sendChannelMessage(
     channelId: VectorID,
     body: String,
+    clientMessageId: String,
+    mentionedUserIds: [VectorID],
     mentionedAgentIds: [VectorID],
     attachments: [VectorDraftAttachment],
     threadRootId: VectorID? = nil,
@@ -622,20 +684,30 @@ public final class ConvexVectorRepository: VectorMobileRepository {
       ])
     }
 
-    let attachmentArgs = uploadedAttachments.map { $0 as ConvexEncodable? }
     return try await client.mutation(
       VectorConvexFunctions.sendChannelMessage,
+      with: VectorConvexArguments.sendChannelMessage(
+        channelId: channelId,
+        body: body,
+        clientMessageId: clientMessageId,
+        mentionedUserIds: mentionedUserIds,
+        mentionedAgentIds: mentionedAgentIds,
+        attachments: uploadedAttachments,
+        threadRootId: threadRootId,
+        replyToMessageId: replyToMessageId
+      )
+    )
+  }
+
+  public func toggleMessageReaction(messageId: VectorID, emoji: String) async throws -> Bool {
+    let result: VectorToggleMessageResult = try await client.mutation(
+      VectorConvexFunctions.toggleMessageReaction,
       with: [
-        "channelId": channelId,
-        "body": body,
-        "format": "markdown",
-        "clientMessageId": UUID().uuidString.lowercased(),
-        "mentionedAgentIds": mentionedAgentIds.map { $0 as ConvexEncodable? },
-        "attachments": attachmentArgs,
-        "threadRootId": threadRootId,
-        "replyToMessageId": replyToMessageId,
+        "messageId": messageId,
+        "emoji": emoji,
       ]
     )
+    return result.active
   }
 
   public func toggleSavedMessage(messageId: VectorID) async throws -> Bool {
@@ -1406,6 +1478,23 @@ public final class MockVectorRepository: VectorMobileRepository {
       .eraseToAnyPublisher()
   }
 
+  public func channelMembers(channelId: VectorID) -> AnyPublisher<[VectorChannelMemberView], Error> {
+    let users = [VectorMockData.raj, VectorMockData.maya]
+    let members = users.map { user in
+      VectorChannelMemberView(
+        membership: VectorChannelMembership(
+          id: "member-\(channelId)-\(user.id)",
+          channelId: channelId,
+          userId: user.id
+        ),
+        user: user
+      )
+    }
+    return Just(members)
+      .setFailureType(to: Error.self)
+      .eraseToAnyPublisher()
+  }
+
   public func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error> {
     Just(
       VectorMockData.collaborationChannelAgents.filter {
@@ -1434,12 +1523,18 @@ public final class MockVectorRepository: VectorMobileRepository {
   public func sendChannelMessage(
     channelId: VectorID,
     body: String,
+    clientMessageId: String,
+    mentionedUserIds: [VectorID],
     mentionedAgentIds: [VectorID],
     attachments: [VectorDraftAttachment],
     threadRootId: VectorID?,
     replyToMessageId: VectorID?
   ) async throws -> VectorSendMessageResult {
     VectorSendMessageResult(messageId: "mock-\(UUID().uuidString)", runIds: [])
+  }
+
+  public func toggleMessageReaction(messageId: VectorID, emoji: String) async throws -> Bool {
+    true
   }
 
   public func toggleSavedMessage(messageId: VectorID) async throws -> Bool { true }

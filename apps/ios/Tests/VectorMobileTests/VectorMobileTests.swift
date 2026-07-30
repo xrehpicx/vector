@@ -44,7 +44,189 @@ final class VectorMobileTests: XCTestCase {
     XCTAssertEqual(VectorConvexFunctions.listChannelThread, "collaboration/messages:listThread")
     XCTAssertEqual(VectorConvexFunctions.listPriorityMessages, "collaboration/messages:listPriorityInbox")
     XCTAssertEqual(VectorConvexFunctions.listSavedMessages, "collaboration/messages:listSaved")
+    XCTAssertEqual(VectorConvexFunctions.listChannelMembers, "collaboration/channels:listMembers")
+    XCTAssertEqual(VectorConvexFunctions.toggleMessageReaction, "collaboration/messages:toggleReaction")
     XCTAssertEqual(VectorConvexFunctions.toggleSavedMessage, "collaboration/messages:toggleSaved")
+  }
+
+  func testMessageArgumentsOmitAbsentOptionalIdsInsteadOfEncodingNull() {
+    let rootArgs = VectorConvexArguments.sendChannelMessage(
+      channelId: "channel-1",
+      body: "Hello",
+      clientMessageId: "mobile:test",
+      mentionedUserIds: [],
+      mentionedAgentIds: [],
+      attachments: [],
+      threadRootId: nil,
+      replyToMessageId: nil
+    )
+    XCTAssertFalse(rootArgs.keys.contains("threadRootId"))
+    XCTAssertFalse(rootArgs.keys.contains("replyToMessageId"))
+
+    let replyArgs = VectorConvexArguments.sendChannelMessage(
+      channelId: "channel-1",
+      body: "Reply",
+      clientMessageId: "mobile:reply",
+      mentionedUserIds: [],
+      mentionedAgentIds: [],
+      attachments: [],
+      threadRootId: "message-root",
+      replyToMessageId: "message-root"
+    )
+    XCTAssertTrue(replyArgs.keys.contains("threadRootId"))
+    XCTAssertTrue(replyArgs.keys.contains("replyToMessageId"))
+  }
+
+  @MainActor
+  func testChannelMessageAppearsOptimisticallyBeforeMutationCompletes() async {
+    let repository = CountingVectorRepository()
+    var continuation: CheckedContinuation<VectorSendMessageResult, Error>?
+    repository.sendChannelMessageAction = { _ in
+      try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository,
+      messageSendTimeout: .seconds(2)
+    )
+    viewModel.openChannel(VectorMockData.collaborationChannels[0])
+
+    let sendTask = Task {
+      await viewModel.sendChannelMessage(body: "Ship it", attachments: [])
+    }
+    await waitUntil {
+      viewModel.channelMessages.contains { $0.message.body == "Ship it" }
+    }
+    let pending = try? XCTUnwrap(
+      viewModel.channelMessages.first { $0.message.body == "Ship it" }
+    )
+    XCTAssertEqual(pending.map { viewModel.messageDeliveryState(for: $0.id) }, .sending)
+    XCTAssertTrue(viewModel.isSendingChannelMessage)
+
+    await waitUntil { continuation != nil }
+    continuation?.resume(
+      returning: VectorSendMessageResult(messageId: "message-created", runIds: [])
+    )
+    let sent = await sendTask.value
+    XCTAssertTrue(sent)
+    XCTAssertTrue(viewModel.channelMessages.contains { $0.id == "message-created" })
+    XCTAssertEqual(repository.sentClientMessageIds.count, 1)
+  }
+
+  @MainActor
+  func testFailedOptimisticMessageCanRetryWithSameIdempotencyKey() async {
+    let repository = CountingVectorRepository()
+    var attempt = 0
+    repository.sendChannelMessageAction = { _ in
+      attempt += 1
+      if attempt == 1 {
+        throw VectorMobileError.validation("Server error")
+      }
+      return VectorSendMessageResult(messageId: "message-retried", runIds: [])
+    }
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository,
+      messageSendTimeout: .seconds(1)
+    )
+    viewModel.openChannel(VectorMockData.collaborationChannels[0])
+
+    let initiallySent = await viewModel.sendChannelMessage(
+      body: "Retry me",
+      attachments: []
+    )
+    XCTAssertFalse(initiallySent)
+    let failed = try? XCTUnwrap(
+      viewModel.channelMessages.first { $0.message.body == "Retry me" }
+    )
+    if let failed {
+      guard case .failed = viewModel.messageDeliveryState(for: failed.id) else {
+        return XCTFail("Expected a failed optimistic message")
+      }
+      await viewModel.retryChannelMessage(failed.id)
+    }
+
+    XCTAssertTrue(viewModel.channelMessages.contains { $0.id == "message-retried" })
+    XCTAssertEqual(repository.sentClientMessageIds.count, 2)
+    XCTAssertEqual(
+      repository.sentClientMessageIds.first,
+      repository.sentClientMessageIds.last
+    )
+  }
+
+  @MainActor
+  func testChannelMessageIncludesMentionedMemberIds() async {
+    let repository = CountingVectorRepository()
+    repository.channelMembersValue = [
+      VectorChannelMemberView(
+        membership: VectorChannelMembership(
+          id: "membership-maya",
+          channelId: VectorMockData.collaborationChannels[0].id,
+          userId: VectorMockData.maya.id
+        ),
+        user: VectorMockData.maya
+      ),
+    ]
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository
+    )
+    viewModel.setAuthenticatedUser(
+      VectorAuthenticatedUser(
+        id: VectorMockData.raj.id,
+        email: VectorMockData.raj.email,
+        name: VectorMockData.raj.name
+      )
+    )
+    viewModel.openChannel(VectorMockData.collaborationChannels[0])
+    await waitUntil { viewModel.channelMembers.count == 1 }
+
+    let sent = await viewModel.sendChannelMessage(
+      body: "@maya can you review this?",
+      attachments: []
+    )
+
+    XCTAssertTrue(sent)
+    XCTAssertEqual(repository.sentMentionedUserIds, [[VectorMockData.maya.id]])
+  }
+
+  @MainActor
+  func testReactionAppearsOptimisticallyBeforeMutationCompletes() async {
+    let repository = CountingVectorRepository()
+    let message = VectorMockData.collaborationMessages[0]
+    repository.channelMessagesValue = [message]
+    var continuation: CheckedContinuation<Bool, Error>?
+    repository.toggleReactionAction = { _, _ in
+      try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository
+    )
+    viewModel.setAuthenticatedUser(
+      VectorAuthenticatedUser(
+        id: VectorMockData.raj.id,
+        email: VectorMockData.raj.email,
+        name: VectorMockData.raj.name
+      )
+    )
+    viewModel.openChannel(VectorMockData.collaborationChannels[0])
+    await waitUntil { viewModel.channelMessages.contains { $0.id == message.id } }
+
+    let reactionTask = Task {
+      await viewModel.toggleReaction(message, emoji: "✅")
+    }
+    await waitUntil {
+      viewModel.channelMessages
+        .first { $0.id == message.id }?
+        .reactions
+        .contains { $0.userId == VectorMockData.raj.id && $0.emoji == "✅" } == true
+    }
+
+    XCTAssertEqual(repository.toggledReactions.count, 1)
+    await waitUntil { continuation != nil }
+    continuation?.resume(returning: true)
+    await reactionTask.value
   }
 
   func testCollaborationModelsDecodeMessagesAgentsAndPriorityMetadata() throws {
@@ -1420,9 +1602,62 @@ private final class CountingVectorRepository: VectorMobileRepository {
   var createRequestPriorityIds: [VectorID?] = []
   let requestCreationSubject = CurrentValueSubject<VectorCreateRequestResult?, Error>(nil)
   var sendAgentSessionAction: (() async throws -> Void)?
+  var sendChannelMessageAction: ((String) async throws -> VectorSendMessageResult)?
+  var sentClientMessageIds: [String] = []
+  var sentMentionedUserIds: [[VectorID]] = []
+  var channelMembersValue: [VectorChannelMemberView] = []
+  var channelMessagesValue: [VectorMessageView] = []
+  var toggleReactionAction: ((VectorID, String) async throws -> Bool)?
+  var toggledReactions: [(messageId: VectorID, emoji: String)] = []
   var documentDetailOverride: VectorDocument?
   var documentChunkPages: [String: VectorPaginatedPage<VectorDocumentContentChunk>] = [:]
   var documentContentPageCursors: [String?] = []
+
+  func channelMessages(
+    channelId: VectorID,
+    pageSize: Int,
+    cursor: String?
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error> {
+    publisher(VectorPaginatedPage(page: channelMessagesValue, isDone: true))
+  }
+
+  func channelMembers(channelId: VectorID) -> AnyPublisher<[VectorChannelMemberView], Error> {
+    publisher(channelMembersValue)
+  }
+
+  func channelThread(
+    rootMessageId: VectorID,
+    pageSize: Int,
+    cursor: String?
+  ) -> AnyPublisher<VectorPaginatedPage<VectorMessageView>, Error> {
+    publisher(VectorPaginatedPage(page: [], isDone: true))
+  }
+
+  func sendChannelMessage(
+    channelId: VectorID,
+    body: String,
+    clientMessageId: String,
+    mentionedUserIds: [VectorID],
+    mentionedAgentIds: [VectorID],
+    attachments: [VectorDraftAttachment],
+    threadRootId: VectorID?,
+    replyToMessageId: VectorID?
+  ) async throws -> VectorSendMessageResult {
+    sentClientMessageIds.append(clientMessageId)
+    sentMentionedUserIds.append(mentionedUserIds)
+    if let sendChannelMessageAction {
+      return try await sendChannelMessageAction(clientMessageId)
+    }
+    return VectorSendMessageResult(messageId: "message-created", runIds: [])
+  }
+
+  func toggleMessageReaction(messageId: VectorID, emoji: String) async throws -> Bool {
+    toggledReactions.append((messageId, emoji))
+    if let toggleReactionAction {
+      return try await toggleReactionAction(messageId, emoji)
+    }
+    return true
+  }
 
   func requestsPage(orgSlug: String, scope: VectorRequestScope, pageSize: Int, cursor: String?) -> AnyPublisher<VectorPaginatedPage<VectorRequestRow>, Error> {
     requestListCalls[scope, default: 0] += 1

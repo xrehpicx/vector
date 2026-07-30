@@ -452,6 +452,9 @@ struct MobileChannelScreen: View {
     }
     .navigationTitle(channel.channel.name)
     .vectorInlineNavigationTitle()
+    #if os(iOS)
+      .toolbar(.hidden, for: .tabBar)
+    #endif
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         Button {
@@ -573,13 +576,16 @@ private struct MobileThreadScreen: View {
       MobileMessageComposer(
         viewModel: viewModel,
         threadRootId: rootMessage.id,
-        replyToMessageId: viewModel.threadMessages.last?.id ?? rootMessage.id
+        replyToMessageId: rootMessage.id
       )
       .background(VectorTheme.surfaceBackground)
       .overlay(alignment: .top) { Divider() }
     }
     .navigationTitle("Thread")
     .vectorInlineNavigationTitle()
+    #if os(iOS)
+      .toolbar(.hidden, for: .tabBar)
+    #endif
     .onAppear {
       viewModel.openThread(rootMessageId: rootMessage.id)
     }
@@ -610,6 +616,29 @@ private struct MobileMessageRow: View {
     return viewModel.channelAgents.first(where: {
       $0.agent.id == authorAgent.id
     })?.owner?.displayName
+  }
+
+  private var isSending: Bool {
+    viewModel.messageDeliveryState(for: message.id) == .sending
+  }
+
+  private var reactionGroups: [MobileReactionGroup] {
+    var order: [String] = []
+    var reactionsByEmoji: [String: [VectorMessageReaction]] = [:]
+    for reaction in message.reactions {
+      if reactionsByEmoji[reaction.emoji] == nil {
+        order.append(reaction.emoji)
+      }
+      reactionsByEmoji[reaction.emoji, default: []].append(reaction)
+    }
+    return order.compactMap { emoji in
+      guard let reactions = reactionsByEmoji[emoji] else { return nil }
+      return MobileReactionGroup(
+        emoji: emoji,
+        count: reactions.count,
+        isActive: reactions.contains { $0.userId == viewModel.currentUser?.id }
+      )
+    }
   }
 
   var body: some View {
@@ -684,6 +713,85 @@ private struct MobileMessageRow: View {
           .padding(.top, 2)
         }
 
+        if let deliveryState = viewModel.messageDeliveryState(for: message.id) {
+          switch deliveryState {
+          case .sending:
+            Label("Sending", systemImage: "clock")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .accessibilityLabel("Message sending")
+          case .sent:
+            Label("Sent", systemImage: "checkmark")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .accessibilityLabel("Message sent")
+          case let .failed(error):
+            Button {
+              Task { await viewModel.retryChannelMessage(message.id) }
+            } label: {
+              Label(error, systemImage: "arrow.clockwise.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Retries this message")
+          }
+        }
+
+        if message.message.deletedAt == nil {
+          HStack(spacing: 6) {
+            ForEach(reactionGroups) { reaction in
+              Button {
+                Task {
+                  await viewModel.toggleReaction(message, emoji: reaction.emoji)
+                }
+              } label: {
+                HStack(spacing: 4) {
+                  Text(reaction.emoji)
+                  Text("\(reaction.count)")
+                    .font(.caption2.weight(.semibold))
+                    .monospacedDigit()
+                }
+                .padding(.horizontal, 8)
+                .frame(minHeight: 28)
+                .background(
+                  reaction.isActive
+                    ? VectorTheme.accent.opacity(0.14)
+                    : Color.secondary.opacity(0.09),
+                  in: Capsule()
+                )
+                .overlay {
+                  if reaction.isActive {
+                    Capsule()
+                      .stroke(VectorTheme.accent.opacity(0.45), lineWidth: 1)
+                  }
+                }
+              }
+              .buttonStyle(.plain)
+              .disabled(isSending)
+              .accessibilityLabel(
+                "\(reaction.emoji), \(reaction.count) \(reaction.count == 1 ? "reaction" : "reactions")"
+              )
+            }
+
+            Menu {
+              ForEach(MobileReactionGroup.quickEmojis, id: \.self) { emoji in
+                Button(emoji) {
+                  Task { await viewModel.toggleReaction(message, emoji: emoji) }
+                }
+              }
+            } label: {
+              Image(systemName: "face.smiling")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.secondary.opacity(0.075), in: Circle())
+            }
+            .disabled(isSending)
+            .accessibilityLabel("Add reaction")
+          }
+        }
+
         if showsThreadAction && message.message.replyCount > 0 {
           Button {
             isShowingThread = true
@@ -704,6 +812,8 @@ private struct MobileMessageRow: View {
     .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)
     .contentShape(Rectangle())
+    .opacity(isSending ? 0.58 : 1)
+    .animation(.easeOut(duration: 0.16), value: isSending)
     .contextMenu {
       Button {
         #if os(iOS)
@@ -722,6 +832,15 @@ private struct MobileMessageRow: View {
       } label: {
         Label(message.saved ? "Remove from saved" : "Save for later", systemImage: "bookmark")
       }
+      Menu {
+        ForEach(MobileReactionGroup.quickEmojis, id: \.self) { emoji in
+          Button(emoji) {
+            Task { await viewModel.toggleReaction(message, emoji: emoji) }
+          }
+        }
+      } label: {
+        Label("Add reaction", systemImage: "face.smiling")
+      }
     }
     .sheet(item: $selectedAttachment) { attachment in
       MobileMediaViewer(attachment: attachment, viewModel: viewModel)
@@ -730,6 +849,16 @@ private struct MobileMessageRow: View {
       MobileThreadScreen(rootMessage: message, viewModel: viewModel)
     }
   }
+}
+
+private struct MobileReactionGroup: Identifiable {
+  static let quickEmojis = ["👍", "❤️", "😂", "🎉", "✅", "👀"]
+
+  let emoji: String
+  let count: Int
+  let isActive: Bool
+
+  var id: String { emoji }
 }
 
 private struct MobileMessageSkeleton: View {
@@ -807,7 +936,13 @@ private struct MobileAttachmentPreview: View {
           }
           .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         } else {
-          Image(systemName: attachment.isVideo ? "play.fill" : attachment.isAudio ? "waveform" : "doc")
+          Image(
+            systemName: attachment.isVideo
+              ? "play.fill"
+              : attachment.isAudio
+                ? "waveform"
+                : attachment.isImage ? "photo" : "doc"
+          )
             .font(.title2.weight(.semibold))
             .foregroundStyle(.white)
             .frame(width: 46, height: 46)
@@ -897,6 +1032,32 @@ private struct MobileMediaViewer: View {
   }
 }
 
+private enum MobileMentionSuggestion: Identifiable {
+  case member(VectorUser)
+  case agent(VectorChannelAgentView)
+
+  var id: String {
+    switch self {
+    case let .member(user): "member:\(user.id)"
+    case let .agent(agent): "agent:\(agent.id)"
+    }
+  }
+
+  var handle: String {
+    switch self {
+    case let .member(user): user.mentionHandle
+    case let .agent(agent): agent.agent.handle
+    }
+  }
+
+  var displayName: String {
+    switch self {
+    case let .member(user): user.displayName
+    case let .agent(agent): agent.agent.name
+    }
+  }
+}
+
 private struct MobileMessageComposer: View {
   @ObservedObject var viewModel: VectorMobileViewModel
   var threadRootId: VectorID? = nil
@@ -907,6 +1068,7 @@ private struct MobileMessageComposer: View {
   @State private var isPhotoPickerPresented = false
   @State private var isFileImporterPresented = false
   @FocusState private var isFocused: Bool
+  @Environment(\.colorScheme) private var colorScheme
 
   private var mentionQuery: String? {
     guard let token = bodyText.split(whereSeparator: \.isWhitespace).last,
@@ -915,50 +1077,87 @@ private struct MobileMessageComposer: View {
     return String(token.dropFirst()).lowercased()
   }
 
-  private var agentSuggestions: [VectorChannelAgentView] {
+  private var mentionSuggestions: [MobileMentionSuggestion] {
     guard let mentionQuery else { return [] }
-    return viewModel.channelAgents.filter {
-      mentionQuery.isEmpty
-        || $0.agent.handle.localizedCaseInsensitiveContains(mentionQuery)
-        || $0.agent.name.localizedCaseInsensitiveContains(mentionQuery)
-    }
+    let members = viewModel.channelMembers
+      .compactMap(\.user)
+      .filter {
+        mentionQuery.isEmpty
+          || $0.mentionHandle.localizedCaseInsensitiveContains(mentionQuery)
+          || $0.displayName.localizedCaseInsensitiveContains(mentionQuery)
+      }
+      .map(MobileMentionSuggestion.member)
+    let agents = viewModel.channelAgents
+      .filter {
+        mentionQuery.isEmpty
+          || $0.agent.handle.localizedCaseInsensitiveContains(mentionQuery)
+          || $0.agent.name.localizedCaseInsensitiveContains(mentionQuery)
+      }
+      .map(MobileMentionSuggestion.agent)
+    return members + agents
   }
 
   private var canSend: Bool {
-    (!bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty)
-      && !viewModel.isSendingChannelMessage
+    !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
   }
 
   var body: some View {
     VStack(spacing: 0) {
-      if !agentSuggestions.isEmpty {
+      if !mentionSuggestions.isEmpty {
         VStack(spacing: 0) {
-          ForEach(agentSuggestions.prefix(4)) { agent in
+          ForEach(Array(mentionSuggestions.prefix(5))) { suggestion in
             Button {
-              insert(agent)
+              insert(suggestion)
             } label: {
               HStack(spacing: 10) {
-                Image(systemName: "cpu")
-                  .foregroundStyle(VectorTheme.accent)
+                Image(
+                  systemName: {
+                    if case .agent = suggestion { return "cpu" }
+                    return "person.fill"
+                  }()
+                )
+                  .foregroundStyle(
+                    {
+                      if case .agent = suggestion { return VectorTheme.accent }
+                      return Color.secondary
+                    }()
+                  )
                   .frame(width: 28, height: 28)
-                  .background(VectorTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                  .background(
+                    {
+                      if case .agent = suggestion {
+                        return VectorTheme.accent.opacity(0.1)
+                      }
+                      return Color.secondary.opacity(0.1)
+                    }(),
+                    in: RoundedRectangle(cornerRadius: 8)
+                  )
                 VStack(alignment: .leading, spacing: 1) {
-                  Text("@\(agent.agent.handle)")
+                  Text("@\(suggestion.handle)")
                     .font(.subheadline.weight(.semibold))
-                  Text("Agent · owned by \(agent.owner?.displayName ?? "workspace member")")
+                  Text({
+                    switch suggestion {
+                    case let .member(user):
+                      return user.displayName
+                    case let .agent(agent):
+                      return "Agent · owned by \(agent.owner?.displayName ?? "workspace member")"
+                    }
+                  }())
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Circle()
-                  .fill(agent.agent.lifecycleStatus == "ready" ? Color.green : Color.secondary)
-                  .frame(width: 8, height: 8)
+                if case let .agent(agent) = suggestion {
+                  Circle()
+                    .fill(agent.agent.lifecycleStatus == "ready" ? Color.green : Color.secondary)
+                    .frame(width: 8, height: 8)
+                }
               }
               .padding(.horizontal, 14)
               .frame(minHeight: 48)
             }
             .buttonStyle(.plain)
-            if agent.id != agentSuggestions.prefix(4).last?.id {
+            if suggestion.id != mentionSuggestions.prefix(5).last?.id {
               Divider().padding(.leading, 52)
             }
           }
@@ -994,7 +1193,7 @@ private struct MobileMessageComposer: View {
         .scrollIndicators(.hidden)
       }
 
-      HStack(alignment: .bottom, spacing: 8) {
+      HStack(alignment: .center, spacing: 7) {
         Menu {
           Button {
             isPhotoPickerPresented = true
@@ -1008,9 +1207,9 @@ private struct MobileMessageComposer: View {
           }
         } label: {
           Image(systemName: "plus")
-            .font(.body.weight(.semibold))
+            .font(.body.weight(.medium))
+            .foregroundStyle(isFocused ? VectorTheme.accent : .primary)
             .frame(width: 36, height: 36)
-            .background(Color.secondary.opacity(0.1), in: Circle())
         }
         .accessibilityLabel("Add attachment")
 
@@ -1018,49 +1217,55 @@ private struct MobileMessageComposer: View {
           .lineLimit(1...5)
           .focused($isFocused)
           .textFieldStyle(.plain)
-          .padding(.horizontal, 12)
           .padding(.vertical, 9)
-          .background(
-            VectorTheme.surfaceBackground,
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-          )
-          .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-              .stroke(
-                isFocused ? VectorTheme.accent : VectorTheme.border.opacity(0.82),
-                lineWidth: isFocused ? 1.5 : 1
-              )
-          }
-          .shadow(
-            color: isFocused ? VectorTheme.accent.opacity(0.16) : Color.black.opacity(0.04),
-            radius: isFocused ? 8 : 3,
-            x: 0,
-            y: isFocused ? 2 : 1
-          )
-          .animation(.easeOut(duration: 0.16), value: isFocused)
 
         Button {
           send()
         } label: {
-          Group {
-            if viewModel.isSendingChannelMessage {
-              ProgressView()
-                .controlSize(.small)
-                .tint(.white)
-            } else {
-              Image(systemName: "arrow.up")
-                .font(.body.weight(.bold))
-            }
-          }
-          .frame(width: 36, height: 36)
+          Image(systemName: "arrow.up")
+            .font(.body.weight(.bold))
+          .frame(width: 34, height: 34)
           .foregroundStyle(.white)
-          .background(canSend ? VectorTheme.accent : Color.secondary.opacity(0.28), in: Circle())
+          .background(
+            canSend
+              ? VectorTheme.accent
+              : colorScheme == .dark
+                ? Color.white.opacity(0.16)
+                : Color.secondary.opacity(0.24),
+            in: Circle()
+          )
         }
         .disabled(!canSend)
         .accessibilityLabel("Send message")
       }
+      .padding(.horizontal, 7)
+      .padding(.vertical, 5)
+      .background(
+        colorScheme == .dark
+          ? Color.white.opacity(0.115)
+          : Color.black.opacity(0.045),
+        in: RoundedRectangle(cornerRadius: 23, style: .continuous)
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: 23, style: .continuous)
+          .stroke(
+            isFocused
+              ? VectorTheme.accent.opacity(0.72)
+              : colorScheme == .dark
+                ? Color.white.opacity(0.2)
+                : Color.black.opacity(0.13),
+            lineWidth: 1
+          )
+      }
+      .shadow(
+        color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.08),
+        radius: isFocused ? 8 : 4,
+        x: 0,
+        y: 2
+      )
+      .animation(.easeOut(duration: 0.16), value: isFocused)
       .padding(.horizontal, 12)
-      .padding(.vertical, 9)
+      .padding(.vertical, 8)
     }
     .photosPicker(
       isPresented: $isPhotoPickerPresented,
@@ -1106,14 +1311,14 @@ private struct MobileMessageComposer: View {
     }
   }
 
-  private func insert(_ agent: VectorChannelAgentView) {
+  private func insert(_ suggestion: MobileMentionSuggestion) {
     let parts = bodyText.split(omittingEmptySubsequences: false, whereSeparator: \.isWhitespace)
     guard !parts.isEmpty else {
-      bodyText = "@\(agent.agent.handle) "
+      bodyText = "@\(suggestion.handle) "
       return
     }
     var mutable = parts.map(String.init)
-    mutable[mutable.count - 1] = "@\(agent.agent.handle) "
+    mutable[mutable.count - 1] = "@\(suggestion.handle) "
     bodyText = mutable.joined(separator: " ")
     isFocused = true
   }
@@ -1121,16 +1326,18 @@ private struct MobileMessageComposer: View {
   private func send() {
     let pendingBody = bodyText
     let pendingAttachments = attachments
+    guard !pendingBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !pendingAttachments.isEmpty
+    else { return }
+    bodyText = ""
+    attachments = []
     Task {
-      if await viewModel.sendChannelMessage(
+      _ = await viewModel.sendChannelMessage(
         body: pendingBody,
         attachments: pendingAttachments,
         threadRootId: threadRootId,
         replyToMessageId: replyToMessageId
-      ) {
-        bodyText = ""
-        attachments = []
-      }
+      )
     }
   }
 }
