@@ -127,6 +127,9 @@ struct MobileConversationHomeScreen: View {
       }
     }
     .navigationTitle(directOnly ? "Direct Messages" : "Home")
+    #if os(iOS)
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .searchable(
       text: $searchText,
       placement: .automatic,
