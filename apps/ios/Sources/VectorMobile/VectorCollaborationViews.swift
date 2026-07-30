@@ -12,15 +12,26 @@ struct MobileConversationHomeScreen: View {
   let directOnly: Bool
   @State private var searchText = ""
 
-  private var visibleChannels: [VectorChannelListItem] {
+  private var visibleConversations: [VectorChannelListItem] {
     let kindFiltered = viewModel.collaborationChannels.filter {
-      directOnly ? $0.channel.kind.isDirect : !$0.channel.kind.isDirect
+      directOnly ? $0.channel.kind.isDirect : true
     }
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !query.isEmpty else { return kindFiltered }
-    return kindFiltered.filter {
-      $0.channel.name.localizedCaseInsensitiveContains(query)
-        || ($0.channel.topic?.localizedCaseInsensitiveContains(query) ?? false)
+    let searched = query.isEmpty
+      ? kindFiltered
+      : kindFiltered.filter {
+        $0.channel.name.localizedCaseInsensitiveContains(query)
+          || ($0.channel.topic?.localizedCaseInsensitiveContains(query) ?? false)
+          || ($0.channel.description?.localizedCaseInsensitiveContains(query) ?? false)
+      }
+
+    return searched.sorted {
+      let firstActivity = $0.channel.lastMessageAt ?? $0.channel.updatedAt
+      let secondActivity = $1.channel.lastMessageAt ?? $1.channel.updatedAt
+      if firstActivity == secondActivity {
+        return $0.channel.name.localizedCaseInsensitiveCompare($1.channel.name) == .orderedAscending
+      }
+      return firstActivity > secondActivity
     }
   }
 
@@ -84,11 +95,11 @@ struct MobileConversationHomeScreen: View {
             }
           }
 
-          Section(directOnly ? "Direct messages" : "Channels") {
-            if visibleChannels.isEmpty {
+          Section {
+            if visibleConversations.isEmpty {
               ContentUnavailableView(
                 searchText.isEmpty
-                  ? (directOnly ? "No direct messages" : "No channels")
+                  ? (directOnly ? "No direct messages" : "No conversations")
                   : "No matches",
                 systemImage: directOnly ? "bubble.left" : "number",
                 description: Text(
@@ -99,26 +110,11 @@ struct MobileConversationHomeScreen: View {
               )
               .listRowBackground(Color.clear)
             } else {
-              ForEach(visibleChannels) { item in
+              ForEach(visibleConversations) { item in
                 NavigationLink {
                   MobileChannelScreen(channel: item, viewModel: viewModel)
                 } label: {
                   MobileChannelRow(item: item)
-                }
-              }
-            }
-          }
-
-          if !directOnly {
-            let directChannels = viewModel.collaborationChannels.filter(\.channel.kind.isDirect)
-            if !directChannels.isEmpty {
-              Section("Direct messages") {
-                ForEach(directChannels.prefix(4)) { item in
-                  NavigationLink {
-                    MobileChannelScreen(channel: item, viewModel: viewModel)
-                  } label: {
-                    MobileChannelRow(item: item)
-                  }
                 }
               }
             }
@@ -134,7 +130,7 @@ struct MobileConversationHomeScreen: View {
     .searchable(
       text: $searchText,
       placement: .automatic,
-      prompt: directOnly ? "Search direct messages" : "Search channels"
+      prompt: directOnly ? "Search direct messages" : "Search conversations"
     )
     .onAppear {
       viewModel.loadCollaboration()
@@ -200,6 +196,18 @@ private enum MobileSmartMessageMode: String, CaseIterable, Identifiable {
 private struct MobileChannelRow: View {
   let item: VectorChannelListItem
 
+  private var subtitle: String? {
+    guard let topic = item.channel.topic?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !topic.isEmpty
+    else { return nil }
+
+    let genericDirectLabels = ["direct message", "group direct message"]
+    if item.channel.kind.isDirect, genericDirectLabels.contains(topic.lowercased()) {
+      return nil
+    }
+    return topic
+  }
+
   var body: some View {
     HStack(spacing: 12) {
       ZStack {
@@ -216,8 +224,8 @@ private struct MobileChannelRow: View {
           .font(.body.weight(item.unreadDisplayCount > 0 ? .semibold : .medium))
           .foregroundStyle(.primary)
           .lineLimit(1)
-        if let topic = item.channel.topic, !topic.isEmpty {
-          Text(topic)
+        if let subtitle {
+          Text(subtitle)
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
