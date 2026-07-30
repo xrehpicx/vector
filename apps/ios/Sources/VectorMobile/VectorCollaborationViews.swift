@@ -651,6 +651,10 @@ private struct MobileMessageRow: View {
     showsThreadAction || onReply != nil
   }
 
+  private var messageContentIndent: CGFloat {
+    28
+  }
+
   private var reactionGroups: [MobileReactionGroup] {
     var order: [String] = []
     var reactionsByEmoji: [String: [VectorMessageReaction]] = [:]
@@ -693,7 +697,7 @@ private struct MobileMessageRow: View {
                 .foregroundStyle(.secondary)
             }
           }
-          .frame(width: 28, height: 28)
+          .frame(width: 22, height: 22)
           .accessibilityHidden(true)
 
           Text(authorName)
@@ -721,12 +725,14 @@ private struct MobileMessageRow: View {
             .font(.subheadline)
             .italic()
             .foregroundStyle(.secondary)
+            .padding(.leading, messageContentIndent)
         } else if !message.message.body.isEmpty {
           Text(message.message.body)
             .font(.body)
             .foregroundStyle(.primary)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, messageContentIndent)
         }
 
         if !message.attachments.isEmpty {
@@ -753,6 +759,7 @@ private struct MobileMessageRow: View {
             }
           }
           .padding(.top, 2)
+          .padding(.leading, messageContentIndent)
         }
 
         if let deliveryState = viewModel.messageDeliveryState(for: message.id),
@@ -767,6 +774,7 @@ private struct MobileMessageRow: View {
           }
           .buttonStyle(.plain)
           .accessibilityHint("Retries this message")
+          .padding(.leading, messageContentIndent)
         }
 
         if message.message.deletedAt == nil, !reactionGroups.isEmpty {
@@ -805,21 +813,35 @@ private struct MobileMessageRow: View {
               )
             }
           }
+          .padding(.leading, messageContentIndent)
         }
 
         if showsThreadAction && message.message.replyCount > 0 {
           Button {
             isShowingThread = true
           } label: {
-            Label(
-              "\(Int(message.message.replyCount)) \(message.message.replyCount == 1 ? "reply" : "replies")",
-              systemImage: "bubble.left"
-            )
-            .font(.caption.weight(.semibold))
+            HStack(spacing: 5) {
+              Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.caption2)
+              Text(
+                "\(Int(message.message.replyCount)) \(message.message.replyCount == 1 ? "reply" : "replies")"
+              )
+              Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(VectorTheme.accent.opacity(0.72))
+            }
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(VectorTheme.accent)
-            .padding(.top, 2)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(VectorTheme.accent.opacity(0.10), in: Capsule())
           }
           .buttonStyle(.plain)
+          .padding(.top, 1)
+          .padding(.leading, messageContentIndent)
+          .accessibilityLabel(
+            "\(Int(message.message.replyCount)) \(message.message.replyCount == 1 ? "reply" : "replies"). Open thread."
+          )
         }
       }
       .padding(.horizontal, 16)
