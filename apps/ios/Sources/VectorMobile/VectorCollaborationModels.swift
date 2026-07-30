@@ -204,6 +204,9 @@ public struct VectorMessageAttachment: Decodable, Equatable, Identifiable, Senda
   public var isImage: Bool { kind == "image" }
   public var isVideo: Bool { kind == "video" }
   public var isAudio: Bool { kind == "audio" }
+  public var isSticker: Bool {
+    isImage && name.lowercased().hasPrefix("sticker-")
+  }
 }
 
 public struct VectorMessageReaction: Decodable, Equatable, Identifiable, Sendable {
@@ -575,19 +578,28 @@ public struct VectorDraftAttachment: Equatable, Sendable {
   public let kind: String
   public let name: String
   public let contentType: String
+  public let width: Double?
+  public let height: Double?
+  public let duration: Double?
 
   public init(
     id: UUID = UUID(),
     data: Data,
     kind: String,
     name: String,
-    contentType: String
+    contentType: String,
+    width: Double? = nil,
+    height: Double? = nil,
+    duration: Double? = nil
   ) {
     self.id = id
     self.data = data
     self.kind = kind
     self.name = name
     self.contentType = contentType
+    self.width = width
+    self.height = height
+    self.duration = duration
   }
 }
 

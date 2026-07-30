@@ -184,6 +184,7 @@ public final class VectorMobileViewModel: ObservableObject {
   private var subscribedComments: [VectorComment] = []
   private var pendingComments: [VectorID: VectorComment] = [:]
   private var pendingChannelMessages: [String: PendingChannelMessage] = [:]
+  private var localAttachmentURLs: [VectorID: VectorAttachmentURL] = [:]
   private var userStatusMutationSequence = 0
   private var optimisticUserStatusGuard: OptimisticUserStatusGuard?
   private let requestCreationTimeout: Duration
@@ -425,7 +426,12 @@ public final class VectorMobileViewModel: ObservableObject {
   }
 
   public func attachmentURL(_ attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error> {
-    repository.attachmentURL(attachmentId: attachmentId)
+    if let localAttachment = localAttachmentURLs[attachmentId] {
+      return Just<VectorAttachmentURL?>(localAttachment)
+        .setFailureType(to: Error.self)
+        .eraseToAnyPublisher()
+    }
+    return repository.attachmentURL(attachmentId: attachmentId)
   }
 
   public func openThread(rootMessageId: VectorID) {
@@ -483,18 +489,23 @@ public final class VectorMobileViewModel: ObservableObject {
     let clientMessageId = UUID().uuidString.lowercased()
     let localMessageId = "pending:\(clientMessageId)"
     let createdAt = Date().timeIntervalSince1970 * 1000
-    let optimisticAttachments = attachments.map {
-      VectorMessageAttachment(
-        id: "\(localMessageId):\($0.id.uuidString.lowercased())",
+    let optimisticAttachments = attachments.map { draft in
+      let attachment = VectorMessageAttachment(
+        id: "\(localMessageId):\(draft.id.uuidString.lowercased())",
         channelId: channelId,
         messageId: localMessageId,
         storageId: "pending",
-        kind: $0.kind,
-        name: $0.name,
-        contentType: $0.contentType,
-        size: Double($0.data.count),
+        kind: draft.kind,
+        name: draft.name,
+        contentType: draft.contentType,
+        size: Double(draft.data.count),
+        width: draft.width,
+        height: draft.height,
+        duration: draft.duration,
         createdAt: createdAt
       )
+      cacheLocalAttachment(draft, as: attachment)
+      return attachment
     }
     let optimisticMessage = VectorMessageView(
       message: VectorChannelMessage(
@@ -658,8 +669,42 @@ public final class VectorMobileViewModel: ObservableObject {
         continue
       }
       messageDeliveryStates.removeValue(forKey: pending.message.id)
+      for attachment in pending.message.attachments {
+        if let localURL = localAttachmentURLs.removeValue(forKey: attachment.id)?.url,
+           localURL.hasPrefix("file://"),
+           let url = URL(string: localURL)
+        {
+          try? FileManager.default.removeItem(at: url)
+        }
+      }
     }
     refreshChannelSendingState()
+  }
+
+  private func cacheLocalAttachment(
+    _ draft: VectorDraftAttachment,
+    as attachment: VectorMessageAttachment
+  ) {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("vector-pending-attachments", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(
+        at: directory,
+        withIntermediateDirectories: true
+      )
+      let pathExtension = (draft.name as NSString).pathExtension
+      let fileName = pathExtension.isEmpty
+        ? attachment.id.replacingOccurrences(of: ":", with: "-")
+        : "\(attachment.id.replacingOccurrences(of: ":", with: "-")).\(pathExtension)"
+      let url = directory.appendingPathComponent(fileName)
+      try draft.data.write(to: url, options: .atomic)
+      localAttachmentURLs[attachment.id] = VectorAttachmentURL(
+        attachment: attachment,
+        url: url.absoluteString
+      )
+    } catch {
+      // Sending remains available even if the temporary optimistic preview cannot be cached.
+    }
   }
 
   private func mergedMessages(

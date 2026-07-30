@@ -77,6 +77,101 @@ final class VectorMobileTests: XCTestCase {
     XCTAssertTrue(replyArgs.keys.contains("replyToMessageId"))
   }
 
+  func testVoiceGestureResolutionPrioritizesCancelThenLockThenSend() {
+    XCTAssertEqual(
+      VectorVoiceGestureDecision.resolve(
+        horizontalTranslation: -100,
+        verticalTranslation: -100
+      ),
+      .cancel
+    )
+    XCTAssertEqual(
+      VectorVoiceGestureDecision.resolve(
+        horizontalTranslation: -20,
+        verticalTranslation: -80
+      ),
+      .lock
+    )
+    XCTAssertEqual(
+      VectorVoiceGestureDecision.resolve(
+        horizontalTranslation: -20,
+        verticalTranslation: -20
+      ),
+      .send
+    )
+  }
+
+  @MainActor
+  func testVoiceMeterNormalizationStaysAudibleAndBounded() {
+    XCTAssertEqual(VectorVoiceRecorder.normalizedLevel(decibels: -80), 0.08)
+    XCTAssertGreaterThan(VectorVoiceRecorder.normalizedLevel(decibels: -20), 0.08)
+    XCTAssertLessThanOrEqual(VectorVoiceRecorder.normalizedLevel(decibels: 0), 1)
+  }
+
+  @MainActor
+  func testOptimisticVoiceMessagePreservesAudioDuration() async {
+    let repository = CountingVectorRepository()
+    var continuation: CheckedContinuation<VectorSendMessageResult, Error>?
+    repository.sendChannelMessageAction = { _ in
+      try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository,
+      messageSendTimeout: .seconds(2)
+    )
+    viewModel.openChannel(VectorMockData.collaborationChannels[0])
+    let voice = VectorDraftAttachment(
+      data: Data([0x01, 0x02]),
+      kind: "audio",
+      name: "Voice message.m4a",
+      contentType: "audio/mp4",
+      duration: 3.25
+    )
+
+    let sendTask = Task {
+      await viewModel.sendChannelMessage(body: "", attachments: [voice])
+    }
+    await waitUntil {
+      viewModel.channelMessages.contains { $0.attachments.first?.isAudio == true }
+    }
+    let pending = try? XCTUnwrap(
+      viewModel.channelMessages.first { $0.attachments.first?.isAudio == true }
+    )
+    XCTAssertEqual(pending?.attachments.first?.duration, 3.25)
+    XCTAssertEqual(
+      pending.map { viewModel.messageDeliveryState(for: $0.id) },
+      .sending
+    )
+
+    await waitUntil { continuation != nil }
+    continuation?.resume(
+      returning: VectorSendMessageResult(messageId: "voice-message-created", runIds: [])
+    )
+    let sent = await sendTask.value
+    XCTAssertTrue(sent)
+  }
+
+  func testStickerAttachmentClassificationIsExplicitAndCaseInsensitive() {
+    let sticker = VectorMessageAttachment(
+      id: "attachment-sticker",
+      channelId: "channel-general",
+      messageId: "message-sticker",
+      storageId: "storage-sticker",
+      kind: "image",
+      name: "Sticker-Happy.png",
+      contentType: "image/png",
+      size: 512,
+      width: 128,
+      height: 128,
+      createdAt: 1
+    )
+    XCTAssertTrue(sticker.isImage)
+    XCTAssertTrue(sticker.isSticker)
+    XCTAssertEqual(sticker.width, 128)
+    XCTAssertEqual(sticker.height, 128)
+  }
+
   @MainActor
   func testChannelMessageAppearsOptimisticallyBeforeMutationCompletes() async {
     let repository = CountingVectorRepository()

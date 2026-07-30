@@ -675,13 +675,23 @@ public final class ConvexVectorRepository: VectorMobileRepository {
         throw VectorMobileError.validation("The attachment could not be uploaded.")
       }
       let result = try JSONDecoder().decode(VectorStorageUploadResponse.self, from: data)
-      uploadedAttachments.append([
+      var uploadedAttachment: [String: ConvexEncodable?] = [
         "storageId": result.storageId,
         "kind": attachment.kind,
         "name": attachment.name,
         "contentType": attachment.contentType,
         "size": Double(attachment.data.count),
-      ])
+      ]
+      if let duration = attachment.duration {
+        uploadedAttachment["duration"] = duration
+      }
+      if let width = attachment.width {
+        uploadedAttachment["width"] = width
+      }
+      if let height = attachment.height {
+        uploadedAttachment["height"] = height
+      }
+      uploadedAttachments.append(uploadedAttachment)
     }
 
     return try await client.mutation(
@@ -1510,9 +1520,17 @@ public final class MockVectorRepository: VectorMobileRepository {
       .flatMap(\.attachments)
       .first { $0.id == attachmentId }
     let url = attachment.map {
-      VectorAttachmentURL(
+      let previewURL: String
+      if $0.isImage {
+        previewURL = "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=85"
+      } else if $0.contentType == "application/pdf" {
+        previewURL = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+      } else {
+        previewURL = "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8"
+      }
+      return VectorAttachmentURL(
         attachment: $0,
-        url: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8"
+        url: previewURL
       )
     }
     return Just(url)

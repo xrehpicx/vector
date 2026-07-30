@@ -377,6 +377,19 @@ enum VectorMockData {
       authorAgent: nil,
       attachments: [
         VectorMessageAttachment(
+          id: "attachment-image",
+          channelId: "channel-general",
+          messageId: "message-video",
+          storageId: "storage-image",
+          kind: "image",
+          name: "workshop-notes.jpg",
+          contentType: "image/jpeg",
+          size: 860_000,
+          width: 1200,
+          height: 800,
+          createdAt: 1_774_590_000_000
+        ),
+        VectorMessageAttachment(
           id: "attachment-video",
           channelId: "channel-general",
           messageId: "message-video",
@@ -388,6 +401,17 @@ enum VectorMockData {
           width: 1280,
           height: 720,
           duration: 31,
+          createdAt: 1_774_590_000_000
+        ),
+        VectorMessageAttachment(
+          id: "attachment-pdf",
+          channelId: "channel-general",
+          messageId: "message-video",
+          storageId: "storage-pdf",
+          kind: "file",
+          name: "launch-brief.pdf",
+          contentType: "application/pdf",
+          size: 13_264,
           createdAt: 1_774_590_000_000
         ),
       ]

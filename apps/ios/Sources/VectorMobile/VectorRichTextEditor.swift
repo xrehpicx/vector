@@ -29,6 +29,182 @@ struct VectorRichTextFormatState: Equatable {
 
 #if os(iOS)
 import UIKit
+import UniformTypeIdentifiers
+
+struct VectorStickerTextEditor: View {
+  @Binding var text: String
+  var isFocused = false
+  var onFocusChange: (Bool) -> Void = { _ in }
+  var onSticker: (Data, String, String) -> Void
+  @State private var measuredHeight: CGFloat = 40
+
+  var body: some View {
+    ZStack(alignment: .leading) {
+      if text.isEmpty {
+        Text("Message")
+          .font(.body)
+          .foregroundStyle(.tertiary)
+          .allowsHitTesting(false)
+      }
+      VectorStickerTextViewRepresentable(
+        text: $text,
+        isFocused: isFocused,
+        onFocusChange: onFocusChange,
+        onHeightChange: { measuredHeight = $0 },
+        onSticker: onSticker
+      )
+    }
+    .frame(height: measuredHeight)
+    .accessibilityLabel("Message")
+  }
+}
+
+private struct VectorStickerTextViewRepresentable: UIViewRepresentable {
+  @Binding var text: String
+  let isFocused: Bool
+  let onFocusChange: (Bool) -> Void
+  let onHeightChange: (CGFloat) -> Void
+  let onSticker: (Data, String, String) -> Void
+
+  func makeUIView(context: Context) -> UITextView {
+    let textView = VectorStickerUITextView()
+    textView.delegate = context.coordinator
+    textView.onHeightChange = onHeightChange
+    textView.backgroundColor = .clear
+    textView.adjustsFontForContentSizeCategory = true
+    textView.font = .preferredFont(forTextStyle: .body)
+    textView.textColor = .label
+    textView.tintColor = UIColor(red: 0.04, green: 0.55, blue: 0.72, alpha: 1)
+    textView.textContainerInset = UIEdgeInsets(top: 9, left: 0, bottom: 9, right: 0)
+    textView.textContainer.lineFragmentPadding = 0
+    textView.isScrollEnabled = true
+    textView.alwaysBounceVertical = false
+    textView.supportsAdaptiveImageGlyph = true
+    textView.text = text
+    DispatchQueue.main.async {
+      textView.reportHeight()
+    }
+    return textView
+  }
+
+  func updateUIView(_ textView: UITextView, context: Context) {
+    context.coordinator.parent = self
+    (textView as? VectorStickerUITextView)?.onHeightChange = onHeightChange
+    if textView.attributedText.string != text,
+       !context.coordinator.isExtractingSticker
+    {
+      let selectedRange = textView.selectedRange
+      textView.text = text
+      textView.selectedRange = NSRange(
+        location: min(selectedRange.location, textView.textStorage.length),
+        length: 0
+      )
+      (textView as? VectorStickerUITextView)?.reportHeight()
+    }
+    if isFocused && !textView.isFirstResponder {
+      textView.becomeFirstResponder()
+    } else if !isFocused && textView.isFirstResponder {
+      textView.resignFirstResponder()
+    }
+  }
+
+  func sizeThatFits(
+    _ proposal: ProposedViewSize,
+    uiView: UITextView,
+    context: Context
+  ) -> CGSize? {
+    guard let width = proposal.width else { return nil }
+    let measured = uiView.sizeThatFits(
+      CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+    )
+    return CGSize(width: width, height: min(max(40, measured.height), 120))
+  }
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(parent: self)
+  }
+
+  final class Coordinator: NSObject, UITextViewDelegate {
+    var parent: VectorStickerTextViewRepresentable
+    var isExtractingSticker = false
+
+    init(parent: VectorStickerTextViewRepresentable) {
+      self.parent = parent
+    }
+
+    func textViewDidChange(_ textView: UITextView) {
+      let fullRange = NSRange(location: 0, length: textView.textStorage.length)
+      var stickers: [(NSRange, NSAdaptiveImageGlyph)] = []
+      textView.textStorage.enumerateAttribute(
+        .adaptiveImageGlyph,
+        in: fullRange
+      ) { value, range, _ in
+        if let glyph = value as? NSAdaptiveImageGlyph {
+          stickers.append((range, glyph))
+        }
+      }
+
+      if !stickers.isEmpty {
+        isExtractingSticker = true
+        for (_, glyph) in stickers {
+          let rawContentType = NSAdaptiveImageGlyph.contentType
+          let decodedPNG = UIImage(data: glyph.imageContent)?.pngData()
+          let data = decodedPNG ?? glyph.imageContent
+          let fileExtension = decodedPNG == nil
+            ? rawContentType.preferredFilenameExtension ?? "heic"
+            : "png"
+          let mimeType = decodedPNG == nil
+            ? rawContentType.preferredMIMEType ?? "image/heic"
+            : "image/png"
+          parent.onSticker(
+            data,
+            "sticker-\(UUID().uuidString).\(fileExtension)",
+            mimeType
+          )
+        }
+        for (range, _) in stickers.reversed() {
+          textView.textStorage.deleteCharacters(in: range)
+        }
+        isExtractingSticker = false
+      }
+
+      parent.text = textView.attributedText.string
+      textView.invalidateIntrinsicContentSize()
+      (textView as? VectorStickerUITextView)?.reportHeight()
+    }
+
+    func textViewDidBeginEditing(_ textView: UITextView) {
+      parent.onFocusChange(true)
+    }
+
+    func textViewDidEndEditing(_ textView: UITextView) {
+      parent.onFocusChange(false)
+    }
+  }
+}
+
+private final class VectorStickerUITextView: UITextView {
+  var onHeightChange: ((CGFloat) -> Void)?
+  private var lastReportedHeight: CGFloat = 0
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    reportHeight()
+  }
+
+  func reportHeight() {
+    guard bounds.width > 0 else { return }
+    let fittingHeight = sizeThatFits(
+      CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
+    ).height
+    let height = min(max(40, fittingHeight), 120)
+    guard abs(height - lastReportedHeight) > 0.5 else { return }
+    lastReportedHeight = height
+    DispatchQueue.main.async { [weak self] in
+      self?.onHeightChange?(height)
+    }
+  }
+}
 
 struct VectorRichTextEditor: View {
   @Binding var text: String
@@ -677,6 +853,18 @@ private extension NSAttributedString.Key {
 }
 
 #else
+
+struct VectorStickerTextEditor: View {
+  @Binding var text: String
+  var isFocused = false
+  var onFocusChange: (Bool) -> Void = { _ in }
+  var onSticker: (Data, String, String) -> Void
+
+  var body: some View {
+    TextField("Message", text: $text, axis: .vertical)
+      .lineLimit(1...6)
+  }
+}
 
 struct VectorRichTextEditor: View {
   @Binding var text: String
