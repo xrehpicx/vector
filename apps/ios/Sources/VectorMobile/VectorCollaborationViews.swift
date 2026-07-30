@@ -623,6 +623,10 @@ private struct MobileMessageRow: View {
   @State private var isShowingThread = false
   @State private var swipeOffset: CGFloat = 0
   @State private var isSwipeOpen = false
+  @State private var isShowingReminderOptions = false
+  @State private var isShowingCustomReminder = false
+  @State private var customReminderDate = Date().addingTimeInterval(60 * 60)
+  @State private var reminderNotice: MobileReminderNotice?
 
   private var authorName: String {
     message.authorUser?.displayName
@@ -653,6 +657,10 @@ private struct MobileMessageRow: View {
 
   private var messageContentIndent: CGFloat {
     28
+  }
+
+  private var trailingSwipeWidth: CGFloat {
+    196
   }
 
   private var reactionGroups: [MobileReactionGroup] {
@@ -850,6 +858,12 @@ private struct MobileMessageRow: View {
       .contentShape(Rectangle())
       .background(VectorTheme.surfaceBackground)
       .offset(x: swipeOffset)
+      .shadow(
+        color: Color.black.opacity(swipeOffset < 0 ? 0.14 : 0),
+        radius: swipeOffset < 0 ? 5 : 0,
+        x: 3,
+        y: 0
+      )
       .opacity(isSending ? 0.58 : 1)
       .animation(.easeOut(duration: 0.16), value: isSending)
       .accessibilityValue(isSending ? "Sending" : "")
@@ -892,6 +906,64 @@ private struct MobileMessageRow: View {
     .navigationDestination(isPresented: $isShowingThread) {
       MobileThreadScreen(rootMessage: message, viewModel: viewModel)
     }
+    .confirmationDialog(
+      "Remind me about this message",
+      isPresented: $isShowingReminderOptions,
+      titleVisibility: .visible
+    ) {
+      Button("In 20 minutes") {
+        scheduleReminder(at: Date().addingTimeInterval(20 * 60))
+      }
+      Button("In 1 hour") {
+        scheduleReminder(at: Date().addingTimeInterval(60 * 60))
+      }
+      Button("Tomorrow at 9:00 AM") {
+        scheduleReminder(at: tomorrowMorning)
+      }
+      Button("Choose date & time…") {
+        customReminderDate = Date().addingTimeInterval(60 * 60)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+          isShowingCustomReminder = true
+        }
+      }
+      Button("Cancel", role: .cancel) {}
+    }
+    .sheet(isPresented: $isShowingCustomReminder) {
+      NavigationStack {
+        Form {
+          DatePicker(
+            "Remind me",
+            selection: $customReminderDate,
+            in: Date().addingTimeInterval(60)...,
+            displayedComponents: [.date, .hourAndMinute]
+          )
+          .datePickerStyle(.compact)
+        }
+        .navigationTitle("Message reminder")
+        .vectorInlineNavigationTitle()
+        .toolbar {
+          ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel") {
+              isShowingCustomReminder = false
+            }
+          }
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Schedule") {
+              isShowingCustomReminder = false
+              scheduleReminder(at: customReminderDate)
+            }
+          }
+        }
+      }
+      .presentationDetents([.medium, .large])
+    }
+    .alert(item: $reminderNotice) { notice in
+      Alert(
+        title: Text(notice.title),
+        message: Text(notice.message),
+        dismissButton: .default(Text("OK"))
+      )
+    }
   }
 
   private var swipeActionTray: some View {
@@ -932,21 +1004,44 @@ private struct MobileMessageRow: View {
         .disabled(isSending || message.message.deletedAt != nil)
         .accessibilityLabel("React to message")
 
+        Button {
+          closeSwipeActions()
+          Task { await viewModel.toggleSaved(message) }
+        } label: {
+          Image(systemName: message.saved ? "bookmark.fill" : "bookmark")
+            .font(.body.weight(.semibold))
+            .foregroundStyle(message.saved ? VectorTheme.accent : .primary)
+            .frame(width: 42, height: 42)
+            .background(
+              message.saved
+                ? VectorTheme.accent.opacity(0.16)
+                : Color.primary.opacity(0.075),
+              in: Circle()
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isSending || message.message.deletedAt != nil)
+        .accessibilityLabel(message.saved ? "Remove from saved" : "Save for later")
+
+        Button {
+          closeSwipeActions()
+          isShowingReminderOptions = true
+        } label: {
+          Image(systemName: "bell.badge")
+            .font(.body.weight(.semibold))
+            .frame(width: 42, height: 42)
+            .background(VectorTheme.accent.opacity(0.14), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isSending || message.message.deletedAt != nil)
+        .accessibilityLabel("Remind me about this message")
+
         Menu {
           Button {
             closeSwipeActions()
             activateReply()
           } label: {
             Label("Reply in thread", systemImage: "bubble.left.and.bubble.right")
-          }
-          Button {
-            closeSwipeActions()
-            Task { await viewModel.toggleSaved(message) }
-          } label: {
-            Label(
-              message.saved ? "Remove from saved" : "Save for later",
-              systemImage: "bookmark"
-            )
           }
           Button {
             closeSwipeActions()
@@ -969,6 +1064,55 @@ private struct MobileMessageRow: View {
       .accessibilityHidden(!isSwipeOpen)
     }
     .frame(maxHeight: .infinity)
+    .background(VectorTheme.rowBackground)
+    .overlay(alignment: .top) {
+      Rectangle()
+        .fill(VectorTheme.border.opacity(0.18))
+        .frame(height: 0.5)
+    }
+    .overlay(alignment: .bottom) {
+      Rectangle()
+        .fill(VectorTheme.border.opacity(0.18))
+        .frame(height: 0.5)
+    }
+  }
+
+  private var tomorrowMorning: Date {
+    let calendar = Calendar.autoupdatingCurrent
+    let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    return calendar.date(
+      bySettingHour: 9,
+      minute: 0,
+      second: 0,
+      of: tomorrow
+    ) ?? tomorrow
+  }
+
+  private func scheduleReminder(at date: Date) {
+    Task {
+      let succeeded = await viewModel.scheduleMessageReminder(message, remindAt: date)
+      if succeeded {
+        let formatted = date.formatted(
+          date: .abbreviated,
+          time: .shortened
+        )
+        reminderNotice = MobileReminderNotice(
+          title: "Reminder set",
+          message: "Vector will notify you \(formatted)."
+        )
+        #if os(iOS)
+          UIAccessibility.post(
+            notification: .announcement,
+            argument: "Reminder set for \(formatted)"
+          )
+        #endif
+      } else {
+        reminderNotice = MobileReminderNotice(
+          title: "Couldn’t set reminder",
+          message: "Check your connection and try again."
+        )
+      }
+    }
   }
 
   private func mediaViewer(
@@ -1001,11 +1145,11 @@ private struct MobileMessageRow: View {
   }
 
   private func updateSwipeOffset(_ translationWidth: CGFloat) {
-    let startingOffset: CGFloat = isSwipeOpen ? -108 : 0
+    let startingOffset: CGFloat = isSwipeOpen ? -trailingSwipeWidth : 0
     let maximumRightOffset: CGFloat = canSwipeToReply ? 84 : 0
     swipeOffset = min(
       maximumRightOffset,
-      max(-108, startingOffset + translationWidth)
+      max(-trailingSwipeWidth, startingOffset + translationWidth)
     )
   }
 
@@ -1024,7 +1168,7 @@ private struct MobileMessageRow: View {
     let shouldOpen = swipeOffset < -48 || projectedTranslation < -72
     withAnimation(.snappy(duration: 0.22)) {
       isSwipeOpen = shouldOpen
-      swipeOffset = shouldOpen ? -108 : 0
+      swipeOffset = shouldOpen ? -trailingSwipeWidth : 0
     }
   }
 
@@ -1042,6 +1186,12 @@ private struct MobileMessageRow: View {
       isShowingThread = true
     }
   }
+}
+
+private struct MobileReminderNotice: Identifiable {
+  let id = UUID()
+  let title: String
+  let message: String
 }
 
 private struct MobileReactionGroup: Identifiable {

@@ -47,6 +47,7 @@ final class VectorMobileTests: XCTestCase {
     XCTAssertEqual(VectorConvexFunctions.listChannelMembers, "collaboration/channels:listMembers")
     XCTAssertEqual(VectorConvexFunctions.toggleMessageReaction, "collaboration/messages:toggleReaction")
     XCTAssertEqual(VectorConvexFunctions.toggleSavedMessage, "collaboration/messages:toggleSaved")
+    XCTAssertEqual(VectorConvexFunctions.createReminder, "reminders:create")
   }
 
   func testMessageArgumentsOmitAbsentOptionalIdsInsteadOfEncodingNull() {
@@ -322,6 +323,58 @@ final class VectorMobileTests: XCTestCase {
     await waitUntil { continuation != nil }
     continuation?.resume(returning: true)
     await reactionTask.value
+  }
+
+  @MainActor
+  func testSavedMessageAppearsOptimisticallyBeforeMutationCompletes() async {
+    let repository = CountingVectorRepository()
+    let message = VectorMockData.collaborationMessages[0].withSaved(false)
+    repository.channelMessagesValue = [message]
+    var continuation: CheckedContinuation<Bool, Error>?
+    repository.toggleSavedAction = { _ in
+      try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository
+    )
+    viewModel.openChannel(VectorMockData.collaborationChannels[0])
+    await waitUntil { viewModel.channelMessages.contains { $0.id == message.id } }
+
+    let saveTask = Task {
+      await viewModel.toggleSaved(message)
+    }
+    await waitUntil {
+      viewModel.channelMessages.first { $0.id == message.id }?.saved == true
+        && viewModel.savedMessages.contains { $0.id == message.id }
+    }
+
+    XCTAssertEqual(repository.toggledSavedMessageIDs, [message.id])
+    await waitUntil { continuation != nil }
+    continuation?.resume(returning: true)
+    await saveTask.value
+  }
+
+  @MainActor
+  func testMessageReminderUsesWorkspaceMessageAndSelectedDate() async {
+    let repository = CountingVectorRepository()
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository
+    )
+    let message = VectorMockData.collaborationMessages[0]
+    let remindAt = Date(timeIntervalSince1970: 2_000_000_000)
+
+    let succeeded = await viewModel.scheduleMessageReminder(
+      message,
+      remindAt: remindAt
+    )
+
+    XCTAssertTrue(succeeded)
+    XCTAssertEqual(repository.scheduledMessageReminders.count, 1)
+    XCTAssertEqual(repository.scheduledMessageReminders[0].orgSlug, "demo")
+    XCTAssertEqual(repository.scheduledMessageReminders[0].messageId, message.id)
+    XCTAssertEqual(repository.scheduledMessageReminders[0].remindAt, remindAt)
   }
 
   func testCollaborationModelsDecodeMessagesAgentsAndPriorityMetadata() throws {
@@ -1704,6 +1757,11 @@ private final class CountingVectorRepository: VectorMobileRepository {
   var channelMessagesValue: [VectorMessageView] = []
   var toggleReactionAction: ((VectorID, String) async throws -> Bool)?
   var toggledReactions: [(messageId: VectorID, emoji: String)] = []
+  var toggleSavedAction: ((VectorID) async throws -> Bool)?
+  var toggledSavedMessageIDs: [VectorID] = []
+  var scheduledMessageReminders: [
+    (orgSlug: String, messageId: VectorID, remindAt: Date)
+  ] = []
   var documentDetailOverride: VectorDocument?
   var documentChunkPages: [String: VectorPaginatedPage<VectorDocumentContentChunk>] = [:]
   var documentContentPageCursors: [String?] = []
@@ -1752,6 +1810,22 @@ private final class CountingVectorRepository: VectorMobileRepository {
       return try await toggleReactionAction(messageId, emoji)
     }
     return true
+  }
+
+  func toggleSavedMessage(messageId: VectorID) async throws -> Bool {
+    toggledSavedMessageIDs.append(messageId)
+    if let toggleSavedAction {
+      return try await toggleSavedAction(messageId)
+    }
+    return true
+  }
+
+  func scheduleMessageReminder(
+    orgSlug: String,
+    messageId: VectorID,
+    remindAt: Date
+  ) async throws {
+    scheduledMessageReminders.append((orgSlug, messageId, remindAt))
   }
 
   func requestsPage(orgSlug: String, scope: VectorRequestScope, pageSize: Int, cursor: String?) -> AnyPublisher<VectorPaginatedPage<VectorRequestRow>, Error> {

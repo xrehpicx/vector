@@ -83,6 +83,8 @@ export const notificationPayloadValidator = v.object({
   workKey: v.optional(v.string()),
   workTitle: v.optional(v.string()),
   taskTitle: v.optional(v.string()),
+  channelName: v.optional(v.string()),
+  messagePreview: v.optional(v.string()),
   commentPreview: v.optional(v.string()),
   inviterName: v.optional(v.string()),
   roleLabel: v.optional(v.string()),

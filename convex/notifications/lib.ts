@@ -18,6 +18,8 @@ type NotificationPayload = {
   workKey?: string;
   workTitle?: string;
   taskTitle?: string;
+  channelName?: string;
+  messagePreview?: string;
   commentPreview?: string;
   inviterName?: string;
   roleLabel?: string;
@@ -238,8 +240,11 @@ export function buildNotificationCopy(
       };
     case 'reminder_due':
       return {
-        title: `Reminder: ${payload.requestKey ?? payload.workKey ?? payload.taskTitle ?? 'work needs attention'}`,
+        title: payload.channelName
+          ? `Reminder: #${payload.channelName}`
+          : `Reminder: ${payload.requestKey ?? payload.workKey ?? payload.taskTitle ?? 'work needs attention'}`,
         body:
+          payload.messagePreview ??
           payload.requestTitle ??
           payload.workTitle ??
           payload.taskTitle ??

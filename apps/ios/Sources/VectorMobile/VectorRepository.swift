@@ -16,6 +16,10 @@ private struct VectorStorageUploadResponse: Decodable {
   let storageId: VectorID
 }
 
+private struct VectorCreateReminderResponse: Decodable {
+  let reminderRuleId: VectorID
+}
+
 public enum VectorConvexFunctions {
   public static let getOrganizations = "users:getOrganizations"
   public static let listRequestsPage = "requests/queries:list"
@@ -90,6 +94,7 @@ public enum VectorConvexFunctions {
   public static let sendChannelMessage = "collaboration/messages:send"
   public static let toggleMessageReaction = "collaboration/messages:toggleReaction"
   public static let toggleSavedMessage = "collaboration/messages:toggleSaved"
+  public static let createReminder = "reminders:create"
   public static let generateChannelUploadURL = "collaboration/messages:generateUploadUrl"
   public static let getChannelAttachmentURL = "collaboration/messages:getAttachmentUrl"
   public static let markChannelRead = "collaboration/messages:markRead"
@@ -243,6 +248,11 @@ public protocol VectorMobileRepository {
   ) async throws -> VectorSendMessageResult
   func toggleMessageReaction(messageId: VectorID, emoji: String) async throws -> Bool
   func toggleSavedMessage(messageId: VectorID) async throws -> Bool
+  func scheduleMessageReminder(
+    orgSlug: String,
+    messageId: VectorID,
+    remindAt: Date
+  ) async throws
   func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws
   func requestsPage(orgSlug: String, scope: VectorRequestScope, pageSize: Int, cursor: String?) -> AnyPublisher<VectorPaginatedPage<VectorRequestRow>, Error>
   func request(orgSlug: String, key: String) -> AnyPublisher<VectorRequestDetail?, Error>
@@ -389,6 +399,14 @@ public extension VectorMobileRepository {
   }
 
   func toggleSavedMessage(messageId: VectorID) async throws -> Bool { false }
+
+  func scheduleMessageReminder(
+    orgSlug: String,
+    messageId: VectorID,
+    remindAt: Date
+  ) async throws {
+    throw VectorMobileError.validation("Message reminders are unavailable in this repository.")
+  }
 
   func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws {}
 
@@ -726,6 +744,36 @@ public final class ConvexVectorRepository: VectorMobileRepository {
       with: ["messageId": messageId]
     )
     return result.active
+  }
+
+  public func scheduleMessageReminder(
+    orgSlug: String,
+    messageId: VectorID,
+    remindAt: Date
+  ) async throws {
+    let timezone = TimeZone.current.identifier
+    let localComponents = Calendar.autoupdatingCurrent.dateComponents(
+      in: TimeZone.current,
+      from: remindAt
+    )
+    let localTime = String(
+      format: "%02d:%02d",
+      localComponents.hour ?? 0,
+      localComponents.minute ?? 0
+    )
+    let _: VectorCreateReminderResponse = try await client.mutation(
+      VectorConvexFunctions.createReminder,
+      with: [
+        "orgSlug": orgSlug,
+        "targetType": "message",
+        "messageId": messageId,
+        "recipientPolicies": ["reminder_creator" as ConvexEncodable?],
+        "cadence": "once",
+        "localTime": localTime,
+        "timezone": timezone,
+        "firstFireAt": remindAt.timeIntervalSince1970 * 1_000,
+      ]
+    )
   }
 
   public func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws {
@@ -1556,6 +1604,12 @@ public final class MockVectorRepository: VectorMobileRepository {
   }
 
   public func toggleSavedMessage(messageId: VectorID) async throws -> Bool { true }
+
+  public func scheduleMessageReminder(
+    orgSlug: String,
+    messageId: VectorID,
+    remindAt: Date
+  ) async throws {}
 
   public func markChannelRead(channelId: VectorID, messageId: VectorID?) async throws {}
 

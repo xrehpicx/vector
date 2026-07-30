@@ -776,18 +776,45 @@ public final class VectorMobileViewModel: ObservableObject {
   }
 
   public func toggleSaved(_ message: VectorMessageView) async {
+    let desired = !message.saved
+    applySavedState(message, active: desired)
     do {
       let active = try await repository.toggleSavedMessage(messageId: message.id)
-      replaceMessage(message.id) { $0.withSaved(active) }
-      if active {
-        if !savedMessages.contains(where: { $0.id == message.id }) {
-          savedMessages.insert(message.withSaved(true), at: 0)
-        }
-      } else {
-        savedMessages.removeAll { $0.id == message.id }
-      }
+      applySavedState(message, active: active)
+    } catch {
+      applySavedState(message, active: message.saved)
+      collaborationError = error.localizedDescription
+    }
+  }
+
+  @discardableResult
+  public func scheduleMessageReminder(
+    _ message: VectorMessageView,
+    remindAt: Date
+  ) async -> Bool {
+    do {
+      try await repository.scheduleMessageReminder(
+        orgSlug: configuration.orgSlug,
+        messageId: message.id,
+        remindAt: remindAt
+      )
+      return true
     } catch {
       collaborationError = error.localizedDescription
+      return false
+    }
+  }
+
+  private func applySavedState(_ message: VectorMessageView, active: Bool) {
+    replaceMessage(message.id) { $0.withSaved(active) }
+    if active {
+      if let index = savedMessages.firstIndex(where: { $0.id == message.id }) {
+        savedMessages[index] = message.withSaved(true)
+      } else {
+        savedMessages.insert(message.withSaved(true), at: 0)
+      }
+    } else {
+      savedMessages.removeAll { $0.id == message.id }
     }
   }
 

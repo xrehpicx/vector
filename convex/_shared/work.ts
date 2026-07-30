@@ -151,7 +151,12 @@ export const actorOriginKindValidator = v.union(
   ...ACTOR_ORIGIN_KINDS.map(kind => v.literal(kind)),
 );
 
-export const REMINDER_TARGET_TYPES = ['request', 'work', 'task'] as const;
+export const REMINDER_TARGET_TYPES = [
+  'request',
+  'work',
+  'task',
+  'message',
+] as const;
 export type ReminderTargetType = (typeof REMINDER_TARGET_TYPES)[number];
 export const reminderTargetTypeValidator = v.union(
   ...REMINDER_TARGET_TYPES.map(type => v.literal(type)),
@@ -164,6 +169,7 @@ export const REMINDER_RECIPIENT_POLICIES = [
   'work_creator',
   'task_assignee',
   'watchers',
+  'reminder_creator',
 ] as const;
 export type ReminderRecipientPolicy =
   (typeof REMINDER_RECIPIENT_POLICIES)[number];

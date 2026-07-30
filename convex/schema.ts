@@ -1497,6 +1497,7 @@ export default defineSchema({
     requestId: v.optional(v.id('requests')),
     workId: v.optional(v.id('issues')),
     taskId: v.optional(v.id('tasks')),
+    messageId: v.optional(v.id('channelMessages')),
     recipientPolicies: v.array(reminderRecipientPolicyValidator),
     cadence: reminderCadenceValidator,
     intervalDays: v.optional(v.number()),
@@ -1514,7 +1515,8 @@ export default defineSchema({
     .index('by_enabled_next_fire', ['enabled', 'nextFireAt'])
     .index('by_request', ['requestId'])
     .index('by_work', ['workId'])
-    .index('by_task', ['taskId']),
+    .index('by_task', ['taskId'])
+    .index('by_message', ['messageId']),
 
   reminderOccurrences: defineTable({
     reminderRuleId: v.id('reminderRules'),

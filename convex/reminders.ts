@@ -18,6 +18,7 @@ import {
   reminderRecipientPolicyValidator,
   reminderTargetTypeValidator,
 } from './_shared/work';
+import { requireMessageAccess } from './collaboration/helpers';
 import { requireOrganization, requireUser, requireWork } from './work/lib';
 
 type LocalDate = { year: number; month: number; day: number };
@@ -141,6 +142,8 @@ async function targetContext(ctx: MutationCtx, rule: Doc<'reminderRules'>) {
       request,
       work: null,
       task: null,
+      message: null,
+      channel: null,
     };
   }
   if (rule.targetType === 'work' && rule.workId) {
@@ -153,6 +156,8 @@ async function targetContext(ctx: MutationCtx, rule: Doc<'reminderRules'>) {
       request: null,
       work,
       task: null,
+      message: null,
+      channel: null,
     };
   }
   if (rule.targetType === 'task' && rule.taskId) {
@@ -165,6 +170,23 @@ async function targetContext(ctx: MutationCtx, rule: Doc<'reminderRules'>) {
       request: null,
       work,
       task,
+      message: null,
+      channel: null,
+    };
+  }
+  if (rule.targetType === 'message' && rule.messageId) {
+    const message = await ctx.db.get('channelMessages', rule.messageId);
+    if (!message) return null;
+    const channel = await ctx.db.get('channels', message.channelId);
+    if (!channel) return null;
+    return {
+      completed: message.deletedAt !== undefined,
+      updatedAt: message.editedAt ?? message.createdAt,
+      request: null,
+      work: null,
+      task: null,
+      message,
+      channel,
     };
   }
   return null;
@@ -195,6 +217,7 @@ async function resolveRecipients(
       for (const watcher of watchers.filter(row => row.role === 'watcher'))
         recipients.add(watcher.userId);
     }
+    if (policy === 'reminder_creator') recipients.add(rule.createdBy);
   }
   return Array.from(recipients);
 }
@@ -205,10 +228,16 @@ export const listForTarget = query({
     requestId: v.optional(v.id('requests')),
     workId: v.optional(v.id('issues')),
     taskId: v.optional(v.id('tasks')),
+    messageId: v.optional(v.id('channelMessages')),
   },
   handler: async (ctx, args) => {
     const { organization } = await requireOrganization(ctx, args.orgSlug);
-    const ids = [args.requestId, args.workId, args.taskId].filter(Boolean);
+    const ids = [
+      args.requestId,
+      args.workId,
+      args.taskId,
+      args.messageId,
+    ].filter(Boolean);
     if (ids.length !== 1)
       throw new ConvexError('EXACTLY_ONE_REMINDER_TARGET_REQUIRED');
     if (args.requestId) {
@@ -229,6 +258,10 @@ export const listForTarget = query({
       if (!task || task.organizationId !== organization._id)
         throw new ConvexError('TASK_NOT_FOUND');
       await requireWork(ctx, task.workId, 'view');
+    } else if (args.messageId) {
+      const { channel } = await requireMessageAccess(ctx, args.messageId);
+      if (channel.organizationId !== organization._id)
+        throw new ConvexError('MESSAGE_NOT_FOUND');
     }
     if (args.requestId)
       return await ctx.db
@@ -240,9 +273,14 @@ export const listForTarget = query({
         .query('reminderRules')
         .withIndex('by_work', q => q.eq('workId', args.workId))
         .collect();
+    if (args.taskId)
+      return await ctx.db
+        .query('reminderRules')
+        .withIndex('by_task', q => q.eq('taskId', args.taskId))
+        .collect();
     return await ctx.db
       .query('reminderRules')
-      .withIndex('by_task', q => q.eq('taskId', args.taskId))
+      .withIndex('by_message', q => q.eq('messageId', args.messageId))
       .collect();
   },
 });
@@ -254,6 +292,7 @@ export const create = mutation({
     requestId: v.optional(v.id('requests')),
     workId: v.optional(v.id('issues')),
     taskId: v.optional(v.id('tasks')),
+    messageId: v.optional(v.id('channelMessages')),
     recipientPolicies: v.array(reminderRecipientPolicyValidator),
     cadence: reminderCadenceValidator,
     intervalDays: v.optional(v.number()),
@@ -262,12 +301,18 @@ export const create = mutation({
     inactivityHours: v.optional(v.number()),
     firstFireAt: v.number(),
   },
+  returns: v.object({ reminderRuleId: v.id('reminderRules') }),
   handler: async (ctx, args) => {
     const { organization, userId } = await requireOrganization(
       ctx,
       args.orgSlug,
     );
-    const ids = [args.requestId, args.workId, args.taskId].filter(Boolean);
+    const ids = [
+      args.requestId,
+      args.workId,
+      args.taskId,
+      args.messageId,
+    ].filter(Boolean);
     if (ids.length !== 1)
       throw new ConvexError('EXACTLY_ONE_REMINDER_TARGET_REQUIRED');
     if (args.targetType === 'request' && args.requestId) {
@@ -287,6 +332,10 @@ export const create = mutation({
       if (!task || task.organizationId !== organization._id)
         throw new ConvexError('TASK_NOT_FOUND');
       await requireWork(ctx, task.workId, 'edit');
+    } else if (args.targetType === 'message' && args.messageId) {
+      const { channel } = await requireMessageAccess(ctx, args.messageId);
+      if (channel.organizationId !== organization._id)
+        throw new ConvexError('MESSAGE_NOT_FOUND');
     } else throw new ConvexError('REMINDER_TARGET_MISMATCH');
     const recipientPolicies = Array.from(new Set(args.recipientPolicies));
     if (recipientPolicies.length === 0)
@@ -296,7 +345,9 @@ export const create = mutation({
         ? ['requester', 'request_owner', 'watchers']
         : args.targetType === 'task'
           ? ['task_assignee', 'work_owner', 'work_creator']
-          : ['work_owner', 'work_creator'],
+          : args.targetType === 'message'
+            ? ['reminder_creator']
+            : ['work_owner', 'work_creator'],
     );
     if (recipientPolicies.some(policy => !applicablePolicies.has(policy)))
       throw new ConvexError('INCOMPATIBLE_RECIPIENT_POLICY');
@@ -326,6 +377,7 @@ export const create = mutation({
       requestId: args.requestId,
       workId: args.workId,
       taskId: args.taskId,
+      messageId: args.messageId,
       recipientPolicies,
       cadence: args.cadence,
       intervalDays: args.intervalDays,
@@ -414,7 +466,9 @@ export const processRule = internalMutation({
           ? getRequestHref(org.slug, target.request.key)
           : target.work && org
             ? getIssueHref(org.slug, target.work.key)
-            : undefined;
+            : target.message && target.channel && org
+              ? `/${org.slug}/channels/${target.channel.slug}?message=${target.message._id}`
+              : undefined;
       await createNotificationEvent(ctx, {
         type: 'reminder_due',
         organizationId: rule.organizationId,
@@ -427,6 +481,10 @@ export const processRule = internalMutation({
           workKey: target.work?.key,
           workTitle: target.work?.title,
           taskTitle: target.task?.title,
+          channelName: target.channel?.name,
+          messagePreview:
+            target.message?.body.trim().slice(0, 180) ||
+            'Open the message in its channel.',
           href,
         },
         recipients: recipients.map(userId => ({ userId })),
