@@ -116,6 +116,7 @@ struct MobileConversationHomeScreen: View {
                 } label: {
                   MobileChannelRow(item: item)
                 }
+                .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                 .listRowSeparator(.hidden)
                 .overlay(alignment: .bottom) {
                   Rectangle()
@@ -220,7 +221,7 @@ private struct MobileChannelRow: View {
   }
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: 10) {
       ZStack {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
           .fill(item.channel.kind.isDirect ? VectorTheme.accent.opacity(0.12) : Color.secondary.opacity(0.09))
@@ -228,7 +229,7 @@ private struct MobileChannelRow: View {
           .font(.subheadline.weight(.semibold))
           .foregroundStyle(item.channel.kind.isDirect ? VectorTheme.accent : .secondary)
       }
-      .frame(width: 36, height: 36)
+      .frame(width: 32, height: 32)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(item.channel.name)
@@ -254,7 +255,7 @@ private struct MobileChannelRow: View {
           .accessibilityLabel("\(item.unreadDisplayCount) unread messages")
       }
     }
-    .frame(minHeight: 48)
+    .frame(minHeight: 40)
     .contentShape(Rectangle())
   }
 }
