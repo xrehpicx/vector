@@ -42,6 +42,10 @@ private struct AuthenticatedVectorMobileView: View {
     TabView(selection: $selectedTab) {
       NavigationStack {
         MobileConversationHomeScreen(viewModel: viewModel, directOnly: false)
+          .vectorTopLevelNavigationChrome(
+            viewModel: viewModel,
+            sessionController: sessionController
+          )
       }
       .tabItem {
         Label(VectorMobileTab.home.title, systemImage: VectorMobileTab.home.systemImage)
@@ -50,6 +54,10 @@ private struct AuthenticatedVectorMobileView: View {
 
       NavigationStack {
         MobileConversationHomeScreen(viewModel: viewModel, directOnly: true)
+          .vectorTopLevelNavigationChrome(
+            viewModel: viewModel,
+            sessionController: sessionController
+          )
       }
       .tabItem {
         Label(VectorMobileTab.directMessages.title, systemImage: VectorMobileTab.directMessages.systemImage)
@@ -62,6 +70,10 @@ private struct AuthenticatedVectorMobileView: View {
           sessionController: sessionController,
           notificationHrefToOpen: $notificationHrefToOpen
         )
+        .vectorTopLevelNavigationChrome(
+          viewModel: viewModel,
+          sessionController: sessionController
+        )
       }
       .tabItem {
         Label(VectorMobileTab.activity.title, systemImage: VectorMobileTab.activity.systemImage)
@@ -70,6 +82,10 @@ private struct AuthenticatedVectorMobileView: View {
 
       NavigationStack {
         MobileCollaborationSearchScreen(viewModel: viewModel)
+          .vectorTopLevelNavigationChrome(
+            viewModel: viewModel,
+            sessionController: sessionController
+          )
       }
       .tabItem {
         Label(VectorMobileTab.search.title, systemImage: VectorMobileTab.search.systemImage)
@@ -81,6 +97,10 @@ private struct AuthenticatedVectorMobileView: View {
           viewModel: viewModel,
           sessionController: sessionController,
           pushCoordinator: pushCoordinator
+        )
+        .vectorTopLevelNavigationChrome(
+          viewModel: viewModel,
+          sessionController: sessionController
         )
       }
       .tabItem {
@@ -181,6 +201,70 @@ private struct AuthenticatedVectorMobileView: View {
       #endif
     }
     pushCoordinator.consumePendingNotificationHref()
+  }
+}
+
+private struct VectorTopLevelNavigationChrome: ViewModifier {
+  @ObservedObject var viewModel: VectorMobileViewModel
+  @ObservedObject var sessionController: VectorMobileSessionController
+  @State private var isShowingProfileStatusSettings = false
+
+  func body(content: Content) -> some View {
+    content
+      .navigationDestination(isPresented: $isShowingProfileStatusSettings) {
+        ProfileStatusSettingsScreen(viewModel: viewModel)
+      }
+      .toolbar {
+        #if os(iOS)
+          ToolbarItem(placement: .topBarLeading) {
+            workspaceMenu
+          }
+          ToolbarItem(placement: .topBarTrailing) {
+            profileMenu
+          }
+        #else
+          ToolbarItem(placement: .automatic) {
+            workspaceMenu
+          }
+          ToolbarItem(placement: .primaryAction) {
+            profileMenu
+          }
+        #endif
+      }
+  }
+
+  private var workspaceMenu: some View {
+    WorkspaceToolbarMenu(
+      sessionController: sessionController,
+      currentOrgSlug: viewModel.configuration.orgSlug,
+      webBaseURL: viewModel.configuration.webBaseURL,
+      issuesURL: viewModel.configuration.workspaceWebURL,
+      webLabel: "Open workspace on web"
+    )
+  }
+
+  private var profileMenu: some View {
+    ProfileStatusToolbarMenu(
+      viewModel: viewModel,
+      sessionController: sessionController,
+      onOpenProfileStatusSettings: {
+        isShowingProfileStatusSettings = true
+      }
+    )
+  }
+}
+
+private extension View {
+  func vectorTopLevelNavigationChrome(
+    viewModel: VectorMobileViewModel,
+    sessionController: VectorMobileSessionController
+  ) -> some View {
+    modifier(
+      VectorTopLevelNavigationChrome(
+        viewModel: viewModel,
+        sessionController: sessionController
+      )
+    )
   }
 }
 
@@ -827,8 +911,6 @@ struct InboxScreen: View {
   @ObservedObject var viewModel: VectorMobileViewModel
   @ObservedObject var sessionController: VectorMobileSessionController
   @Binding var notificationHrefToOpen: String?
-  @State private var isShowingProfileStatusSettings = false
-
   var body: some View {
     ScrollView {
       if viewModel.inboxNotifications.isEmpty {
@@ -862,52 +944,8 @@ struct InboxScreen: View {
     .background(VectorTheme.rowBackground)
     .navigationTitle("Inbox")
     .vectorInlineNavigationTitle()
-    .navigationDestination(isPresented: $isShowingProfileStatusSettings) {
-      ProfileStatusSettingsScreen(viewModel: viewModel)
-    }
     .navigationDestination(isPresented: notificationDestinationPresented) {
       notificationDestination
-    }
-    .toolbar {
-      #if os(iOS)
-      ToolbarItem(placement: .topBarLeading) {
-        WorkspaceToolbarMenu(
-          sessionController: sessionController,
-          currentOrgSlug: viewModel.configuration.orgSlug,
-          webBaseURL: viewModel.configuration.webBaseURL,
-          issuesURL: viewModel.configuration.workspaceWebURL,
-          webLabel: "Open workspace on web"
-        )
-      }
-      ToolbarItem(placement: .topBarTrailing) {
-        ProfileStatusToolbarMenu(
-          viewModel: viewModel,
-          sessionController: sessionController,
-          onOpenProfileStatusSettings: {
-            isShowingProfileStatusSettings = true
-          }
-        )
-      }
-      #else
-      ToolbarItem(placement: .automatic) {
-        WorkspaceToolbarMenu(
-          sessionController: sessionController,
-          currentOrgSlug: viewModel.configuration.orgSlug,
-          webBaseURL: viewModel.configuration.webBaseURL,
-          issuesURL: viewModel.configuration.workspaceWebURL,
-          webLabel: "Open workspace on web"
-        )
-      }
-      ToolbarItem(placement: .primaryAction) {
-        ProfileStatusToolbarMenu(
-          viewModel: viewModel,
-          sessionController: sessionController,
-          onOpenProfileStatusSettings: {
-            isShowingProfileStatusSettings = true
-          }
-        )
-      }
-      #endif
     }
   }
 
