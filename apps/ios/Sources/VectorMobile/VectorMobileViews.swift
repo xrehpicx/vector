@@ -362,9 +362,11 @@ private struct VectorRestoreLoadingIndicator: View {
 
 private struct VectorSetupScreen: View {
   @ObservedObject var sessionController: VectorMobileSessionController
+  @Environment(\.colorScheme) private var colorScheme
   @State private var appURLString = "imai.tech"
   @State private var identifier = ""
   @State private var password = ""
+  @State private var isConfiguringServer = false
 
   private var canSubmit: Bool {
     !appURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -378,66 +380,96 @@ private struct VectorSetupScreen: View {
       ZStack {
         VectorAuthBackground()
 
-        ScrollView {
-          VStack(spacing: 22) {
-            VectorLoginHero()
+        GeometryReader { proxy in
+          ScrollView {
+            VStack(spacing: 0) {
+              VStack(spacing: 28) {
+                VectorLoginHero()
 
-            VStack(alignment: .leading, spacing: 14) {
-              VectorNativeLoginForm(
-                appURLString: $appURLString,
-                identifier: $identifier,
-                password: $password,
-                onSubmit: signIn
-              )
+                VStack(alignment: .leading, spacing: 12) {
+                  VectorNativeLoginForm(
+                    identifier: $identifier,
+                    password: $password,
+                    onSubmit: signIn
+                  )
 
-              if let error = sessionController.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
-                  .font(.caption)
-                  .foregroundStyle(Color(red: 1.0, green: 0.42, blue: 0.48))
-                  .fixedSize(horizontal: false, vertical: true)
-              }
+                  VectorServerDisclosure(
+                    appURLString: $appURLString,
+                    isExpanded: $isConfiguringServer
+                  )
 
-              Button(action: signIn) {
-                HStack(spacing: 8) {
-                  if sessionController.phase == .authenticating {
-                    ProgressView()
-                      .controlSize(.small)
-                      .tint(.white)
+                  if let error = sessionController.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                      .font(.footnote)
+                      .foregroundStyle(.red)
+                      .fixedSize(horizontal: false, vertical: true)
+                      .frame(maxWidth: .infinity, alignment: .leading)
+                      .padding(12)
+                      .background(
+                        Color.red.opacity(colorScheme == .dark ? 0.14 : 0.08),
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                      )
                   }
-                  Text(sessionController.phase == .authenticating ? "Signing in" : "Sign in")
-                    .font(.subheadline.weight(.semibold))
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .foregroundStyle(Color.white)
-                .background(
-                  canSubmit ? VectorTheme.accent : Color.white.opacity(0.16),
-                  in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                )
+                .frame(maxWidth: 380)
               }
-              .buttonStyle(.plain)
-              .disabled(!canSubmit)
 
-              Button {
-                sessionController.useDemoData()
-              } label: {
-                Text("Preview sample data")
-                  .font(.subheadline.weight(.medium))
+              Spacer(minLength: 34)
+
+              VStack(spacing: 10) {
+                Button(action: signIn) {
+                  HStack(spacing: 8) {
+                    if sessionController.phase == .authenticating {
+                      ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                    }
+                    Text(sessionController.phase == .authenticating ? "Signing in…" : "Sign in")
+                      .font(.headline)
+                  }
                   .frame(maxWidth: .infinity)
-                  .frame(height: 38)
+                  .frame(height: 50)
+                  .foregroundStyle(Color.white)
+                  .background(
+                    canSubmit ? VectorTheme.accent : VectorTheme.accent.opacity(0.34),
+                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                  )
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSubmit)
+                .accessibilityHint("Signs in to the selected Vector server")
+
+                Button {
+                  sessionController.useDemoData()
+                } label: {
+                  Label("Explore demo workspace", systemImage: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .foregroundStyle(.primary)
+                    .background(
+                      colorScheme == .dark ? Color.white.opacity(0.08) : Color.white,
+                      in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    )
+                    .overlay(
+                      RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.plain)
               }
-              .buttonStyle(.plain)
-              .foregroundStyle(.white.opacity(0.78))
+              .frame(maxWidth: 380)
             }
             .frame(maxWidth: 360)
+            .frame(minHeight: proxy.size.height)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 22)
+            .padding(.top, 34)
+            .padding(.bottom, 18)
           }
-          .frame(maxWidth: .infinity)
-          .padding(.horizontal, 20)
-          .padding(.top, 78)
-          .padding(.bottom, 32)
+          .scrollDismissesKeyboard(.interactively)
         }
       }
-      .ignoresSafeArea()
       .vectorHiddenNavigationBar()
       .onAppear {
         if appURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -463,116 +495,130 @@ private struct VectorSetupScreen: View {
 }
 
 private struct VectorAuthBackground: View {
+  @Environment(\.colorScheme) private var colorScheme
+
   var body: some View {
     ZStack {
-      LinearGradient(
-        colors: [
-          Color(red: 0.01, green: 0.01, blue: 0.04),
-          Color(red: 0.02, green: 0.03, blue: 0.08),
-          Color(red: 0.01, green: 0.01, blue: 0.03),
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
+      (colorScheme == .dark ? Color.black : Color(white: 0.965))
       RadialGradient(
         colors: [
-          Color(red: 0.05, green: 0.47, blue: 0.62).opacity(0.34),
+          VectorTheme.accent.opacity(colorScheme == .dark ? 0.16 : 0.08),
           Color.clear,
         ],
-        center: .bottomTrailing,
-        startRadius: 12,
-        endRadius: 360
-      )
-      RadialGradient(
-        colors: [
-          Color(red: 0.20, green: 0.12, blue: 0.46).opacity(0.24),
-          Color.clear,
-        ],
-        center: .topLeading,
+        center: .top,
         startRadius: 0,
-        endRadius: 280
+        endRadius: 330
       )
     }
+    .ignoresSafeArea()
   }
 }
 
 private struct VectorLoginHero: View {
   var body: some View {
-    VStack(spacing: 12) {
-      Image("VectorLogo")
-        .resizable()
-        .scaledToFit()
-        .frame(width: 58, height: 58)
-        .shadow(color: VectorTheme.accent.opacity(0.28), radius: 22, x: 0, y: 10)
+    VStack(spacing: 14) {
+      VectorLogoMark(size: 56)
 
-      VStack(spacing: 4) {
-        Text("Vector")
-          .font(.system(size: 28, weight: .semibold))
-          .foregroundStyle(.white)
-        Text("Sign in to your workspace")
+      VStack(spacing: 7) {
+        Text("Sign in to Vector")
+          .font(.title2.weight(.bold))
+          .foregroundStyle(.primary)
+        Text("Open your conversations, work, and connected agents.")
           .font(.subheadline)
-          .foregroundStyle(.white.opacity(0.64))
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
     .accessibilityElement(children: .combine)
-    .accessibilityLabel("Vector. Sign in to your workspace.")
+    .accessibilityLabel("Sign in to Vector. Open your conversations, work, and connected agents.")
   }
 }
 
 private struct VectorNativeLoginForm: View {
-  @Binding var appURLString: String
+  @Environment(\.colorScheme) private var colorScheme
   @Binding var identifier: String
   @Binding var password: String
   let onSubmit: () -> Void
 
   var body: some View {
-    VStack(spacing: 0) {
-      VectorLoginFormRow(title: "Instance", text: $appURLString, prompt: "imai.tech", keyboard: .url)
-      VectorLoginSeparator()
-      VectorCredentialFields(identifier: $identifier, password: $password, onSubmit: onSubmit)
-    }
-    .background(
-      Color(red: 0.08, green: 0.09, blue: 0.12).opacity(0.82),
-      in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
-    )
-    .shadow(color: Color.black.opacity(0.28), radius: 18, x: 0, y: 12)
+    VectorCredentialFields(identifier: $identifier, password: $password, onSubmit: onSubmit)
+      .frame(height: 104)
+      .background(
+        colorScheme == .dark ? Color.white.opacity(0.075) : Color.white,
+        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
+      )
+      .shadow(color: Color.black.opacity(colorScheme == .dark ? 0 : 0.05), radius: 14, x: 0, y: 6)
   }
 }
 
-private struct VectorLoginSeparator: View {
-  var body: some View {
-    Rectangle()
-      .fill(Color.white.opacity(0.10))
-      .frame(height: 0.5)
-      .padding(.leading, 108)
+private struct VectorServerDisclosure: View {
+  @Environment(\.colorScheme) private var colorScheme
+  @Binding var appURLString: String
+  @Binding var isExpanded: Bool
+
+  private var serverLabel: String {
+    let trimmed = appURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? "Set server" : trimmed
   }
-}
-
-private struct VectorLoginFormRow: View {
-  let title: String
-  @Binding var text: String
-  let prompt: String
-  let keyboard: VectorSetupKeyboard
 
   var body: some View {
-    HStack(spacing: 12) {
-      Text(title)
-        .font(.subheadline.weight(.medium))
-        .foregroundStyle(.white.opacity(0.92))
-        .frame(width: 84, alignment: .leading)
-      TextField("", text: $text, prompt: Text(prompt).foregroundStyle(.white.opacity(0.34)))
-        .vectorSetupKeyboard(keyboard)
-        .font(.subheadline)
-        .foregroundStyle(.white)
-        .tint(VectorTheme.accent)
-        .submitLabel(.next)
+    VStack(alignment: .leading, spacing: 10) {
+      Button {
+        withAnimation(.snappy(duration: 0.24)) {
+          isExpanded.toggle()
+        }
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "network")
+            .font(.caption.weight(.semibold))
+          Text("Server")
+          Spacer(minLength: 12)
+          Text(serverLabel)
+            .lineLimit(1)
+            .foregroundStyle(.secondary)
+          Image(systemName: "chevron.down")
+            .font(.caption2.weight(.bold))
+            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+            .foregroundStyle(.tertiary)
+        }
+        .font(.footnote.weight(.medium))
+        .foregroundStyle(.primary)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Vector server, \(serverLabel)")
+      .accessibilityHint(isExpanded ? "Collapses server settings" : "Expands server settings")
+
+      if isExpanded {
+        VStack(alignment: .leading, spacing: 7) {
+          TextField("your-vector-server.com", text: $appURLString)
+            .vectorSetupKeyboard(.url)
+            .font(.body)
+            .tint(VectorTheme.accent)
+            .padding(.horizontal, 12)
+            .frame(height: 46)
+            .background(
+              colorScheme == .dark ? Color.white.opacity(0.075) : Color.white,
+              in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
+            )
+            .submitLabel(.next)
+
+          Text("Use the domain where your organization hosts Vector.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
+      }
     }
-    .padding(.horizontal, 14)
-    .frame(height: 46)
   }
 }
 
@@ -588,15 +634,19 @@ private struct VectorCredentialFields: View {
         password: $password,
         onSubmit: onSubmit
       )
-      .frame(height: 92)
+      .frame(height: 104)
     #else
       VStack(spacing: 0) {
-        VectorLoginFormRow(title: "Account", text: $identifier, prompt: "you@example.com", keyboard: .email)
-        VectorLoginSeparator()
+        TextField("Email or username", text: $identifier)
+          .vectorSetupKeyboard(.email)
+          .padding(.horizontal, 14)
+          .frame(height: 52)
+        Divider()
+          .padding(.leading, 14)
         SecureField("Password", text: $password)
           .onSubmit(onSubmit)
           .padding(.horizontal, 14)
-          .frame(height: 46)
+          .frame(height: 52)
       }
     #endif
   }
@@ -685,7 +735,7 @@ private struct VectorCredentialFields: View {
         passwordField.returnKeyType = .go
 
         let separator = UIView()
-        separator.backgroundColor = UIColor.white.withAlphaComponent(0.10)
+        separator.backgroundColor = .separator
 
         let accountRow = makeRow(title: "Account", field: accountField)
         let passwordRow = makeRow(title: "Password", field: passwordField)
@@ -696,7 +746,7 @@ private struct VectorCredentialFields: View {
           accountRow.topAnchor.constraint(equalTo: topAnchor),
           accountRow.leadingAnchor.constraint(equalTo: leadingAnchor),
           accountRow.trailingAnchor.constraint(equalTo: trailingAnchor),
-          accountRow.heightAnchor.constraint(equalToConstant: 46),
+          accountRow.heightAnchor.constraint(equalToConstant: 52),
           separator.topAnchor.constraint(equalTo: accountRow.bottomAnchor),
           separator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 108),
           separator.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -716,14 +766,14 @@ private struct VectorCredentialFields: View {
       private func configureField(_ field: UITextField, placeholder: String) {
         field.font = .preferredFont(forTextStyle: .subheadline)
         field.adjustsFontForContentSizeCategory = true
-        field.textColor = .white
+        field.textColor = .label
         field.tintColor = UIColor(VectorTheme.accent)
         field.autocapitalizationType = .none
         field.autocorrectionType = .no
         field.spellCheckingType = .no
         field.attributedPlaceholder = NSAttributedString(
           string: placeholder,
-          attributes: [.foregroundColor: UIColor.white.withAlphaComponent(0.34)]
+          attributes: [.foregroundColor: UIColor.placeholderText]
         )
       }
 
@@ -734,7 +784,7 @@ private struct VectorCredentialFields: View {
           for: .systemFont(ofSize: 15, weight: .medium)
         )
         label.adjustsFontForContentSizeCategory = true
-        label.textColor = UIColor.white.withAlphaComponent(0.92)
+        label.textColor = .label
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.widthAnchor.constraint(equalToConstant: 84).isActive = true
 
