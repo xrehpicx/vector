@@ -351,6 +351,7 @@ enum VectorMockData {
         actorKind: "agent",
         authorAgentId: collaborationAgent.id,
         body: "I’m connected to Raj’s Mac and ready to help from the Vector workspace.",
+        replyToMessageId: "message-welcome",
         createdAt: 1_774_580_000_000
       ),
       authorUser: nil,

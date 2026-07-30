@@ -64,6 +64,19 @@ final class VectorMobileTests: XCTestCase {
     XCTAssertFalse(rootArgs.keys.contains("threadRootId"))
     XCTAssertFalse(rootArgs.keys.contains("replyToMessageId"))
 
+    let inlineReplyArgs = VectorConvexArguments.sendChannelMessage(
+      channelId: "channel-1",
+      body: "Quoted reply",
+      clientMessageId: "mobile:inline-reply",
+      mentionedUserIds: [],
+      mentionedAgentIds: [],
+      attachments: [],
+      threadRootId: nil,
+      replyToMessageId: "message-root"
+    )
+    XCTAssertFalse(inlineReplyArgs.keys.contains("threadRootId"))
+    XCTAssertTrue(inlineReplyArgs.keys.contains("replyToMessageId"))
+
     let replyArgs = VectorConvexArguments.sendChannelMessage(
       channelId: "channel-1",
       body: "Reply",
@@ -288,6 +301,49 @@ final class VectorMobileTests: XCTestCase {
     XCTAssertTrue(sent)
     XCTAssertTrue(viewModel.channelMessages.contains { $0.id == "message-created" })
     XCTAssertEqual(repository.sentClientMessageIds.count, 1)
+  }
+
+  @MainActor
+  func testInlineReplyStaysInChannelAndPreservesQuotedTarget() async {
+    let repository = CountingVectorRepository()
+    var continuation: CheckedContinuation<VectorSendMessageResult, Error>?
+    repository.sendChannelMessageAction = { _ in
+      try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository,
+      messageSendTimeout: .seconds(2)
+    )
+    viewModel.openChannel(VectorMockData.collaborationChannels[0])
+
+    let sendTask = Task {
+      await viewModel.sendChannelMessage(
+        body: "A regular reply",
+        attachments: [],
+        replyToMessageId: "message-welcome"
+      )
+    }
+    await waitUntil {
+      viewModel.channelMessages.contains { $0.message.body == "A regular reply" }
+    }
+    let pending = try? XCTUnwrap(
+      viewModel.channelMessages.first { $0.message.body == "A regular reply" }
+    )
+    XCTAssertNil(pending?.message.threadRootId)
+    XCTAssertEqual(pending?.message.replyToMessageId, "message-welcome")
+    XCTAssertEqual(repository.sentThreadRootIds.last ?? nil, nil)
+    XCTAssertEqual(
+      repository.sentReplyToMessageIds.last ?? nil,
+      "message-welcome"
+    )
+
+    await waitUntil { continuation != nil }
+    continuation?.resume(
+      returning: VectorSendMessageResult(messageId: "inline-reply-created", runIds: [])
+    )
+    let sent = await sendTask.value
+    XCTAssertTrue(sent)
   }
 
   @MainActor
@@ -1834,6 +1890,8 @@ private final class CountingVectorRepository: VectorMobileRepository {
   var sendChannelMessageAction: ((String) async throws -> VectorSendMessageResult)?
   var sentClientMessageIds: [String] = []
   var sentMentionedUserIds: [[VectorID]] = []
+  var sentThreadRootIds: [VectorID?] = []
+  var sentReplyToMessageIds: [VectorID?] = []
   var channelMembersValue: [VectorChannelMemberView] = []
   var channelMessagesValue: [VectorMessageView] = []
   var toggleReactionAction: ((VectorID, String) async throws -> Bool)?
@@ -1879,6 +1937,8 @@ private final class CountingVectorRepository: VectorMobileRepository {
   ) async throws -> VectorSendMessageResult {
     sentClientMessageIds.append(clientMessageId)
     sentMentionedUserIds.append(mentionedUserIds)
+    sentThreadRootIds.append(threadRootId)
+    sentReplyToMessageIds.append(replyToMessageId)
     if let sendChannelMessageAction {
       return try await sendChannelMessageAction(clientMessageId)
     }

@@ -428,12 +428,16 @@ export const send = mutation({
       ) {
         throw new ConvexError('REPLY_TARGET_NOT_FOUND');
       }
-      const expectedRoot = replyTo.threadRootId ?? replyTo._id;
-      if (threadRoot && expectedRoot !== threadRoot._id) {
+      if (threadRoot) {
+        const expectedRoot = replyTo.threadRootId ?? replyTo._id;
+        if (expectedRoot !== threadRoot._id) {
+          throw new ConvexError('REPLY_THREAD_MISMATCH');
+        }
+      } else if (replyTo.threadRootId) {
+        // Replies to a message inside a thread must stay in that thread.
+        // A top-level reply can reference another top-level message without
+        // implicitly creating a thread.
         throw new ConvexError('REPLY_THREAD_MISMATCH');
-      }
-      if (!threadRoot) {
-        threadRoot = await requireThreadRoot(ctx, expectedRoot, args.channelId);
       }
     }
     const mentions = await validateMentionIds(

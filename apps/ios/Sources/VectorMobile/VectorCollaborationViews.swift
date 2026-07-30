@@ -422,12 +422,36 @@ struct MobileChannelScreen: View {
   let channel: VectorChannelListItem
   @ObservedObject var viewModel: VectorMobileViewModel
   @State private var isShowingDetails = false
+  @State private var replyTarget: VectorMessageView?
+  @State private var composerFocusRequest = 0
 
   var body: some View {
     VStack(spacing: 0) {
-      MobileMessageTimeline(viewModel: viewModel)
+      MobileMessageTimeline(
+        viewModel: viewModel,
+        onReply: { message in
+          replyTarget = message
+          composerFocusRequest += 1
+        }
+      )
 
-      MobileMessageComposer(viewModel: viewModel)
+      if let replyTarget {
+        MobileReplyContextBar(
+          message: replyTarget,
+          onCancel: {
+            self.replyTarget = nil
+          }
+        )
+      }
+
+      MobileMessageComposer(
+        viewModel: viewModel,
+        replyToMessageId: replyTarget?.id,
+        focusRequest: composerFocusRequest,
+        onSent: {
+          replyTarget = nil
+        }
+      )
     }
     .navigationTitle(channel.channel.name)
     .vectorInlineNavigationTitle()
@@ -458,6 +482,7 @@ struct MobileChannelScreen: View {
 
 private struct MobileMessageTimeline: View {
   @ObservedObject var viewModel: VectorMobileViewModel
+  let onReply: (VectorMessageView) -> Void
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -476,7 +501,14 @@ private struct MobileMessageTimeline: View {
             .padding(.top, 80)
           } else {
             ForEach(viewModel.channelMessages) { message in
-              MobileMessageRow(message: message, viewModel: viewModel)
+              MobileMessageRow(
+                message: message,
+                viewModel: viewModel,
+                replyContext: replyContext(for: message),
+                onReply: {
+                  onReply(message)
+                }
+              )
                 .id(message.id)
             }
           }
@@ -500,6 +532,11 @@ private struct MobileMessageTimeline: View {
       }
     }
   }
+
+  private func replyContext(for message: VectorMessageView) -> VectorMessageView? {
+    guard let replyToMessageId = message.message.replyToMessageId else { return nil }
+    return viewModel.channelMessages.first(where: { $0.id == replyToMessageId })
+  }
 }
 
 private struct MobileThreadScreen: View {
@@ -515,6 +552,7 @@ private struct MobileThreadScreen: View {
             MobileMessageRow(
               message: rootMessage,
               viewModel: viewModel,
+              replyContext: replyContext(for: rootMessage),
               showsThreadAction: false,
               mediaReplyThreadRootID: rootMessage.id,
               onReply: {
@@ -541,6 +579,7 @@ private struct MobileThreadScreen: View {
                 MobileMessageRow(
                   message: reply,
                   viewModel: viewModel,
+                  replyContext: replyContext(for: reply),
                   showsThreadAction: false,
                   mediaReplyThreadRootID: rootMessage.id,
                   onReply: {
@@ -563,33 +602,12 @@ private struct MobileThreadScreen: View {
       }
 
       if let replyTarget {
-        HStack(spacing: 9) {
-          Image(systemName: "arrowshape.turn.up.left")
-            .foregroundStyle(VectorTheme.accent)
-          VStack(alignment: .leading, spacing: 1) {
-            Text(
-              "Replying to \(replyTarget.authorUser?.displayName ?? replyTarget.authorAgent?.name ?? "message")"
-            )
-            .font(.caption.weight(.semibold))
-            Text(replyTarget.message.body.isEmpty ? "Voice or file attachment" : replyTarget.message.body)
-              .font(.caption2)
-              .foregroundStyle(.secondary)
-              .lineLimit(1)
-          }
-          Spacer()
-          Button {
+        MobileReplyContextBar(
+          message: replyTarget,
+          onCancel: {
             self.replyTarget = nil
-          } label: {
-            Image(systemName: "xmark")
-              .frame(width: 32, height: 32)
           }
-          .buttonStyle(.plain)
-          .accessibilityLabel("Cancel reply")
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) { Divider() }
+        )
       }
 
       MobileMessageComposer(
@@ -610,6 +628,67 @@ private struct MobileThreadScreen: View {
     .onAppear {
       viewModel.openThread(rootMessageId: rootMessage.id)
     }
+  }
+
+  private func replyContext(for message: VectorMessageView) -> VectorMessageView? {
+    guard let replyToMessageId = message.message.replyToMessageId else { return nil }
+    if replyToMessageId == rootMessage.id {
+      return rootMessage
+    }
+    return viewModel.threadMessages.first(where: { $0.id == replyToMessageId })
+  }
+}
+
+private struct MobileReplyContextBar: View {
+  let message: VectorMessageView
+  let onCancel: () -> Void
+
+  private var authorName: String {
+    message.authorUser?.displayName
+      ?? message.authorAgent?.name
+      ?? "message"
+  }
+
+  private var excerpt: String {
+    if !message.message.body.isEmpty {
+      return message.message.body
+    }
+    if let attachment = message.attachments.first {
+      return attachment.isAudio ? "Voice message" : attachment.name
+    }
+    return "Attachment"
+  }
+
+  var body: some View {
+    HStack(spacing: 9) {
+      RoundedRectangle(cornerRadius: 1)
+        .fill(VectorTheme.accent)
+        .frame(width: 3, height: 30)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 1) {
+        Text("Replying to \(authorName)")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(VectorTheme.accent)
+        Text(excerpt)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+      Spacer(minLength: 8)
+      Button(action: onCancel) {
+        Image(systemName: "xmark")
+          .font(.caption.weight(.semibold))
+          .frame(width: 32, height: 32)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Cancel reply")
+    }
+    .padding(.leading, 14)
+    .padding(.trailing, 8)
+    .padding(.vertical, 6)
+    .background(VectorTheme.surfaceBackground)
+    .overlay(alignment: .top) { Divider() }
   }
 }
 
@@ -648,6 +727,7 @@ struct VectorMessageSwipeResolver {
 private struct MobileMessageRow: View {
   let message: VectorMessageView
   @ObservedObject var viewModel: VectorMobileViewModel
+  var replyContext: VectorMessageView?
   var showsThreadAction = true
   var mediaReplyThreadRootID: VectorID?
   var onReply: (() -> Void)?
@@ -694,7 +774,7 @@ private struct MobileMessageRow: View {
   }
 
   private var trailingSwipeWidth: CGFloat {
-    196
+    150
   }
 
   private var reactionGroups: [MobileReactionGroup] {
@@ -760,6 +840,11 @@ private struct MobileMessageRow: View {
           Text(messageTimestamp(message.message.createdAt))
             .font(.caption2)
             .foregroundStyle(.secondary)
+        }
+
+        if let replyContext {
+          MobileInlineReplyQuote(message: replyContext)
+            .padding(.leading, messageContentIndent)
         }
 
         if message.message.deletedAt != nil {
@@ -911,6 +996,18 @@ private struct MobileMessageRow: View {
     .clipped()
     .contextMenu {
       Button {
+        activateReply()
+      } label: {
+        Label("Reply", systemImage: "arrowshape.turn.up.left")
+      }
+      if showsThreadAction {
+        Button {
+          isShowingThread = true
+        } label: {
+          Label("Start thread", systemImage: "bubble.left.and.bubble.right")
+        }
+      }
+      Button {
         #if os(iOS)
           UIPasteboard.general.string = message.message.body
         #endif
@@ -918,9 +1015,9 @@ private struct MobileMessageRow: View {
         Label("Copy text", systemImage: "doc.on.doc")
       }
       Button {
-        activateReply()
+        isShowingReminderOptions = true
       } label: {
-        Label("Reply in thread", systemImage: "bubble.left.and.bubble.right")
+        Label("Remind me", systemImage: "bell.badge")
       }
       Button {
         Task { await viewModel.toggleSaved(message) }
@@ -1015,7 +1112,7 @@ private struct MobileMessageRow: View {
       }
       .padding(.leading, 12)
 
-      HStack(spacing: 8) {
+      HStack(spacing: 6) {
         Spacer()
         Menu {
           ForEach(MobileReactionGroup.quickReactions) { reaction in
@@ -1070,29 +1167,6 @@ private struct MobileMessageRow: View {
         .disabled(isSending || message.message.deletedAt != nil)
         .accessibilityLabel("Remind me about this message")
 
-        Menu {
-          Button {
-            closeSwipeActions()
-            activateReply()
-          } label: {
-            Label("Reply in thread", systemImage: "bubble.left.and.bubble.right")
-          }
-          Button {
-            closeSwipeActions()
-            #if os(iOS)
-              UIPasteboard.general.string = message.message.body
-            #endif
-          } label: {
-            Label("Copy text", systemImage: "doc.on.doc")
-          }
-        } label: {
-          Image(systemName: "ellipsis")
-            .font(.body.weight(.semibold))
-            .frame(width: 42, height: 42)
-            .background(Color.secondary.opacity(0.12), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("More message actions")
       }
       .padding(.trailing, 12)
       .accessibilityHidden(!isSwipeOpen)
@@ -1252,9 +1326,54 @@ private struct MobileMessageRow: View {
   private func activateReply() {
     if let onReply {
       onReply()
-    } else {
+    } else if showsThreadAction {
       isShowingThread = true
     }
+  }
+}
+
+private struct MobileInlineReplyQuote: View {
+  let message: VectorMessageView
+
+  private var authorName: String {
+    message.authorUser?.displayName
+      ?? message.authorAgent?.name
+      ?? "Vector"
+  }
+
+  private var excerpt: String {
+    if message.message.deletedAt != nil {
+      return "This message was deleted."
+    }
+    if !message.message.body.isEmpty {
+      return message.message.body
+    }
+    if let attachment = message.attachments.first {
+      return attachment.isAudio ? "Voice message" : attachment.name
+    }
+    return "Attachment"
+  }
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 7) {
+      RoundedRectangle(cornerRadius: 1)
+        .fill(VectorTheme.accent.opacity(0.75))
+        .frame(width: 3)
+      VStack(alignment: .leading, spacing: 1) {
+        Text(authorName)
+          .font(.caption2.weight(.semibold))
+          .foregroundStyle(VectorTheme.accent)
+          .lineLimit(1)
+        Text(excerpt)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(2)
+      }
+    }
+    .padding(.vertical, 3)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Reply to \(authorName): \(excerpt)")
   }
 }
 
@@ -1781,6 +1900,7 @@ private struct MobileMessageComposer: View {
   @ObservedObject var viewModel: VectorMobileViewModel
   var threadRootId: VectorID? = nil
   var replyToMessageId: VectorID? = nil
+  var focusRequest = 0
   var onSent: (() -> Void)?
   @StateObject private var voiceRecorder = VectorVoiceRecorder()
   @State private var bodyText = ""
@@ -1964,6 +2084,10 @@ private struct MobileMessageComposer: View {
         guard voiceRecorder.phase == .idle else { return }
         isFocused = true
       }
+    }
+    .onChange(of: focusRequest) {
+      guard voiceRecorder.phase == .idle else { return }
+      isFocused = true
     }
   }
 
