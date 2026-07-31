@@ -17,6 +17,7 @@ const config: ExpoConfig = {
       'aps-environment': '$(APS_ENVIRONMENT)',
     },
     infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
       NSMicrophoneUsageDescription:
         'Vector uses the microphone when you record a voice message.',
       NSPhotoLibraryUsageDescription:
