@@ -320,6 +320,209 @@ public final class VectorMobileViewModel: ObservableObject {
     loadSmartMessages()
   }
 
+  public func createCollaborationChannel(
+    kind: VectorChannelKind,
+    name: String,
+    topic: String?,
+    memberUserIds: [VectorID]
+  ) async -> VectorChannelListItem? {
+    let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let cleanTopic = topic?.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanName.isEmpty else {
+      collaborationError = "Enter a channel name."
+      return nil
+    }
+
+    collaborationError = nil
+    do {
+      let channelId = try await repository.createCollaborationChannel(
+        orgSlug: configuration.orgSlug,
+        kind: kind,
+        name: cleanName,
+        topic: cleanTopic?.isEmpty == true ? nil : cleanTopic,
+        memberUserIds: memberUserIds
+      )
+      if let existing = collaborationChannels.first(where: { $0.id == channelId }) {
+        return existing
+      }
+
+      let now = Date().timeIntervalSince1970 * 1_000
+      let membership = VectorChannelMembership(
+        id: "pending-membership-\(channelId)",
+        channelId: channelId,
+        userId: currentUser?.id ?? "current-user",
+        role: "owner",
+        notificationMode: kind.isDirect ? .all : .mentions
+      )
+      let created = VectorChannelListItem(
+        channel: VectorChannel(
+          id: channelId,
+          kind: kind,
+          name: cleanName,
+          slug: collaborationSlug(cleanName, fallback: channelId),
+          topic: cleanTopic?.isEmpty == true ? nil : cleanTopic,
+          isDefault: false,
+          createdAt: now,
+          updatedAt: now
+        ),
+        membership: membership,
+        unreadCount: 0
+      )
+      collaborationChannels.removeAll { $0.id == channelId }
+      collaborationChannels.insert(created, at: 0)
+      return created
+    } catch {
+      collaborationError = error.localizedDescription
+      return nil
+    }
+  }
+
+  public func updateCollaborationChannel(
+    channelId: VectorID,
+    name: String,
+    topic: String?
+  ) async -> Bool {
+    let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let cleanTopic = topic?.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanName.isEmpty,
+          let original = collaborationChannels.first(where: { $0.id == channelId })
+    else {
+      collaborationError = "Enter a channel name."
+      return false
+    }
+
+    collaborationError = nil
+    replaceCollaborationChannel(
+      original,
+      channel: copiedChannel(
+        original.channel,
+        name: cleanName,
+        topic: cleanTopic?.isEmpty == true ? nil : cleanTopic
+      )
+    )
+    do {
+      try await repository.updateCollaborationChannel(
+        channelId: channelId,
+        name: cleanName,
+        topic: cleanTopic?.isEmpty == true ? nil : cleanTopic
+      )
+      return true
+    } catch {
+      replaceCollaborationChannel(original, channel: original.channel)
+      collaborationError = error.localizedDescription
+      return false
+    }
+  }
+
+  public func archiveCollaborationChannel(_ channelId: VectorID) async -> Bool {
+    guard let original = collaborationChannels.first(where: { $0.id == channelId }) else {
+      return false
+    }
+    collaborationError = nil
+    collaborationChannels.removeAll { $0.id == channelId }
+    do {
+      try await repository.archiveCollaborationChannel(channelId: channelId)
+      return true
+    } catch {
+      collaborationChannels.insert(original, at: 0)
+      collaborationError = error.localizedDescription
+      return false
+    }
+  }
+
+  public func addChannelMembers(
+    channelId: VectorID,
+    userIds: [VectorID]
+  ) async -> Bool {
+    let uniqueUserIds = Array(Set(userIds))
+    guard !uniqueUserIds.isEmpty else { return true }
+    collaborationError = nil
+
+    do {
+      for userId in uniqueUserIds {
+        let membershipId = try await repository.addChannelMember(
+          channelId: channelId,
+          userId: userId
+        )
+        guard !channelMembers.contains(where: { $0.membership.userId == userId }) else {
+          continue
+        }
+        let user = workspaceOptions?.members.first(where: {
+          ($0.userId ?? $0.user?.id) == userId
+        })?.user
+        channelMembers.append(
+          VectorChannelMemberView(
+            membership: VectorChannelMembership(
+              id: membershipId,
+              channelId: channelId,
+              userId: userId
+            ),
+            user: user
+          )
+        )
+      }
+      return true
+    } catch {
+      collaborationError = error.localizedDescription
+      return false
+    }
+  }
+
+  public func removeChannelMember(
+    channelId: VectorID,
+    userId: VectorID
+  ) async -> Bool {
+    let originalMembers = channelMembers
+    collaborationError = nil
+    channelMembers.removeAll { $0.membership.userId == userId }
+    do {
+      try await repository.removeChannelMember(channelId: channelId, userId: userId)
+      return true
+    } catch {
+      channelMembers = originalMembers
+      collaborationError = error.localizedDescription
+      return false
+    }
+  }
+
+  public func setChannelNotificationMode(
+    channelId: VectorID,
+    mode: VectorChannelNotificationMode
+  ) async -> Bool {
+    guard let original = collaborationChannels.first(where: { $0.id == channelId }),
+          let membership = original.membership
+    else { return false }
+    collaborationError = nil
+    let optimisticMembership = VectorChannelMembership(
+      id: membership.id,
+      channelId: membership.channelId,
+      userId: membership.userId,
+      role: membership.role,
+      notificationMode: mode,
+      lastReadAt: membership.lastReadAt,
+      favoriteAt: membership.favoriteAt
+    )
+    replaceCollaborationChannel(
+      VectorChannelListItem(
+        channel: original.channel,
+        membership: optimisticMembership,
+        unreadCount: original.unreadCount
+      ),
+      channel: original.channel
+    )
+    do {
+      try await repository.setChannelPreferences(
+        channelId: channelId,
+        notificationMode: mode
+      )
+      return true
+    } catch {
+      replaceCollaborationChannel(original, channel: original.channel)
+      collaborationError = error.localizedDescription
+      return false
+    }
+  }
+
   public func loadSmartMessages() {
     priorityMessagesCancellable?.cancel()
     savedMessagesCancellable?.cancel()
@@ -2809,6 +3012,56 @@ public final class VectorMobileViewModel: ObservableObject {
       VectorNotificationPreference(category: category, inAppEnabled: true, emailEnabled: false, pushEnabled: false)
     case .unknown:
       VectorNotificationPreference(category: category, inAppEnabled: true, emailEnabled: false, pushEnabled: false)
+    }
+  }
+
+  private func collaborationSlug(_ name: String, fallback: VectorID) -> String {
+    let normalized = name
+      .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+      .lowercased()
+      .map { character in
+        character.isLetter || character.isNumber ? character : "-"
+      }
+    let collapsed = String(normalized)
+      .split(separator: "-", omittingEmptySubsequences: true)
+      .joined(separator: "-")
+    return collapsed.isEmpty ? fallback : collapsed
+  }
+
+  private func copiedChannel(
+    _ channel: VectorChannel,
+    name: String,
+    topic: String?
+  ) -> VectorChannel {
+    VectorChannel(
+      id: channel.id,
+      kind: channel.kind,
+      name: name,
+      slug: channel.slug,
+      topic: topic,
+      description: channel.description,
+      icon: channel.icon,
+      color: channel.color,
+      isDefault: channel.isDefault,
+      lastMessageAt: channel.lastMessageAt,
+      createdAt: channel.createdAt,
+      updatedAt: Date().timeIntervalSince1970 * 1_000
+    )
+  }
+
+  private func replaceCollaborationChannel(
+    _ item: VectorChannelListItem,
+    channel: VectorChannel
+  ) {
+    let replacement = VectorChannelListItem(
+      channel: channel,
+      membership: item.membership,
+      unreadCount: item.unreadCount
+    )
+    if let index = collaborationChannels.firstIndex(where: { $0.id == item.id }) {
+      collaborationChannels[index] = replacement
+    } else {
+      collaborationChannels.insert(replacement, at: 0)
     }
   }
 

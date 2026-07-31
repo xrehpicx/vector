@@ -11,6 +11,8 @@ struct MobileConversationHomeScreen: View {
   @ObservedObject var viewModel: VectorMobileViewModel
   let directOnly: Bool
   @State private var searchText = ""
+  @State private var creationRoute: MobileConversationCreationRoute?
+  @State private var openedChannel: VectorChannelListItem?
 
   private var visibleConversations: [VectorChannelListItem] {
     let kindFiltered = viewModel.collaborationChannels.filter {
@@ -144,8 +146,427 @@ struct MobileConversationHomeScreen: View {
       placement: .automatic,
       prompt: directOnly ? "Search direct messages" : "Search conversations"
     )
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        if directOnly {
+          Button {
+            creationRoute = .directMessage
+          } label: {
+            Image(systemName: "square.and.pencil")
+          }
+          .accessibilityLabel("New direct message")
+        } else {
+          Menu {
+            Button {
+              creationRoute = .directMessage
+            } label: {
+              Label("New message", systemImage: "message")
+            }
+            Button {
+              creationRoute = .channel
+            } label: {
+              Label("New channel", systemImage: "number")
+            }
+          } label: {
+            Image(systemName: "square.and.pencil")
+          }
+          .accessibilityLabel("New conversation")
+        }
+      }
+    }
+    .sheet(item: $creationRoute) { route in
+      switch route {
+      case .directMessage:
+        MobileNewMessageSheet(
+          viewModel: viewModel,
+          onCreated: openCreatedChannel
+        )
+      case .channel:
+        MobileCreateChannelSheet(
+          viewModel: viewModel,
+          onCreated: openCreatedChannel
+        )
+      }
+    }
+    .navigationDestination(
+      isPresented: Binding(
+        get: { openedChannel != nil },
+        set: { isPresented in
+          if !isPresented {
+            openedChannel = nil
+          }
+        }
+      )
+    ) {
+      if let openedChannel {
+        MobileChannelScreen(channel: openedChannel, viewModel: viewModel)
+      }
+    }
     .onAppear {
       viewModel.loadCollaboration()
+    }
+  }
+
+  private func openCreatedChannel(_ channel: VectorChannelListItem) {
+    creationRoute = nil
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(180))
+      openedChannel = channel
+    }
+  }
+}
+
+private enum MobileConversationCreationRoute: String, Identifiable {
+  case directMessage
+  case channel
+
+  var id: String { rawValue }
+}
+
+private struct MobileNewMessageSheet: View {
+  @ObservedObject var viewModel: VectorMobileViewModel
+  let onCreated: (VectorChannelListItem) -> Void
+  @Environment(\.dismiss) private var dismiss
+  @State private var searchText = ""
+  @State private var pendingUserId: VectorID?
+  @State private var errorMessage: String?
+
+  private var availableMembers: [VectorWorkspaceMember] {
+    let currentUserId = viewModel.currentUser?.id
+    let currentEmail = viewModel.currentUser?.email
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return (viewModel.workspaceOptions?.members ?? [])
+      .filter { member in
+        guard let userId = member.userId ?? member.user?.id else { return false }
+        if userId == currentUserId {
+          return false
+        }
+        if let currentEmail, let email = member.email,
+           email.caseInsensitiveCompare(currentEmail) == .orderedSame
+        {
+          return false
+        }
+        return true
+      }
+      .filter { member in
+        query.isEmpty
+          || member.displayName.localizedCaseInsensitiveContains(query)
+          || (member.email?.localizedCaseInsensitiveContains(query) ?? false)
+      }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+  }
+
+  var body: some View {
+    NavigationStack {
+      List {
+        if let errorMessage {
+          Label(errorMessage, systemImage: "exclamationmark.triangle")
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+
+        if availableMembers.isEmpty {
+          ContentUnavailableView(
+            searchText.isEmpty ? "No teammates available" : "No teammates found",
+            systemImage: "person.2",
+            description: Text(
+              searchText.isEmpty
+                ? "Invite teammates to the workspace before starting a direct message."
+                : "Try another name or email."
+            )
+          )
+          .listRowBackground(Color.clear)
+        } else {
+          Section("People") {
+            ForEach(availableMembers) { member in
+              Button {
+                startMessage(with: member)
+              } label: {
+                HStack(spacing: 11) {
+                  VectorUserAvatar(
+                    user: member.user,
+                    baseURL: viewModel.configuration.webBaseURL,
+                    size: 34
+                  )
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(member.displayName)
+                      .font(.body.weight(.medium))
+                      .foregroundStyle(.primary)
+                    if let email = member.email {
+                      Text(email)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                  }
+                  Spacer()
+                  if pendingUserId == (member.userId ?? member.user?.id) {
+                    ProgressView()
+                      .controlSize(.small)
+                  }
+                }
+                .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
+              .disabled(pendingUserId != nil)
+            }
+          }
+        }
+      }
+      .navigationTitle("New Message")
+      .vectorInlineNavigationTitle()
+      .searchable(text: $searchText, placement: .automatic, prompt: "Name or email")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            dismiss()
+          }
+          .disabled(pendingUserId != nil)
+        }
+      }
+      .interactiveDismissDisabled(pendingUserId != nil)
+    }
+  }
+
+  private func startMessage(with member: VectorWorkspaceMember) {
+    guard let userId = member.userId ?? member.user?.id else { return }
+    pendingUserId = userId
+    errorMessage = nil
+    Task {
+      let created = await viewModel.createCollaborationChannel(
+        kind: .direct,
+        name: member.displayName,
+        topic: nil,
+        memberUserIds: [userId]
+      )
+      pendingUserId = nil
+      if let created {
+        onCreated(created)
+      } else {
+        errorMessage = viewModel.collaborationError ?? "Unable to start the message."
+      }
+    }
+  }
+}
+
+private struct MobileCreateChannelSheet: View {
+  @ObservedObject var viewModel: VectorMobileViewModel
+  let onCreated: (VectorChannelListItem) -> Void
+  @Environment(\.dismiss) private var dismiss
+  @FocusState private var isNameFocused: Bool
+  @State private var name = ""
+  @State private var topic = ""
+  @State private var isPrivate = false
+  @State private var selectedMemberIds: Set<VectorID> = []
+  @State private var isSubmitting = false
+  @State private var errorMessage: String?
+
+  private var canCreate: Bool {
+    !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSubmitting
+  }
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        if let errorMessage {
+          Section {
+            Label(errorMessage, systemImage: "exclamationmark.triangle")
+              .font(.footnote)
+              .foregroundStyle(.red)
+          }
+        }
+
+        Section {
+          HStack(spacing: 10) {
+            Image(systemName: isPrivate ? "lock" : "number")
+              .foregroundStyle(.secondary)
+              .frame(width: 22)
+            TextField("Channel name", text: $name)
+              .focused($isNameFocused)
+              .autocorrectionDisabled()
+              .submitLabel(.done)
+          }
+          TextField("What is this channel for?", text: $topic, axis: .vertical)
+            .lineLimit(2...4)
+        } header: {
+          Text("Channel details")
+        } footer: {
+          Text("Use a short name teammates can recognize at a glance.")
+        }
+
+        Section {
+          Toggle(isOn: $isPrivate) {
+            Label("Private channel", systemImage: "lock")
+          }
+        } footer: {
+          Text(
+            isPrivate
+              ? "Only invited members can find and open this channel."
+              : "Anyone in the workspace can find and join this channel."
+          )
+        }
+
+        Section {
+          NavigationLink {
+            MobileWorkspaceMemberPicker(
+              title: "Add People",
+              members: viewModel.workspaceOptions?.members ?? [],
+              currentUser: viewModel.currentUser,
+              baseURL: viewModel.configuration.webBaseURL,
+              selectedUserIds: $selectedMemberIds
+            )
+          } label: {
+            LabeledContent {
+              Text(
+                selectedMemberIds.isEmpty
+                  ? "Optional"
+                  : "\(selectedMemberIds.count) selected"
+              )
+              .foregroundStyle(.secondary)
+            } label: {
+              Label("Add people", systemImage: "person.badge.plus")
+            }
+          }
+        } footer: {
+          Text("You can add or remove members later from channel details.")
+        }
+      }
+      .navigationTitle("New Channel")
+      .vectorInlineNavigationTitle()
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            dismiss()
+          }
+          .disabled(isSubmitting)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          if isSubmitting {
+            ProgressView()
+              .controlSize(.small)
+              .accessibilityLabel("Creating channel")
+          } else {
+            Button("Create") {
+              createChannel()
+            }
+            .fontWeight(.semibold)
+            .disabled(!canCreate)
+          }
+        }
+      }
+      .interactiveDismissDisabled(isSubmitting)
+      .onAppear {
+        Task { @MainActor in
+          try? await Task.sleep(for: .milliseconds(250))
+          isNameFocused = true
+        }
+      }
+    }
+  }
+
+  private func createChannel() {
+    isSubmitting = true
+    errorMessage = nil
+    Task {
+      let created = await viewModel.createCollaborationChannel(
+        kind: isPrivate ? .private : .public,
+        name: name,
+        topic: topic,
+        memberUserIds: Array(selectedMemberIds)
+      )
+      isSubmitting = false
+      if let created {
+        onCreated(created)
+      } else {
+        errorMessage = viewModel.collaborationError ?? "Unable to create the channel."
+      }
+    }
+  }
+}
+
+private struct MobileWorkspaceMemberPicker: View {
+  let title: String
+  let members: [VectorWorkspaceMember]
+  let currentUser: VectorUser?
+  let baseURL: URL?
+  @Binding var selectedUserIds: Set<VectorID>
+  @Environment(\.dismiss) private var dismiss
+  @State private var searchText = ""
+
+  private var visibleMembers: [VectorWorkspaceMember] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return members
+      .filter { member in
+        guard let userId = member.userId ?? member.user?.id else { return false }
+        if userId == currentUser?.id {
+          return false
+        }
+        if let currentEmail = currentUser?.email, let email = member.email,
+           email.caseInsensitiveCompare(currentEmail) == .orderedSame
+        {
+          return false
+        }
+        return true
+      }
+      .filter { member in
+        query.isEmpty
+          || member.displayName.localizedCaseInsensitiveContains(query)
+          || (member.email?.localizedCaseInsensitiveContains(query) ?? false)
+      }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+  }
+
+  var body: some View {
+    List {
+      ForEach(visibleMembers) { member in
+        if let userId = member.userId ?? member.user?.id {
+          Button {
+            if selectedUserIds.contains(userId) {
+              selectedUserIds.remove(userId)
+            } else {
+              selectedUserIds.insert(userId)
+            }
+          } label: {
+            HStack(spacing: 11) {
+              VectorUserAvatar(user: member.user, baseURL: baseURL, size: 32)
+              VStack(alignment: .leading, spacing: 2) {
+                Text(member.displayName)
+                  .foregroundStyle(.primary)
+                if let email = member.email {
+                  Text(email)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+              }
+              Spacer()
+              Image(systemName: selectedUserIds.contains(userId) ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(selectedUserIds.contains(userId) ? VectorTheme.accent : .secondary)
+                .font(.title3)
+            }
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+        }
+      }
+    }
+    .overlay {
+      if visibleMembers.isEmpty {
+        ContentUnavailableView.search(text: searchText)
+      }
+    }
+    .navigationTitle(title)
+    .vectorInlineNavigationTitle()
+    .searchable(text: $searchText, placement: .automatic, prompt: "Name or email")
+    .toolbar {
+      ToolbarItem(placement: .confirmationAction) {
+        Button("Done") {
+          dismiss()
+        }
+        .fontWeight(.semibold)
+      }
     }
   }
 }
@@ -421,9 +842,14 @@ private struct MobileSmartThreadScreen: View {
 struct MobileChannelScreen: View {
   let channel: VectorChannelListItem
   @ObservedObject var viewModel: VectorMobileViewModel
+  @Environment(\.dismiss) private var dismiss
   @State private var isShowingDetails = false
   @State private var replyTarget: VectorMessageView?
   @State private var composerFocusRequest = 0
+
+  private var activeChannel: VectorChannelListItem {
+    viewModel.collaborationChannels.first(where: { $0.id == channel.id }) ?? channel
+  }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -453,7 +879,7 @@ struct MobileChannelScreen: View {
         }
       )
     }
-    .navigationTitle(channel.channel.name)
+    .navigationTitle(activeChannel.channel.name)
     .vectorInlineNavigationTitle()
     #if os(iOS)
       .toolbar(.hidden, for: .tabBar)
@@ -470,12 +896,19 @@ struct MobileChannelScreen: View {
       }
     }
     .sheet(isPresented: $isShowingDetails) {
-      MobileChannelDetailsSheet(channel: channel, viewModel: viewModel)
-        .presentationDetents([.medium, .large])
+      MobileChannelDetailsSheet(
+        channel: activeChannel,
+        viewModel: viewModel,
+        onArchived: {
+          isShowingDetails = false
+          dismiss()
+        }
+      )
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
     .onAppear {
-      viewModel.openChannel(channel)
+      viewModel.openChannel(activeChannel)
     }
   }
 }
@@ -2492,21 +2925,49 @@ private func voiceDurationLabel(_ duration: TimeInterval) -> String {
 private struct MobileChannelDetailsSheet: View {
   let channel: VectorChannelListItem
   @ObservedObject var viewModel: VectorMobileViewModel
+  let onArchived: () -> Void
   @Environment(\.dismiss) private var dismiss
+  @State private var notificationMode: VectorChannelNotificationMode
+  @State private var isUpdatingNotifications = false
+  @State private var isArchiving = false
+  @State private var isConfirmingArchive = false
+
+  init(
+    channel: VectorChannelListItem,
+    viewModel: VectorMobileViewModel,
+    onArchived: @escaping () -> Void
+  ) {
+    self.channel = channel
+    self.viewModel = viewModel
+    self.onArchived = onArchived
+    self._notificationMode = State(initialValue: channel.membership?.notificationMode ?? .mentions)
+  }
+
+  private var activeChannel: VectorChannelListItem {
+    viewModel.collaborationChannels.first(where: { $0.id == channel.id }) ?? channel
+  }
+
+  private var canManage: Bool {
+    canManageChannel(activeChannel, viewModel: viewModel)
+  }
+
+  private var detailsTitle: String {
+    activeChannel.channel.kind.isDirect ? "Conversation Details" : "Channel Details"
+  }
 
   var body: some View {
     NavigationStack {
       List {
         Section {
           VStack(spacing: 8) {
-            Image(systemName: channel.channel.kind.systemImage)
+            Image(systemName: activeChannel.channel.kind.systemImage)
               .font(.title2.weight(.semibold))
               .foregroundStyle(VectorTheme.accent)
               .frame(width: 52, height: 52)
               .background(VectorTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 15))
-            Text(channel.channel.name)
+            Text(activeChannel.channel.name)
               .font(.headline)
-            if let topic = channel.channel.topic {
+            if let topic = activeChannel.channel.topic {
               Text(topic)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -2517,8 +2978,70 @@ private struct MobileChannelDetailsSheet: View {
           .padding(.vertical, 12)
         }
 
+        if let error = viewModel.collaborationError, !error.isEmpty {
+          Section {
+            Label(error, systemImage: "exclamationmark.triangle")
+              .font(.footnote)
+              .foregroundStyle(.red)
+          }
+        }
+
+        Section {
+          NavigationLink {
+            MobileChannelMembersScreen(
+              channel: activeChannel,
+              viewModel: viewModel
+            )
+          } label: {
+            LabeledContent {
+              Text("\(viewModel.channelMembers.count)")
+                .foregroundStyle(.secondary)
+            } label: {
+              Label("Members", systemImage: "person.2")
+            }
+          }
+
+          if canManage && !activeChannel.channel.kind.isDirect {
+            NavigationLink {
+              MobileEditChannelScreen(
+                channel: activeChannel,
+                viewModel: viewModel
+              )
+            } label: {
+              Label("Edit channel", systemImage: "pencil")
+            }
+          }
+
+          LabeledContent {
+            Text(channelVisibilityLabel(activeChannel.channel.kind))
+              .foregroundStyle(.secondary)
+          } label: {
+            Label("Visibility", systemImage: activeChannel.channel.kind.systemImage)
+          }
+        } header: {
+          Text(activeChannel.channel.kind.isDirect ? "Conversation" : "Channel")
+        }
+
         Section("Notifications") {
-          Label("Mentions and replies", systemImage: "bell")
+          Picker(selection: $notificationMode) {
+            Label("All messages", systemImage: "bell").tag(VectorChannelNotificationMode.all)
+            Label("Mentions and replies", systemImage: "at").tag(VectorChannelNotificationMode.mentions)
+            Label("Muted", systemImage: "bell.slash").tag(VectorChannelNotificationMode.muted)
+          } label: {
+            HStack {
+              Label("Notify me", systemImage: "bell")
+              if isUpdatingNotifications {
+                Spacer()
+                ProgressView()
+                  .controlSize(.small)
+              }
+            }
+          }
+          .disabled(isUpdatingNotifications)
+          .onChange(of: notificationMode) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            updateNotifications(from: oldValue, to: newValue)
+          }
         }
 
         Section("Agents") {
@@ -2548,8 +3071,31 @@ private struct MobileChannelDetailsSheet: View {
             }
           }
         }
+
+        if canManage
+          && !activeChannel.channel.kind.isDirect
+          && !activeChannel.channel.isDefault
+        {
+          Section {
+            Button(role: .destructive) {
+              isConfirmingArchive = true
+            } label: {
+              HStack {
+                Label("Archive channel", systemImage: "archivebox")
+                Spacer()
+                if isArchiving {
+                  ProgressView()
+                    .controlSize(.small)
+                }
+              }
+            }
+            .disabled(isArchiving)
+          } footer: {
+            Text("Archived channels stop accepting new messages and leave the conversation list.")
+          }
+        }
       }
-      .navigationTitle("Channel Details")
+      .navigationTitle(detailsTitle)
       .vectorInlineNavigationTitle()
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
@@ -2559,8 +3105,419 @@ private struct MobileChannelDetailsSheet: View {
           .fontWeight(.semibold)
         }
       }
+      .confirmationDialog(
+        "Archive \(activeChannel.channel.name)?",
+        isPresented: $isConfirmingArchive,
+        titleVisibility: .visible
+      ) {
+        Button("Archive Channel", role: .destructive) {
+          archiveChannel()
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("Members can no longer send messages after this channel is archived.")
+      }
     }
   }
+
+  private func updateNotifications(
+    from oldValue: VectorChannelNotificationMode,
+    to newValue: VectorChannelNotificationMode
+  ) {
+    isUpdatingNotifications = true
+    Task {
+      let updated = await viewModel.setChannelNotificationMode(
+        channelId: activeChannel.id,
+        mode: newValue
+      )
+      isUpdatingNotifications = false
+      if !updated {
+        notificationMode = oldValue
+      }
+    }
+  }
+
+  private func archiveChannel() {
+    isArchiving = true
+    Task {
+      let archived = await viewModel.archiveCollaborationChannel(activeChannel.id)
+      isArchiving = false
+      if archived {
+        onArchived()
+      }
+    }
+  }
+}
+
+private struct MobileEditChannelScreen: View {
+  let channel: VectorChannelListItem
+  @ObservedObject var viewModel: VectorMobileViewModel
+  @Environment(\.dismiss) private var dismiss
+  @State private var name: String
+  @State private var topic: String
+  @State private var isSaving = false
+  @State private var errorMessage: String?
+
+  init(channel: VectorChannelListItem, viewModel: VectorMobileViewModel) {
+    self.channel = channel
+    self.viewModel = viewModel
+    self._name = State(initialValue: channel.channel.name)
+    self._topic = State(initialValue: channel.channel.topic ?? "")
+  }
+
+  private var canSave: Bool {
+    !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving
+  }
+
+  var body: some View {
+    Form {
+      if let errorMessage {
+        Section {
+          Label(errorMessage, systemImage: "exclamationmark.triangle")
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+      }
+
+      Section("Channel details") {
+        TextField("Channel name", text: $name)
+          .autocorrectionDisabled()
+        TextField("Topic", text: $topic, axis: .vertical)
+          .lineLimit(2...5)
+      }
+    }
+    .navigationTitle("Edit Channel")
+    .vectorInlineNavigationTitle()
+    .toolbar {
+      ToolbarItem(placement: .confirmationAction) {
+        if isSaving {
+          ProgressView()
+            .controlSize(.small)
+            .accessibilityLabel("Saving channel")
+        } else {
+          Button("Save") {
+            save()
+          }
+          .fontWeight(.semibold)
+          .disabled(!canSave)
+        }
+      }
+    }
+  }
+
+  private func save() {
+    isSaving = true
+    errorMessage = nil
+    Task {
+      let saved = await viewModel.updateCollaborationChannel(
+        channelId: channel.id,
+        name: name,
+        topic: topic
+      )
+      isSaving = false
+      if saved {
+        dismiss()
+      } else {
+        errorMessage = viewModel.collaborationError ?? "Unable to update the channel."
+      }
+    }
+  }
+}
+
+private struct MobileChannelMembersScreen: View {
+  let channel: VectorChannelListItem
+  @ObservedObject var viewModel: VectorMobileViewModel
+  @State private var isAddingMembers = false
+  @State private var removingUserIds: Set<VectorID> = []
+
+  private var canManage: Bool {
+    canManageChannel(channel, viewModel: viewModel)
+  }
+
+  private var sortedMembers: [VectorChannelMemberView] {
+    viewModel.channelMembers.sorted {
+      ($0.user?.displayName ?? "").localizedCaseInsensitiveCompare(
+        $1.user?.displayName ?? ""
+      ) == .orderedAscending
+    }
+  }
+
+  var body: some View {
+    List {
+      if let error = viewModel.collaborationError, !error.isEmpty {
+        Label(error, systemImage: "exclamationmark.triangle")
+          .font(.footnote)
+          .foregroundStyle(.red)
+      }
+
+      ForEach(sortedMembers) { item in
+        HStack(spacing: 11) {
+          VectorUserAvatar(
+            user: item.user,
+            baseURL: viewModel.configuration.webBaseURL,
+            size: 34
+          )
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+              Text(item.user?.displayName ?? "Unknown member")
+                .font(.body.weight(.medium))
+              if item.membership.userId == viewModel.currentUser?.id {
+                Text("you")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+            }
+            Text(channelRoleLabel(item.membership.role))
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          Spacer()
+          if removingUserIds.contains(item.membership.userId) {
+            ProgressView()
+              .controlSize(.small)
+          }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+          if canRemove(item) {
+            Button(role: .destructive) {
+              remove(item)
+            } label: {
+              Label("Remove", systemImage: "person.badge.minus")
+            }
+          }
+        }
+      }
+    }
+    .overlay {
+      if sortedMembers.isEmpty {
+        ContentUnavailableView(
+          "No members",
+          systemImage: "person.2",
+          description: Text("Channel members will appear here.")
+        )
+      }
+    }
+    .navigationTitle("Members")
+    .vectorInlineNavigationTitle()
+    .toolbar {
+      if canManage && !channel.channel.kind.isDirect {
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+            isAddingMembers = true
+          } label: {
+            Image(systemName: "person.badge.plus")
+          }
+          .accessibilityLabel("Add members")
+        }
+      }
+    }
+    .sheet(isPresented: $isAddingMembers) {
+      MobileAddChannelMembersSheet(
+        channel: channel,
+        viewModel: viewModel
+      )
+    }
+  }
+
+  private func canRemove(_ item: VectorChannelMemberView) -> Bool {
+    canManage
+      && !channel.channel.kind.isDirect
+      && item.membership.role != "owner"
+      && item.membership.userId != viewModel.currentUser?.id
+      && !removingUserIds.contains(item.membership.userId)
+  }
+
+  private func remove(_ item: VectorChannelMemberView) {
+    let userId = item.membership.userId
+    removingUserIds.insert(userId)
+    Task {
+      _ = await viewModel.removeChannelMember(
+        channelId: channel.id,
+        userId: userId
+      )
+      removingUserIds.remove(userId)
+    }
+  }
+}
+
+private struct MobileAddChannelMembersSheet: View {
+  let channel: VectorChannelListItem
+  @ObservedObject var viewModel: VectorMobileViewModel
+  @Environment(\.dismiss) private var dismiss
+  @State private var searchText = ""
+  @State private var selectedUserIds: Set<VectorID> = []
+  @State private var isAdding = false
+  @State private var errorMessage: String?
+
+  private var existingUserIds: Set<VectorID> {
+    Set(viewModel.channelMembers.map(\.membership.userId))
+  }
+
+  private var availableMembers: [VectorWorkspaceMember] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return (viewModel.workspaceOptions?.members ?? [])
+      .filter { member in
+        guard let userId = member.userId ?? member.user?.id else { return false }
+        return !existingUserIds.contains(userId)
+      }
+      .filter { member in
+        query.isEmpty
+          || member.displayName.localizedCaseInsensitiveContains(query)
+          || (member.email?.localizedCaseInsensitiveContains(query) ?? false)
+      }
+      .sorted {
+        $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+      }
+  }
+
+  var body: some View {
+    NavigationStack {
+      List {
+        if let errorMessage {
+          Label(errorMessage, systemImage: "exclamationmark.triangle")
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
+
+        ForEach(availableMembers) { member in
+          if let userId = member.userId ?? member.user?.id {
+            Button {
+              if selectedUserIds.contains(userId) {
+                selectedUserIds.remove(userId)
+              } else {
+                selectedUserIds.insert(userId)
+              }
+            } label: {
+              HStack(spacing: 11) {
+                VectorUserAvatar(
+                  user: member.user,
+                  baseURL: viewModel.configuration.webBaseURL,
+                  size: 34
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(member.displayName)
+                    .foregroundStyle(.primary)
+                  if let email = member.email {
+                    Text(email)
+                      .font(.caption)
+                      .foregroundStyle(.secondary)
+                  }
+                }
+                Spacer()
+                Image(
+                  systemName: selectedUserIds.contains(userId)
+                    ? "checkmark.circle.fill"
+                    : "circle"
+                )
+                .font(.title3)
+                .foregroundStyle(
+                  selectedUserIds.contains(userId) ? VectorTheme.accent : .secondary
+                )
+              }
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isAdding)
+          }
+        }
+      }
+      .overlay {
+        if availableMembers.isEmpty {
+          ContentUnavailableView(
+            searchText.isEmpty ? "Everyone is already here" : "No teammates found",
+            systemImage: "person.2",
+            description: Text(
+              searchText.isEmpty
+                ? "All workspace members already belong to this channel."
+                : "Try another name or email."
+            )
+          )
+        }
+      }
+      .navigationTitle("Add People")
+      .vectorInlineNavigationTitle()
+      .searchable(text: $searchText, placement: .automatic, prompt: "Name or email")
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            dismiss()
+          }
+          .disabled(isAdding)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          if isAdding {
+            ProgressView()
+              .controlSize(.small)
+              .accessibilityLabel("Adding members")
+          } else {
+            Button(selectedUserIds.count == 1 ? "Add" : "Add \(selectedUserIds.count)") {
+              addMembers()
+            }
+            .fontWeight(.semibold)
+            .disabled(selectedUserIds.isEmpty)
+          }
+        }
+      }
+      .interactiveDismissDisabled(isAdding)
+    }
+  }
+
+  private func addMembers() {
+    isAdding = true
+    errorMessage = nil
+    Task {
+      let added = await viewModel.addChannelMembers(
+        channelId: channel.id,
+        userIds: Array(selectedUserIds)
+      )
+      isAdding = false
+      if added {
+        dismiss()
+      } else {
+        errorMessage = viewModel.collaborationError ?? "Unable to add members."
+      }
+    }
+  }
+}
+
+private func channelVisibilityLabel(_ kind: VectorChannelKind) -> String {
+  switch kind {
+  case .public: "Public"
+  case .private: "Private"
+  case .announcement: "Announcement"
+  case .direct: "Direct message"
+  case .groupDirect: "Group message"
+  }
+}
+
+private func channelRoleLabel(_ role: String) -> String {
+  switch role {
+  case "owner": "Channel owner"
+  case "moderator": "Channel moderator"
+  default: "Member"
+  }
+}
+
+@MainActor
+private func canManageChannel(
+  _ channel: VectorChannelListItem,
+  viewModel: VectorMobileViewModel
+) -> Bool {
+  if channel.membership?.role == "owner" || channel.membership?.role == "moderator" {
+    return true
+  }
+  let currentUserId = viewModel.currentUser?.id
+  let currentEmail = viewModel.currentUser?.email
+  let workspaceRole = viewModel.workspaceOptions?.members.first { member in
+    if let currentUserId, (member.userId ?? member.user?.id) == currentUserId {
+      return true
+    }
+    if let currentEmail, let memberEmail = member.email {
+      return memberEmail.caseInsensitiveCompare(currentEmail) == .orderedSame
+    }
+    return false
+  }?.role
+  return workspaceRole == "owner" || workspaceRole == "admin"
 }
 
 struct MobileCollaborationSearchScreen: View {

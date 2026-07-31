@@ -91,6 +91,12 @@ public enum VectorConvexFunctions {
   public static let listSavedMessages = "collaboration/messages:listSaved"
   public static let listChannelMembers = "collaboration/channels:listMembers"
   public static let listChannelAgents = "collaboration/agents:listChannelMemberships"
+  public static let createCollaborationChannel = "collaboration/channels:create"
+  public static let updateCollaborationChannel = "collaboration/channels:update"
+  public static let archiveCollaborationChannel = "collaboration/channels:archive"
+  public static let addChannelMember = "collaboration/channels:addMember"
+  public static let removeChannelMember = "collaboration/channels:removeMember"
+  public static let setChannelPreferences = "collaboration/channels:setPreferences"
   public static let sendChannelMessage = "collaboration/messages:send"
   public static let toggleMessageReaction = "collaboration/messages:toggleReaction"
   public static let toggleSavedMessage = "collaboration/messages:toggleSaved"
@@ -235,6 +241,25 @@ public protocol VectorMobileRepository {
   func savedMessages(orgSlug: String) -> AnyPublisher<[VectorMessageView], Error>
   func channelMembers(channelId: VectorID) -> AnyPublisher<[VectorChannelMemberView], Error>
   func channelAgents(channelId: VectorID) -> AnyPublisher<[VectorChannelAgentView], Error>
+  func createCollaborationChannel(
+    orgSlug: String,
+    kind: VectorChannelKind,
+    name: String,
+    topic: String?,
+    memberUserIds: [VectorID]
+  ) async throws -> VectorID
+  func updateCollaborationChannel(
+    channelId: VectorID,
+    name: String,
+    topic: String?
+  ) async throws
+  func archiveCollaborationChannel(channelId: VectorID) async throws
+  func addChannelMember(channelId: VectorID, userId: VectorID) async throws -> VectorID
+  func removeChannelMember(channelId: VectorID, userId: VectorID) async throws
+  func setChannelPreferences(
+    channelId: VectorID,
+    notificationMode: VectorChannelNotificationMode
+  ) async throws
   func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error>
   func sendChannelMessage(
     channelId: VectorID,
@@ -373,6 +398,43 @@ public extension VectorMobileRepository {
     Just([])
       .setFailureType(to: Error.self)
       .eraseToAnyPublisher()
+  }
+
+  func createCollaborationChannel(
+    orgSlug: String,
+    kind: VectorChannelKind,
+    name: String,
+    topic: String?,
+    memberUserIds: [VectorID]
+  ) async throws -> VectorID {
+    throw VectorMobileError.validation("Creating conversations is unavailable in this repository.")
+  }
+
+  func updateCollaborationChannel(
+    channelId: VectorID,
+    name: String,
+    topic: String?
+  ) async throws {
+    throw VectorMobileError.validation("Editing channels is unavailable in this repository.")
+  }
+
+  func archiveCollaborationChannel(channelId: VectorID) async throws {
+    throw VectorMobileError.validation("Archiving channels is unavailable in this repository.")
+  }
+
+  func addChannelMember(channelId: VectorID, userId: VectorID) async throws -> VectorID {
+    throw VectorMobileError.validation("Adding channel members is unavailable in this repository.")
+  }
+
+  func removeChannelMember(channelId: VectorID, userId: VectorID) async throws {
+    throw VectorMobileError.validation("Removing channel members is unavailable in this repository.")
+  }
+
+  func setChannelPreferences(
+    channelId: VectorID,
+    notificationMode: VectorChannelNotificationMode
+  ) async throws {
+    throw VectorMobileError.validation("Channel preferences are unavailable in this repository.")
   }
 
   func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error> {
@@ -650,6 +712,86 @@ public final class ConvexVectorRepository: VectorMobileRepository {
       )
       .mapError { $0 as Error }
       .eraseToAnyPublisher()
+  }
+
+  public func createCollaborationChannel(
+    orgSlug: String,
+    kind: VectorChannelKind,
+    name: String,
+    topic: String?,
+    memberUserIds: [VectorID]
+  ) async throws -> VectorID {
+    var arguments: [String: ConvexEncodable?] = [
+      "orgSlug": orgSlug,
+      "kind": kind.rawValue,
+      "name": name,
+      "memberUserIds": memberUserIds.map { $0 as ConvexEncodable? },
+    ]
+    if let topic, !topic.isEmpty {
+      arguments["topic"] = topic
+    }
+    return try await client.mutation(
+      VectorConvexFunctions.createCollaborationChannel,
+      with: arguments
+    )
+  }
+
+  public func updateCollaborationChannel(
+    channelId: VectorID,
+    name: String,
+    topic: String?
+  ) async throws {
+    let _: VectorMutationResponse = try await client.mutation(
+      VectorConvexFunctions.updateCollaborationChannel,
+      with: [
+        "channelId": channelId,
+        "name": name,
+        "topic": topic,
+      ]
+    )
+  }
+
+  public func archiveCollaborationChannel(channelId: VectorID) async throws {
+    let _: VectorMutationResponse = try await client.mutation(
+      VectorConvexFunctions.archiveCollaborationChannel,
+      with: [
+        "channelId": channelId,
+        "archived": true,
+      ]
+    )
+  }
+
+  public func addChannelMember(channelId: VectorID, userId: VectorID) async throws -> VectorID {
+    try await client.mutation(
+      VectorConvexFunctions.addChannelMember,
+      with: [
+        "channelId": channelId,
+        "userId": userId,
+      ]
+    )
+  }
+
+  public func removeChannelMember(channelId: VectorID, userId: VectorID) async throws {
+    let _: VectorMutationResponse = try await client.mutation(
+      VectorConvexFunctions.removeChannelMember,
+      with: [
+        "channelId": channelId,
+        "userId": userId,
+      ]
+    )
+  }
+
+  public func setChannelPreferences(
+    channelId: VectorID,
+    notificationMode: VectorChannelNotificationMode
+  ) async throws {
+    let _: VectorID = try await client.mutation(
+      VectorConvexFunctions.setChannelPreferences,
+      with: [
+        "channelId": channelId,
+        "notificationMode": notificationMode.rawValue,
+      ]
+    )
   }
 
   public func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error> {
@@ -1562,6 +1704,35 @@ public final class MockVectorRepository: VectorMobileRepository {
     .setFailureType(to: Error.self)
     .eraseToAnyPublisher()
   }
+
+  public func createCollaborationChannel(
+    orgSlug: String,
+    kind: VectorChannelKind,
+    name: String,
+    topic: String?,
+    memberUserIds: [VectorID]
+  ) async throws -> VectorID {
+    "mock-channel-\(UUID().uuidString.lowercased())"
+  }
+
+  public func updateCollaborationChannel(
+    channelId: VectorID,
+    name: String,
+    topic: String?
+  ) async throws {}
+
+  public func archiveCollaborationChannel(channelId: VectorID) async throws {}
+
+  public func addChannelMember(channelId: VectorID, userId: VectorID) async throws -> VectorID {
+    "mock-member-\(userId)"
+  }
+
+  public func removeChannelMember(channelId: VectorID, userId: VectorID) async throws {}
+
+  public func setChannelPreferences(
+    channelId: VectorID,
+    notificationMode: VectorChannelNotificationMode
+  ) async throws {}
 
   public func attachmentURL(attachmentId: VectorID) -> AnyPublisher<VectorAttachmentURL?, Error> {
     let attachment = VectorMockData.collaborationMessages

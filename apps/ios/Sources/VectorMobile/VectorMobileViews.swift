@@ -4142,7 +4142,7 @@ private struct IssueCommentCard: View {
   }
 }
 
-private struct VectorUserAvatar: View {
+struct VectorUserAvatar: View {
   let user: VectorUser?
   let baseURL: URL?
   var size: CGFloat = 26

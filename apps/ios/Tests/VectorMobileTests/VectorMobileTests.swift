@@ -45,6 +45,12 @@ final class VectorMobileTests: XCTestCase {
     XCTAssertEqual(VectorConvexFunctions.listPriorityMessages, "collaboration/messages:listPriorityInbox")
     XCTAssertEqual(VectorConvexFunctions.listSavedMessages, "collaboration/messages:listSaved")
     XCTAssertEqual(VectorConvexFunctions.listChannelMembers, "collaboration/channels:listMembers")
+    XCTAssertEqual(VectorConvexFunctions.createCollaborationChannel, "collaboration/channels:create")
+    XCTAssertEqual(VectorConvexFunctions.updateCollaborationChannel, "collaboration/channels:update")
+    XCTAssertEqual(VectorConvexFunctions.archiveCollaborationChannel, "collaboration/channels:archive")
+    XCTAssertEqual(VectorConvexFunctions.addChannelMember, "collaboration/channels:addMember")
+    XCTAssertEqual(VectorConvexFunctions.removeChannelMember, "collaboration/channels:removeMember")
+    XCTAssertEqual(VectorConvexFunctions.setChannelPreferences, "collaboration/channels:setPreferences")
     XCTAssertEqual(VectorConvexFunctions.toggleMessageReaction, "collaboration/messages:toggleReaction")
     XCTAssertEqual(VectorConvexFunctions.toggleSavedMessage, "collaboration/messages:toggleSaved")
     XCTAssertEqual(VectorConvexFunctions.createReminder, "reminders:create")
@@ -89,6 +95,85 @@ final class VectorMobileTests: XCTestCase {
     )
     XCTAssertTrue(replyArgs.keys.contains("threadRootId"))
     XCTAssertTrue(replyArgs.keys.contains("replyToMessageId"))
+  }
+
+  @MainActor
+  func testCreatingDirectMessageUsesNativeConvexMutationAndAddsConversationImmediately() async {
+    let repository = CountingVectorRepository()
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository,
+      initialLoadPolicy: .primarySurfaces
+    )
+
+    let created = await viewModel.createCollaborationChannel(
+      kind: .direct,
+      name: "Maya",
+      topic: nil,
+      memberUserIds: ["user-maya"]
+    )
+
+    XCTAssertEqual(created?.id, "channel-created")
+    XCTAssertEqual(created?.channel.kind, .direct)
+    XCTAssertEqual(created?.channel.name, "Maya")
+    XCTAssertEqual(viewModel.collaborationChannels.first?.id, "channel-created")
+    XCTAssertEqual(repository.createdChannels.count, 1)
+    XCTAssertEqual(repository.createdChannels.first?.memberUserIds, ["user-maya"])
+  }
+
+  @MainActor
+  func testChannelManagementMutationsUpdateLocalState() async throws {
+    let repository = CountingVectorRepository()
+    let viewModel = VectorMobileViewModel(
+      configuration: .demo,
+      repository: repository,
+      initialLoadPolicy: .primarySurfaces
+    )
+    let createdChannel = await viewModel.createCollaborationChannel(
+      kind: .private,
+      name: "Launch",
+      topic: "Coordinate launch work",
+      memberUserIds: []
+    )
+    let created = try XCTUnwrap(createdChannel)
+
+    let updated = await viewModel.updateCollaborationChannel(
+      channelId: created.id,
+      name: "Launch Room",
+      topic: "Final coordination"
+    )
+    XCTAssertTrue(updated)
+    XCTAssertEqual(viewModel.collaborationChannels.first?.channel.name, "Launch Room")
+    XCTAssertEqual(repository.updatedChannels.first?.name, "Launch Room")
+
+    let preferencesUpdated = await viewModel.setChannelNotificationMode(
+      channelId: created.id,
+      mode: .all
+    )
+    XCTAssertTrue(preferencesUpdated)
+    XCTAssertEqual(viewModel.collaborationChannels.first?.membership?.notificationMode, .all)
+    XCTAssertEqual(repository.channelPreferenceUpdates.first?.mode, .all)
+
+    let membersAdded = await viewModel.addChannelMembers(
+      channelId: created.id,
+      userIds: ["user-maya"]
+    )
+    XCTAssertTrue(membersAdded)
+    XCTAssertEqual(viewModel.channelMembers.first?.membership.userId, "user-maya")
+    XCTAssertEqual(repository.addedChannelMembers.first?.userId, "user-maya")
+
+    let memberRemoved = await viewModel.removeChannelMember(
+      channelId: created.id,
+      userId: "user-maya"
+    )
+    XCTAssertTrue(memberRemoved)
+    XCTAssertTrue(viewModel.channelMembers.isEmpty)
+    XCTAssertEqual(repository.removedChannelMembers.first?.userId, "user-maya")
+
+    let archived = await viewModel.archiveCollaborationChannel(created.id)
+    XCTAssertTrue(archived)
+    XCTAssertTrue(viewModel.collaborationChannels.isEmpty)
+    XCTAssertEqual(repository.archivedChannelIds, [created.id])
   }
 
   func testVoiceGestureResolutionPrioritizesCancelThenLockThenSend() {
@@ -1901,6 +1986,16 @@ private final class CountingVectorRepository: VectorMobileRepository {
   var scheduledMessageReminders: [
     (orgSlug: String, messageId: VectorID, remindAt: Date)
   ] = []
+  var createdChannels: [
+    (kind: VectorChannelKind, name: String, topic: String?, memberUserIds: [VectorID])
+  ] = []
+  var updatedChannels: [(channelId: VectorID, name: String, topic: String?)] = []
+  var archivedChannelIds: [VectorID] = []
+  var addedChannelMembers: [(channelId: VectorID, userId: VectorID)] = []
+  var removedChannelMembers: [(channelId: VectorID, userId: VectorID)] = []
+  var channelPreferenceUpdates: [
+    (channelId: VectorID, mode: VectorChannelNotificationMode)
+  ] = []
   var documentDetailOverride: VectorDocument?
   var documentChunkPages: [String: VectorPaginatedPage<VectorDocumentContentChunk>] = [:]
   var documentContentPageCursors: [String?] = []
@@ -1915,6 +2010,45 @@ private final class CountingVectorRepository: VectorMobileRepository {
 
   func channelMembers(channelId: VectorID) -> AnyPublisher<[VectorChannelMemberView], Error> {
     publisher(channelMembersValue)
+  }
+
+  func createCollaborationChannel(
+    orgSlug: String,
+    kind: VectorChannelKind,
+    name: String,
+    topic: String?,
+    memberUserIds: [VectorID]
+  ) async throws -> VectorID {
+    createdChannels.append((kind, name, topic, memberUserIds))
+    return "channel-created"
+  }
+
+  func updateCollaborationChannel(
+    channelId: VectorID,
+    name: String,
+    topic: String?
+  ) async throws {
+    updatedChannels.append((channelId, name, topic))
+  }
+
+  func archiveCollaborationChannel(channelId: VectorID) async throws {
+    archivedChannelIds.append(channelId)
+  }
+
+  func addChannelMember(channelId: VectorID, userId: VectorID) async throws -> VectorID {
+    addedChannelMembers.append((channelId, userId))
+    return "membership-\(userId)"
+  }
+
+  func removeChannelMember(channelId: VectorID, userId: VectorID) async throws {
+    removedChannelMembers.append((channelId, userId))
+  }
+
+  func setChannelPreferences(
+    channelId: VectorID,
+    notificationMode: VectorChannelNotificationMode
+  ) async throws {
+    channelPreferenceUpdates.append((channelId, notificationMode))
   }
 
   func channelThread(
