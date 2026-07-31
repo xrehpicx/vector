@@ -24,6 +24,7 @@ export type RootStackParamList = {
         mode?: 'direct' | 'channel';
       }
     | undefined;
+  WorkspaceSwitcher: undefined;
 };
 
 export type MainTabParamList = {

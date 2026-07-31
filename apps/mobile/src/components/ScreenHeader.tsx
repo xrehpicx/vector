@@ -1,16 +1,13 @@
-import {
-  ActionSheetIOS,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { Avatar } from './Avatar';
 import { colors } from '@/theme';
 import { useWorkspace } from '@/providers/WorkspaceProvider';
+import type { RootStackParamList } from '@/navigation/types';
 
 export function ScreenHeader({
   title,
@@ -26,25 +23,13 @@ export function ScreenHeader({
   trailingSymbol?: string;
 }) {
   const insets = useSafeAreaInsets();
-  const { currentUser, organizations, orgSlug, setOrgSlug } = useWorkspace();
-  const activeOrganization = organizations.find(org => org.slug === orgSlug);
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { currentUser } = useWorkspace();
 
   function chooseWorkspace() {
-    if (onLeadingPress) {
-      onLeadingPress();
-      return;
-    }
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        cancelButtonIndex: 0,
-        options: ['Cancel', ...organizations.map(org => org.name)],
-        title: 'Switch workspace',
-      },
-      index => {
-        const selected = organizations[index - 1];
-        if (selected) setOrgSlug(selected.slug);
-      },
-    );
+    if (onLeadingPress) onLeadingPress();
+    else navigation.navigate('WorkspaceSwitcher');
   }
   return (
     <View
@@ -72,9 +57,9 @@ export function ScreenHeader({
         <Text numberOfLines={1} style={styles.title}>
           {title}
         </Text>
-        {(subtitle ?? activeOrganization?.name) ? (
+        {subtitle ? (
           <Text numberOfLines={1} style={styles.subtitle}>
-            {subtitle ?? activeOrganization?.name}
+            {subtitle}
           </Text>
         ) : null}
       </View>

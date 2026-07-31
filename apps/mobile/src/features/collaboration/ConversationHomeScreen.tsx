@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import {
-  ActionSheetIOS,
   FlatList,
   Pressable,
   ScrollView,
@@ -25,7 +24,7 @@ type Props = { directOnly?: boolean };
 export function ConversationHomeScreen({ directOnly = false }: Props) {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { orgSlug, organizations, setOrgSlug } = useWorkspace();
+  const { orgSlug, organizations } = useWorkspace();
   const channels = useQuery(api.collaboration.channels.list, {
     orgSlug,
     limit: 100,
@@ -49,34 +48,7 @@ export function ConversationHomeScreen({ directOnly = false }: Props) {
   }, [channels, directOnly, filter, search]);
 
   function compose() {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options: ['Cancel', 'New message', 'New channel'],
-        cancelButtonIndex: 0,
-        title: 'Start a conversation',
-      },
-      index => {
-        if (index === 1)
-          navigation.navigate('NewConversation', { mode: 'direct' });
-        if (index === 2)
-          navigation.navigate('NewConversation', { mode: 'channel' });
-      },
-    );
-  }
-
-  function chooseWorkspace() {
-    const options = ['Cancel', ...organizations.map(org => org.name)];
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex: 0,
-        title: 'Switch workspace',
-      },
-      index => {
-        const selected = organizations[index - 1];
-        if (selected) setOrgSlug(selected.slug);
-      },
-    );
+    navigation.navigate('NewConversation', { mode: 'direct' });
   }
 
   return (
@@ -84,7 +56,6 @@ export function ConversationHomeScreen({ directOnly = false }: Props) {
       <ScreenHeader
         title={directOnly ? 'Messages' : 'Inbox'}
         subtitle={activeOrganization?.name ?? 'Vector workspace'}
-        onLeadingPress={chooseWorkspace}
         onTrailingPress={compose}
       />
       <View style={styles.search}>

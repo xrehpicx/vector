@@ -2,7 +2,6 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, useColorScheme } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MainTabParamList, RootStackParamList } from './types';
 import { ConversationHomeScreen } from '@/features/collaboration/ConversationHomeScreen';
@@ -15,66 +14,28 @@ import { AgentsScreen } from '@/features/collaboration/AgentsScreen';
 import { ActivityScreen } from '@/features/shell/ActivityScreen';
 import { SearchScreen } from '@/features/shell/SearchScreen';
 import { MoreScreen } from '@/features/shell/MoreScreen';
+import { WorkspaceSwitcherScreen } from '@/features/shell/WorkspaceSwitcherScreen';
+import { LiquidTabBar } from './LiquidTabBar';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 
-const tabSymbols: Record<keyof MainTabParamList, string> = {
-  Home: 'house.fill',
-  DMs: 'bubble.left.and.bubble.right.fill',
-  Activity: 'bell.fill',
-  Search: 'magnifyingglass',
-  More: 'ellipsis',
-};
+function DirectMessagesScreen() {
+  return <ConversationHomeScreen directOnly />;
+}
 
 function MainTabs() {
-  const isDark = useColorScheme() === 'dark';
-  const insets = useSafeAreaInsets();
-  const navigationColors = {
-    accent: '#0099c2',
-    background: isDark ? '#1c1c1e' : '#f2f2f7',
-    label: isDark ? '#8e8e93' : '#6c6c70',
-    separator: isDark ? '#38383a' : '#c6c6c8',
-  };
   return (
     <Tabs.Navigator
-      screenOptions={({ route }) => ({
+      initialRouteName='Home'
+      screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: navigationColors.accent,
-        tabBarInactiveTintColor: navigationColors.label,
-        tabBarIcon: ({ color }) => (
-          <SymbolView
-            name={tabSymbols[route.name] as never}
-            size={23}
-            tintColor={color}
-          />
-        ),
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
         tabBarHideOnKeyboard: true,
-        tabBarStyle: {
-          backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
-          borderColor: navigationColors.separator,
-          borderRadius: 28,
-          borderTopColor: navigationColors.separator,
-          borderWidth: 0.5,
-          bottom: 7,
-          height: 55 + insets.bottom,
-          left: 10,
-          paddingBottom: Math.max(insets.bottom, 7),
-          paddingTop: 6,
-          position: 'absolute',
-          right: 10,
-          shadowColor: '#000000',
-          shadowOffset: { height: 5, width: 0 },
-          shadowOpacity: isDark ? 0.32 : 0.12,
-          shadowRadius: 16,
-        },
-      })}
+      }}
+      tabBar={props => <LiquidTabBar {...props} />}
     >
       <Tabs.Screen name='Home' component={ConversationHomeScreen} />
-      <Tabs.Screen name='DMs'>
-        {() => <ConversationHomeScreen directOnly />}
-      </Tabs.Screen>
+      <Tabs.Screen name='DMs' component={DirectMessagesScreen} />
       <Tabs.Screen name='Activity' component={ActivityScreen} />
       <Tabs.Screen name='Search' component={SearchScreen} />
       <Tabs.Screen name='More' component={MoreScreen} />
@@ -138,7 +99,7 @@ export function RootNavigator() {
       <RootStack.Screen
         name='NewConversation'
         component={NewConversationScreen}
-        options={({ navigation }) => ({
+        options={({ navigation, route }) => ({
           headerLeft: () => (
             <Pressable
               accessibilityLabel='Close new conversation'
@@ -155,7 +116,35 @@ export function RootNavigator() {
             </Pressable>
           ),
           presentation: 'formSheet',
-          title: 'New conversation',
+          sheetAllowedDetents: [0.92],
+          sheetGrabberVisible: true,
+          title:
+            route.params?.mode === 'channel' ? 'New channel' : 'New message',
+        })}
+      />
+      <RootStack.Screen
+        name='WorkspaceSwitcher'
+        component={WorkspaceSwitcherScreen}
+        options={({ navigation }) => ({
+          headerLeft: () => (
+            <Pressable
+              accessibilityLabel='Close workspace switcher'
+              hitSlop={10}
+              onPress={() => navigation.goBack()}
+              style={{
+                alignItems: 'center',
+                height: 36,
+                justifyContent: 'center',
+                width: 36,
+              }}
+            >
+              <SymbolView name='xmark' size={17} tintColor={label} />
+            </Pressable>
+          ),
+          presentation: 'formSheet',
+          sheetAllowedDetents: 'fitToContents',
+          sheetGrabberVisible: true,
+          title: 'Workspaces',
         })}
       />
     </RootStack.Navigator>

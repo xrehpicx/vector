@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   ActivityIndicator,
@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -60,6 +61,12 @@ export function NewConversationScreen({ navigation, route }: Props) {
   const canCreate =
     mode === 'direct' ? Boolean(selectedPerson) : Boolean(name.trim());
 
+  useEffect(() => {
+    navigation.setOptions({
+      title: mode === 'direct' ? 'New message' : 'New channel',
+    });
+  }, [mode, navigation]);
+
   async function submit() {
     if (!canCreate || pending) return;
     setPending(true);
@@ -106,32 +113,31 @@ export function NewConversationScreen({ navigation, route }: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.page}
     >
-      <View style={styles.segmented}>
-        {(['direct', 'channel'] as const).map(value => (
-          <Pressable
-            key={value}
-            onPress={() => setMode(value)}
-            style={[styles.segment, mode === value && styles.segmentSelected]}
-          >
-            <SymbolView
-              name={(value === 'direct' ? 'bubble.left' : 'number') as never}
-              size={16}
-              tintColor={mode === value ? colors.label : colors.secondaryLabel}
-            />
-            <Text
-              style={[
-                styles.segmentLabel,
-                mode === value && styles.segmentLabelSelected,
-              ]}
-            >
-              {value === 'direct' ? 'Direct message' : 'Channel'}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
       {mode === 'direct' ? (
         <>
+          <Pressable
+            accessibilityRole='button'
+            onPress={() => setMode('channel')}
+            style={({ pressed }) => [
+              styles.newChannelRow,
+              pressed && styles.rowPressed,
+            ]}
+          >
+            <View style={styles.actionIcon}>
+              <SymbolView name='number' size={18} tintColor={colors.accent} />
+            </View>
+            <View style={styles.personCopy}>
+              <Text style={styles.personName}>New channel</Text>
+              <Text style={styles.personEmail}>
+                Create a shared space for your team
+              </Text>
+            </View>
+            <SymbolView
+              name='chevron.right'
+              size={14}
+              tintColor={colors.tertiaryLabel}
+            />
+          </Pressable>
           <View style={styles.searchBox}>
             <SymbolView
               name='magnifyingglass'
@@ -186,6 +192,21 @@ export function NewConversationScreen({ navigation, route }: Props) {
         </>
       ) : (
         <View style={styles.channelForm}>
+          <Pressable
+            accessibilityRole='button'
+            onPress={() => setMode('direct')}
+            style={({ pressed }) => [
+              styles.backToPeople,
+              pressed && styles.rowPressed,
+            ]}
+          >
+            <SymbolView
+              name='chevron.left'
+              size={14}
+              tintColor={colors.accent}
+            />
+            <Text style={styles.backToPeopleLabel}>New message</Text>
+          </Pressable>
           <Text style={styles.label}>Channel name</Text>
           <TextInput
             autoCapitalize='none'
@@ -205,10 +226,7 @@ export function NewConversationScreen({ navigation, route }: Props) {
             style={[styles.field, styles.topicField]}
             value={topic}
           />
-          <Pressable
-            onPress={() => setIsPrivate(value => !value)}
-            style={styles.visibilityRow}
-          >
+          <View style={styles.visibilityRow}>
             <SymbolView
               name={(isPrivate ? 'lock.fill' : 'number') as never}
               size={18}
@@ -224,12 +242,13 @@ export function NewConversationScreen({ navigation, route }: Props) {
                   : 'Visible to everyone in the workspace'}
               </Text>
             </View>
-            <SymbolView
-              name='chevron.up.chevron.down'
-              size={14}
-              tintColor={colors.tertiaryLabel}
+            <Switch
+              accessibilityLabel='Private channel'
+              onValueChange={setIsPrivate}
+              trackColor={{ true: colors.accent }}
+              value={isPrivate}
             />
-          </Pressable>
+          </View>
         </View>
       )}
 
@@ -257,36 +276,29 @@ export function NewConversationScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  page: { backgroundColor: colors.background, flex: 1, paddingTop: 10 },
-  segmented: {
-    backgroundColor: colors.secondaryBackground,
-    borderRadius: 12,
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    padding: 3,
-  },
-  segment: {
+  page: { backgroundColor: colors.background, flex: 1 },
+  newChannelRow: {
     alignItems: 'center',
-    borderRadius: 9,
-    flex: 1,
+    borderBottomColor: colors.separator,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    gap: 7,
-    height: 38,
+    minHeight: 64,
+    paddingHorizontal: 16,
+  },
+  actionIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderRadius: 18,
+    height: 36,
     justifyContent: 'center',
+    width: 36,
   },
-  segmentSelected: { backgroundColor: colors.tertiaryBackground },
-  segmentLabel: {
-    color: colors.secondaryLabel,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  segmentLabelSelected: { color: colors.label },
+  rowPressed: { backgroundColor: colors.fill },
   searchBox: {
     alignItems: 'center',
     borderBottomColor: colors.separator,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    marginTop: 12,
     paddingHorizontal: 16,
   },
   searchInput: {
@@ -298,6 +310,8 @@ const styles = StyleSheet.create({
   },
   personRow: {
     alignItems: 'center',
+    borderBottomColor: colors.separator,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     minHeight: 58,
     paddingHorizontal: 16,
@@ -306,6 +320,18 @@ const styles = StyleSheet.create({
   personName: { color: colors.label, fontSize: 16, fontWeight: '600' },
   personEmail: { color: colors.secondaryLabel, fontSize: 13, marginTop: 2 },
   channelForm: { gap: 8, padding: 16 },
+  backToPeople: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 9,
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 2,
+    marginLeft: -6,
+    minHeight: 32,
+    paddingHorizontal: 6,
+  },
+  backToPeopleLabel: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   label: {
     color: colors.secondaryLabel,
     fontSize: 12,
