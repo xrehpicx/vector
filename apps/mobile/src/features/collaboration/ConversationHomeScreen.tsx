@@ -3,6 +3,7 @@ import {
   ActionSheetIOS,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -30,18 +31,22 @@ export function ConversationHomeScreen({ directOnly = false }: Props) {
     limit: 100,
   });
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+
+  const activeOrganization = organizations.find(org => org.slug === orgSlug);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (channels ?? []).filter(item => {
       if (directOnly && !['direct', 'group_direct'].includes(item.channel.kind))
         return false;
+      if (filter === 'unread' && item.unreadCount === 0) return false;
       if (!needle) return true;
       return [item.channel.name, item.channel.topic, item.channel.description]
         .filter(Boolean)
         .some(value => value!.toLowerCase().includes(needle));
     });
-  }, [channels, directOnly, search]);
+  }, [channels, directOnly, filter, search]);
 
   function compose() {
     ActionSheetIOS.showActionSheetWithOptions(
@@ -77,7 +82,8 @@ export function ConversationHomeScreen({ directOnly = false }: Props) {
   return (
     <View style={styles.page}>
       <ScreenHeader
-        title={directOnly ? 'Direct messages' : 'Home'}
+        title={directOnly ? 'Messages' : 'Inbox'}
+        subtitle={activeOrganization?.name ?? 'Vector workspace'}
         onLeadingPress={chooseWorkspace}
         onTrailingPress={compose}
       />
@@ -89,54 +95,109 @@ export function ConversationHomeScreen({ directOnly = false }: Props) {
         />
         <TextInput
           onChangeText={setSearch}
-          placeholder='Search conversations'
+          placeholder='Search or ask Vector'
           placeholderTextColor={colors.secondaryLabel}
           style={styles.searchInput}
           value={search}
         />
       </View>
 
-      {!directOnly ? (
-        <FlatList
-          contentContainerStyle={styles.shortcuts}
-          data={
-            [
-              ['at', 'Priority'],
-              ['bubble.left.and.bubble.right', 'Threads'],
-              ['bookmark', 'Saved'],
-              ['cpu', 'Agents'],
-            ] as const
-          }
-          horizontal
-          keyExtractor={item => item[1]}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => {
-                if (item[1] === 'Agents') navigation.navigate('Agents');
-                else
-                  navigation.navigate('MessageCollection', {
-                    mode: item[1].toLowerCase() as
-                      'priority' | 'threads' | 'saved',
-                  });
-              }}
-              style={styles.shortcut}
+      <ScrollView
+        contentContainerStyle={styles.filterRail}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroller}
+      >
+        {(['all', 'unread'] as const).map(value => (
+          <Pressable
+            accessibilityState={{ selected: filter === value }}
+            key={value}
+            onPress={() => setFilter(value)}
+            style={({ pressed }) => [
+              styles.filter,
+              filter === value && styles.filterSelected,
+              pressed && styles.filterPressed,
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterLabel,
+                filter === value && styles.filterLabelSelected,
+              ]}
             >
-              <SymbolView
-                name={item[0] as never}
-                size={17}
-                tintColor={colors.secondaryLabel}
-              />
-              <Text style={styles.shortcutLabel}>{item[1]}</Text>
-            </Pressable>
-          )}
-          showsHorizontalScrollIndicator={false}
-          style={styles.shortcutRail}
-        />
-      ) : null}
+              {value === 'all' ? 'All' : 'Unread'}
+            </Text>
+          </Pressable>
+        ))}
+        {!directOnly
+          ? (
+              [
+                ['at', 'Priority'],
+                ['bubble.left.and.bubble.right', 'Threads'],
+                ['bookmark', 'Saved'],
+                ['cpu', 'Agents'],
+              ] as const
+            ).map(item => (
+              <Pressable
+                key={item[1]}
+                onPress={() => {
+                  if (item[1] === 'Agents') navigation.navigate('Agents');
+                  else
+                    navigation.navigate('MessageCollection', {
+                      mode: item[1].toLowerCase() as
+                        'priority' | 'threads' | 'saved',
+                    });
+                }}
+                style={styles.shortcut}
+              >
+                <SymbolView
+                  name={item[0] as never}
+                  size={17}
+                  tintColor={colors.secondaryLabel}
+                />
+                <Text style={styles.shortcutLabel}>{item[1]}</Text>
+              </Pressable>
+            ))
+          : null}
+      </ScrollView>
 
       <FlatList
+        contentContainerStyle={
+          visible.length === 0 ? styles.emptyList : styles.listContent
+        }
         data={visible}
         keyExtractor={item => item.channel._id}
+        ListEmptyComponent={
+          channels !== undefined ? (
+            <View style={styles.empty}>
+              <View style={styles.emptyIcon}>
+                <SymbolView
+                  name={
+                    search || filter === 'unread'
+                      ? 'line.3.horizontal.decrease'
+                      : 'bubble.left.and.bubble.right'
+                  }
+                  size={22}
+                  tintColor={colors.secondaryLabel}
+                />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {search
+                  ? 'No matching conversations'
+                  : filter === 'unread'
+                    ? 'You’re all caught up'
+                    : directOnly
+                      ? 'No direct messages yet'
+                      : 'No conversations yet'}
+              </Text>
+              <Text style={styles.emptyCopy}>
+                {search
+                  ? 'Try another name or keyword.'
+                  : 'New messages will appear here.'}
+              </Text>
+            </View>
+          ) : null
+        }
         renderItem={({ item }) => {
           const isDirect = ['direct', 'group_direct'].includes(
             item.channel.kind,
@@ -156,17 +217,36 @@ export function ConversationHomeScreen({ directOnly = false }: Props) {
                 pressed && styles.rowPressed,
               ]}
             >
-              <View style={[styles.icon, isDirect && styles.directIcon]}>
-                <SymbolView
-                  name={(isDirect ? 'bubble.left' : 'number') as never}
-                  size={20}
-                  tintColor={isDirect ? colors.accent : colors.secondaryLabel}
-                />
-              </View>
+              {isDirect ? (
+                <View style={styles.directAvatar}>
+                  <Text style={styles.directAvatarLabel}>
+                    {item.channel.name.trim().at(0)?.toUpperCase() ?? '?'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.icon}>
+                  <SymbolView
+                    name={
+                      (item.channel.kind === 'private'
+                        ? 'lock.fill'
+                        : 'number') as never
+                    }
+                    size={18}
+                    tintColor={colors.secondaryLabel}
+                  />
+                </View>
+              )}
               <View style={styles.rowBody}>
-                <Text numberOfLines={1} style={styles.rowTitle}>
-                  {item.channel.name}
-                </Text>
+                <View style={styles.rowTitleLine}>
+                  <Text numberOfLines={1} style={styles.rowTitle}>
+                    {item.channel.name}
+                  </Text>
+                  <Text style={styles.rowTime}>
+                    {formatActivity(
+                      item.channel.lastMessageAt ?? item.channel.createdAt,
+                    )}
+                  </Text>
+                </View>
                 <Text numberOfLines={1} style={styles.rowSubtitle}>
                   {isDirect
                     ? 'Direct message'
@@ -182,11 +262,6 @@ export function ConversationHomeScreen({ directOnly = false }: Props) {
                   </Text>
                 </View>
               ) : null}
-              <SymbolView
-                name='chevron.right'
-                size={14}
-                tintColor={colors.tertiaryLabel}
-              />
             </Pressable>
           );
         }}
@@ -200,33 +275,57 @@ const styles = StyleSheet.create({
   search: {
     alignItems: 'center',
     backgroundColor: colors.secondaryBackground,
-    borderRadius: 14,
+    borderRadius: 13,
     flexDirection: 'row',
-    height: 42,
+    height: 40,
     marginHorizontal: 16,
     paddingHorizontal: 12,
   },
   searchInput: {
     color: colors.label,
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     marginLeft: 8,
     paddingVertical: 0,
   },
-  shortcuts: { gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
-  shortcutRail: { flexGrow: 0 },
+  filterRail: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  filterScroller: { flexGrow: 0 },
+  filter: {
+    borderColor: colors.separator,
+    borderRadius: 15,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    minHeight: 32,
+    paddingHorizontal: 13,
+  },
+  filterSelected: { backgroundColor: colors.label, borderColor: colors.label },
+  filterPressed: { opacity: 0.65 },
+  filterLabel: {
+    color: colors.secondaryLabel,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  filterLabelSelected: { color: colors.background },
   shortcut: {
     alignItems: 'center',
     backgroundColor: colors.secondaryBackground,
-    borderRadius: 12,
+    borderRadius: 11,
     flexDirection: 'row',
     gap: 7,
-    height: 40,
-    paddingHorizontal: 12,
+    height: 32,
+    paddingHorizontal: 11,
   },
-  shortcutLabel: { color: colors.label, fontSize: 15, fontWeight: '600' },
+  shortcutLabel: { color: colors.label, fontSize: 14, fontWeight: '600' },
   row: {
     alignItems: 'center',
+    borderBottomColor: colors.separator,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     minHeight: metrics.rowHeight,
     paddingHorizontal: 16,
@@ -235,24 +334,74 @@ const styles = StyleSheet.create({
   icon: {
     alignItems: 'center',
     backgroundColor: colors.secondaryBackground,
-    borderRadius: 11,
+    borderRadius: 20,
     height: 40,
     justifyContent: 'center',
     width: 40,
   },
-  directIcon: { backgroundColor: 'rgba(0,153,194,0.12)' },
-  rowBody: { flex: 1, marginLeft: 12, minWidth: 0, paddingVertical: 9 },
-  rowTitle: { color: colors.label, fontSize: 17, fontWeight: '600' },
+  directAvatar: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderRadius: 20,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  directAvatarLabel: { color: colors.accent, fontSize: 15, fontWeight: '700' },
+  rowBody: { flex: 1, marginLeft: 11, minWidth: 0, paddingVertical: 8 },
+  rowTitleLine: { alignItems: 'baseline', flexDirection: 'row' },
+  rowTitle: { color: colors.label, flex: 1, fontSize: 16, fontWeight: '600' },
+  rowTime: { color: colors.tertiaryLabel, fontSize: 11, marginLeft: 8 },
   rowSubtitle: { color: colors.secondaryLabel, fontSize: 13, marginTop: 1 },
   badge: {
     alignItems: 'center',
     backgroundColor: '#0099c2',
     borderRadius: 12,
     justifyContent: 'center',
-    marginRight: 10,
+    marginLeft: 10,
     minHeight: 23,
     minWidth: 23,
     paddingHorizontal: 6,
   },
   badgeLabel: { color: 'white', fontSize: 12, fontWeight: '700' },
+  listContent: { paddingBottom: 112 },
+  emptyList: { flexGrow: 1, paddingBottom: 112 },
+  empty: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 36,
+  },
+  emptyIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.secondaryBackground,
+    borderRadius: 22,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  emptyTitle: {
+    color: colors.label,
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 12,
+  },
+  emptyCopy: {
+    color: colors.secondaryLabel,
+    fontSize: 13,
+    marginTop: 4,
+    textAlign: 'center',
+  },
 });
+
+function formatActivity(value: number) {
+  const date = new Date(value);
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}

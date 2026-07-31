@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, useColorScheme } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MainTabParamList, RootStackParamList } from './types';
 import { ConversationHomeScreen } from '@/features/collaboration/ConversationHomeScreen';
@@ -28,6 +29,7 @@ const tabSymbols: Record<keyof MainTabParamList, string> = {
 
 function MainTabs() {
   const isDark = useColorScheme() === 'dark';
+  const insets = useSafeAreaInsets();
   const navigationColors = {
     accent: '#0099c2',
     background: isDark ? '#1c1c1e' : '#f2f2f7',
@@ -48,9 +50,24 @@ function MainTabs() {
           />
         ),
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
-          backgroundColor: navigationColors.background,
+          backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
+          borderColor: navigationColors.separator,
+          borderRadius: 28,
           borderTopColor: navigationColors.separator,
+          borderWidth: 0.5,
+          bottom: 7,
+          height: 55 + insets.bottom,
+          left: 10,
+          paddingBottom: Math.max(insets.bottom, 7),
+          paddingTop: 6,
+          position: 'absolute',
+          right: 10,
+          shadowColor: '#000000',
+          shadowOffset: { height: 5, width: 0 },
+          shadowOpacity: isDark ? 0.32 : 0.12,
+          shadowRadius: 16,
         },
       })}
     >
@@ -74,7 +91,8 @@ export function RootNavigator() {
       screenOptions={{
         contentStyle: { backgroundColor: background },
         headerBackButtonDisplayMode: 'minimal',
-        headerShadowVisible: false,
+        headerBlurEffect: 'systemMaterial',
+        headerShadowVisible: true,
         headerStyle: { backgroundColor: background },
         headerTintColor: '#0099c2',
         headerTitleStyle: { color: label, fontSize: 17, fontWeight: '700' },

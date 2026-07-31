@@ -1,4 +1,4 @@
-import { PlatformColor } from 'react-native';
+import { DynamicColorIOS, PlatformColor } from 'react-native';
 
 export const colors = {
   background: PlatformColor('systemBackground'),
@@ -9,14 +9,17 @@ export const colors = {
   secondaryLabel: PlatformColor('secondaryLabel'),
   tertiaryLabel: PlatformColor('tertiaryLabel'),
   separator: PlatformColor('separator'),
-  accent: PlatformColor('systemCyan'),
+  accent: DynamicColorIOS({ dark: '#27b4d6', light: '#0789aa' }),
+  accentSoft: DynamicColorIOS({ dark: '#102f38', light: '#e2f4f8' }),
   destructive: PlatformColor('systemRed'),
+  success: PlatformColor('systemGreen'),
   fill: PlatformColor('tertiarySystemFill'),
 };
 
 export const metrics = {
   pageInset: 16,
-  rowHeight: 58,
+  rowHeight: 62,
   compactRadius: 12,
   controlHeight: 44,
+  hairline: 0.5,
 };

@@ -11,7 +11,7 @@ const config: ExpoConfig = {
   ios: {
     appleTeamId: 'R9QFK9NM3Y',
     bundleIdentifier: 'studio.imai.vector',
-    buildNumber: '202607312351',
+    buildNumber: '202608010310',
     supportsTablet: true,
     entitlements: {
       'aps-environment': '$(APS_ENVIRONMENT)',
