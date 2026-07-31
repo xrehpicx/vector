@@ -58,6 +58,7 @@
     "generate:keys": "node generateKeys.mjs"
   },
   "dependencies": {
+    "@better-auth/expo": "1.6.25",
     "@ai-sdk/provider-utils": "^4.0.40",
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
     "@anthropic-ai/sdk": "^0.115.0",

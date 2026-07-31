@@ -8,7 +8,9 @@ export const openrouter = createOpenRouter({
 
 export const defaultAssistantModel = process.env.OPENROUTER_MODEL?.trim() || '';
 
-export function assertAssistantModelConfigured(modelId?: string): void {
+export function assertAssistantModelConfigured(
+  modelId?: string,
+): asserts modelId is string {
   if (!process.env.OPENROUTER_API_KEY?.trim()) {
     throw new Error(
       'Assistant is temporarily unavailable because OPENROUTER_API_KEY is not configured.',

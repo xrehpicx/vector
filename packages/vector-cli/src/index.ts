@@ -3073,7 +3073,7 @@ workCommand
     let previous: ReturnType<typeof snapshotWork> | undefined;
     let settled = false;
     let unsubscribe: (() => void) | undefined;
-    let timer: NodeJS.Timeout | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     const emit = (event: WorkWatchEvent & { observedAt: string }) => {
       if (runtime.json) {

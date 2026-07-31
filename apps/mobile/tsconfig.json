@@ -1,0 +1,14 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "allowJs": false,
+    "exactOptionalPropertyTypes": false,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@vector/convex/*": ["../../convex/*"]
+    },
+    "strict": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "index.ts", "app.config.ts"]
+}

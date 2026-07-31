@@ -3,11 +3,13 @@ import {
   paginationResultValidator,
 } from 'convex/server';
 import {
+  internalMutation,
   mutation,
   query,
   type MutationCtx,
   type QueryCtx,
 } from '../_generated/server';
+import { internal } from '../_generated/api';
 import { v, ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import {
@@ -370,11 +372,6 @@ export const send = mutation({
         PERMISSIONS.CHANNEL_MESSAGE_SEND,
       );
     }
-    const attachmentInputs = await validateAttachments(
-      ctx,
-      args.attachments ?? [],
-    );
-    const body = validateBody(args.body, attachmentInputs.length > 0);
     const clientMessageId = validateClientMessageId(args.clientMessageId);
     if (clientMessageId) {
       const existing = await ctx.db
@@ -394,10 +391,9 @@ export const send = mutation({
         }
         const runs = await ctx.db
           .query('collaborationAgentRuns')
-          .withIndex('by_channel_id_and_created_at', q =>
-            q.eq('channelId', args.channelId),
+          .withIndex('by_trigger_message_id_and_agent_id', q =>
+            q.eq('triggerMessageId', existing._id),
           )
-          .order('desc')
           .take(MAX_AGENTS_PER_CHANNEL);
         return {
           messageId: existing._id,
@@ -407,6 +403,15 @@ export const send = mutation({
         };
       }
     }
+
+    // Resolve an idempotent retry before validating attachment ownership. A
+    // prior attempt may have committed the message and attached its storage
+    // objects even when the client never received the acknowledgement.
+    const attachmentInputs = await validateAttachments(
+      ctx,
+      args.attachments ?? [],
+    );
+    const body = validateBody(args.body, attachmentInputs.length > 0);
 
     let threadRoot: Doc<'channelMessages'> | undefined;
     if (args.threadRootId) {
@@ -491,14 +496,31 @@ export const send = mutation({
         updatedAt: now,
       });
     }
-    const message = await ctx.db.get('channelMessages', messageId);
-    if (!message) throw new ConvexError('MESSAGE_CREATE_FAILED');
-    const runIds = await createAutomaticRunsForMessage(
-      ctx,
-      message,
-      access.userId,
+    await ctx.scheduler.runAfter(
+      0,
+      internal.collaboration.messages.processAutomaticRuns,
+      { messageId, requestedByUserId: access.userId },
     );
-    return { messageId, runIds };
+    return { messageId, runIds: [] };
+  },
+});
+
+/**
+ * Agent wake-up can build a sizeable conversation context. Keep it outside the
+ * user's send transaction so message acknowledgement stays fast and reliable.
+ * The run creation helper is idempotent for each message + agent pair.
+ */
+export const processAutomaticRuns = internalMutation({
+  args: {
+    messageId: v.id('channelMessages'),
+    requestedByUserId: v.id('users'),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get('channelMessages', args.messageId);
+    if (!message || message.deletedAt) return null;
+    await createAutomaticRunsForMessage(ctx, message, args.requestedByUserId);
+    return null;
   },
 });
 

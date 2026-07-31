@@ -31,5 +31,5 @@
     "convex/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "archive", "convex"]
+  "exclude": ["node_modules", "archive", "convex", "apps/mobile"]
 }

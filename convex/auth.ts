@@ -4,6 +4,7 @@ import {
   type GenericCtx,
 } from '@convex-dev/better-auth';
 import { convex } from '@convex-dev/better-auth/plugins';
+import { expo } from '@better-auth/expo';
 import { APIError, betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
 import { username, emailOTP, deviceAuthorization } from 'better-auth/plugins';
@@ -34,11 +35,16 @@ const getBaseUrl = () =>
 const getTrustedOrigins = () => {
   const configuredOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS || '')
     .split(',')
-    .map(origin => origin.trim())
+    .map((origin: string) => origin.trim())
     .filter(Boolean);
 
   return Array.from(
-    new Set([getBaseUrl(), 'https://vector.imai.studio', ...configuredOrigins]),
+    new Set([
+      getBaseUrl(),
+      'https://vector.imai.studio',
+      'vector://',
+      ...configuredOrigins,
+    ]),
   );
 };
 
@@ -228,6 +234,7 @@ export const createAuthOptions = (
     },
   },
   plugins: [
+    expo(),
     username(),
     emailOTP({
       async sendVerificationOTP({ email, otp, type }) {
