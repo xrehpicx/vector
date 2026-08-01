@@ -13,19 +13,14 @@ import { enableScreens } from 'react-native-screens';
 import { useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
-import { authClient } from '@/lib/auth-client';
-import { convex } from '@/lib/convex';
 import { colors } from '@/theme';
 import { SignInScreen } from '@/features/auth/SignInScreen';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { WorkspaceProvider } from '@/providers/WorkspaceProvider';
+import { ServerProvider, useServer } from '@/providers/ServerProvider';
 import { MessageDeliveryManager } from '@/features/collaboration/MessageDeliveryManager';
 
 enableScreens(true);
-
-const convexAuthClient = authClient as unknown as ComponentProps<
-  typeof ConvexBetterAuthProvider
->['authClient'];
 
 function LoadingScreen() {
   return (
@@ -35,30 +30,47 @@ function LoadingScreen() {
   );
 }
 
-export default function App() {
+function ConnectedApp() {
   const colorScheme = useColorScheme();
+  const { authClient, convexClient, server } = useServer();
+  const convexAuthClient = authClient as unknown as ComponentProps<
+    typeof ConvexBetterAuthProvider
+  >['authClient'];
+
+  return (
+    <ConvexBetterAuthProvider
+      authClient={convexAuthClient}
+      client={convexClient}
+      key={`${server.appUrl}:${server.authUrl}:${server.convexUrl}`}
+    >
+      <StatusBar style='auto' />
+      <AuthLoading>
+        <LoadingScreen />
+      </AuthLoading>
+      <Unauthenticated>
+        <SignInScreen />
+      </Unauthenticated>
+      <Authenticated>
+        <WorkspaceProvider>
+          <MessageDeliveryManager />
+          <NavigationContainer
+            theme={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+          >
+            <RootNavigator />
+          </NavigationContainer>
+        </WorkspaceProvider>
+      </Authenticated>
+    </ConvexBetterAuthProvider>
+  );
+}
+
+export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <ConvexBetterAuthProvider authClient={convexAuthClient} client={convex}>
-          <StatusBar style='auto' />
-          <AuthLoading>
-            <LoadingScreen />
-          </AuthLoading>
-          <Unauthenticated>
-            <SignInScreen />
-          </Unauthenticated>
-          <Authenticated>
-            <WorkspaceProvider>
-              <MessageDeliveryManager />
-              <NavigationContainer
-                theme={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
-              >
-                <RootNavigator />
-              </NavigationContainer>
-            </WorkspaceProvider>
-          </Authenticated>
-        </ConvexBetterAuthProvider>
+        <ServerProvider>
+          <ConnectedApp />
+        </ServerProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

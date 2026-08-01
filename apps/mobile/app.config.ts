@@ -11,7 +11,7 @@ const config: ExpoConfig = {
   ios: {
     appleTeamId: 'R9QFK9NM3Y',
     bundleIdentifier: 'studio.imai.vector',
-    buildNumber: '202608010430',
+    buildNumber: '202608012000',
     supportsTablet: true,
     entitlements: {
       'aps-environment': '$(APS_ENVIRONMENT)',
@@ -58,7 +58,7 @@ const config: ExpoConfig = {
     convexSiteUrl:
       process.env.EXPO_PUBLIC_CONVEX_SITE_URL ??
       'https://proficient-poodle-798.convex.site',
-    appUrl: process.env.EXPO_PUBLIC_APP_URL ?? 'https://vector.imai.studio',
+    appUrl: process.env.EXPO_PUBLIC_APP_URL ?? 'https://imai.tech',
     orgSlug: process.env.EXPO_PUBLIC_ORG_SLUG,
   },
 };

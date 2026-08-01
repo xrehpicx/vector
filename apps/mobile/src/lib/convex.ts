@@ -1,8 +1,8 @@
 import { ConvexReactClient } from 'convex/react';
 
-import { runtime } from './runtime';
-
-export const convex = new ConvexReactClient(runtime.convexUrl, {
-  expectAuth: true,
-  unsavedChangesWarning: false,
-});
+export function createVectorConvexClient(convexUrl: string) {
+  return new ConvexReactClient(convexUrl, {
+    expectAuth: true,
+    unsavedChangesWarning: false,
+  });
+}

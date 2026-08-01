@@ -10,7 +10,7 @@ type VectorExtra = {
 const extra = (Constants.expoConfig?.extra ?? {}) as VectorExtra;
 
 export const runtime = {
-  appUrl: extra.appUrl ?? 'https://vector.imai.studio',
+  appUrl: extra.appUrl ?? 'https://imai.tech',
   convexSiteUrl:
     extra.convexSiteUrl ?? 'https://proficient-poodle-798.convex.site',
   convexUrl: extra.convexUrl ?? 'https://cloud.imai.tech',

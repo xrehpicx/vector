@@ -1,8 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { authClient } from '@/lib/auth-client';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { useServer } from '@/providers/ServerProvider';
 import { colors } from '@/theme';
 
 const rows = [
@@ -15,6 +15,7 @@ const rows = [
 ] as const;
 
 export function MoreScreen() {
+  const { authClient } = useServer();
   return (
     <View style={styles.page}>
       <ScreenHeader title='More' trailingSymbol='gearshape' />

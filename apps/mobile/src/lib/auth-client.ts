@@ -5,17 +5,19 @@ import { usernameClient } from 'better-auth/client/plugins';
 import type { BetterAuthClientPlugin } from 'better-auth';
 import * as SecureStore from 'expo-secure-store';
 
-import { runtime } from './runtime';
+export function createVectorAuthClient(appUrl: string) {
+  return createAuthClient({
+    baseURL: appUrl,
+    plugins: [
+      expoClient({
+        scheme: 'vector',
+        storagePrefix: 'vector',
+        storage: SecureStore,
+      }) as BetterAuthClientPlugin,
+      usernameClient(),
+      convexClient(),
+    ],
+  });
+}
 
-export const authClient = createAuthClient({
-  baseURL: runtime.convexSiteUrl,
-  plugins: [
-    expoClient({
-      scheme: 'vector',
-      storagePrefix: 'vector',
-      storage: SecureStore,
-    }) as BetterAuthClientPlugin,
-    usernameClient(),
-    convexClient(),
-  ],
-});
+export type VectorAuthClient = ReturnType<typeof createVectorAuthClient>;
