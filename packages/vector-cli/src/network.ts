@@ -110,6 +110,22 @@ export function createVectorDispatcher(options: Agent.Options = {}): Agent {
 
 const vectorDispatcher = createVectorDispatcher();
 
+export function isCallerCancellation(
+  error: unknown,
+  callerSignal: AbortSignal | undefined,
+): boolean {
+  if (!callerSignal?.aborted) return false;
+  const callerReason = callerSignal.reason;
+  const callerTimedOut =
+    callerReason instanceof DOMException &&
+    callerReason.name === 'TimeoutError';
+  return !callerTimedOut && error === callerReason;
+}
+
+/**
+ * Caller cancellations are preserved verbatim, so this may reject with a
+ * caller-supplied signal reason that is not an Error.
+ */
 export async function fetchWithDispatcher(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
@@ -119,18 +135,63 @@ export async function fetchWithDispatcher(
 ): Promise<Response> {
   const endpoint = safeEndpoint(input);
   const method = safeMethod(input, init);
+  const inputRequest =
+    typeof Request !== 'undefined' && input instanceof Request ? input : null;
+  const callerSignal =
+    init && 'signal' in init
+      ? (init.signal ?? undefined)
+      : inputRequest?.signal;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const signal = init?.signal
-    ? AbortSignal.any([init.signal, timeoutSignal])
+  const signal = callerSignal
+    ? AbortSignal.any([callerSignal, timeoutSignal])
     : timeoutSignal;
+  const fetchInput = inputRequest ? inputRequest.url : input;
 
   try {
-    return (await undiciFetch(input as Parameters<typeof undiciFetch>[0], {
-      ...(init as Parameters<typeof undiciFetch>[1]),
+    const effectiveBody =
+      init?.body != null
+        ? init.body
+        : inputRequest?.body
+          ? // Buffering preserves Content-Length when adapting a native Request.
+            new Uint8Array(await inputRequest.arrayBuffer())
+          : undefined;
+    const isStreamingBody =
+      typeof ReadableStream !== 'undefined' &&
+      effectiveBody instanceof ReadableStream;
+    const isAsyncIterableBody =
+      effectiveBody != null &&
+      typeof (effectiveBody as { [Symbol.asyncIterator]?: unknown })[
+        Symbol.asyncIterator
+      ] === 'function';
+    const initDuplex = (init as { duplex?: 'half' } | undefined)?.duplex;
+    const duplex =
+      initDuplex ??
+      (isStreamingBody || isAsyncIterableBody ? 'half' : undefined);
+    const fetchInit = inputRequest
+      ? {
+          cache: inputRequest.cache,
+          credentials: inputRequest.credentials,
+          headers: inputRequest.headers,
+          integrity: inputRequest.integrity,
+          keepalive: inputRequest.keepalive,
+          method: inputRequest.method,
+          mode: inputRequest.mode,
+          referrer: inputRequest.referrer,
+          referrerPolicy: inputRequest.referrerPolicy,
+          redirect: inputRequest.redirect,
+          ...init,
+          body: effectiveBody,
+          duplex,
+          signal,
+        }
+      : { ...init, duplex, signal };
+
+    return (await undiciFetch(fetchInput as Parameters<typeof undiciFetch>[0], {
+      ...(fetchInit as Parameters<typeof undiciFetch>[1]),
       dispatcher,
-      signal,
     })) as unknown as Response;
   } catch (error) {
+    if (isCallerCancellation(error, callerSignal)) throw error;
     throw new VectorNetworkError({
       cause: error,
       endpoint,
