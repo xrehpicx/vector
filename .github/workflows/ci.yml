@@ -92,6 +92,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Node 22.19 is the CLI package's supported floor; the app workspace
+        # remains pinned to Node 24.x.
         node:
           - 22.19.0
           - 24.x

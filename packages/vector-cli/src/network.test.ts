@@ -16,9 +16,10 @@ describe('CLI network transport', () => {
   const dispatchers: Dispatcher[] = [];
 
   afterEach(async () => {
-    await Promise.all(dispatchers.map(dispatcher => dispatcher.close()));
+    await Promise.all(dispatchers.map(dispatcher => dispatcher.destroy()));
     dispatchers.length = 0;
     if (server) {
+      server.closeAllConnections();
       await new Promise<void>((resolve, reject) => {
         server!.close(error => (error ? reject(error) : resolve()));
       });
@@ -173,7 +174,9 @@ describe('CLI network transport', () => {
 
   it('preserves a Request body when adapting it for Undici', async () => {
     let receivedBody = '';
+    let receivedContentLength: string | undefined;
     server = createServer((request, response) => {
+      receivedContentLength = request.headers['content-length'];
       request.setEncoding('utf8');
       request.on('data', chunk => {
         receivedBody += chunk;
@@ -208,6 +211,50 @@ describe('CLI network transport', () => {
 
     expect(response.status).toBe(200);
     expect(receivedBody).toBe('{"title":"Network diagnostic"}');
+    expect(receivedContentLength).toBe(
+      String(Buffer.byteLength('{"title":"Network diagnostic"}')),
+    );
+  });
+
+  it('uses an init stream body that overrides an adapted Request', async () => {
+    let receivedBody = '';
+    server = createServer((request, response) => {
+      request.setEncoding('utf8');
+      request.on('data', chunk => {
+        receivedBody += chunk;
+      });
+      request.on('end', () => {
+        response.writeHead(200);
+        response.end();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server!.listen(0, '127.0.0.1', () => resolve());
+      server!.once('error', reject);
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Test server did not expose a TCP port');
+    }
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+    const request = new Request(`http://127.0.0.1:${address.port}/document`);
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('override body'));
+        controller.close();
+      },
+    });
+
+    const response = await fetchWithDispatcher(
+      request,
+      { method: 'POST', body },
+      'create document',
+      dispatcher,
+    );
+
+    expect(response.status).toBe(200);
+    expect(receivedBody).toBe('override body');
   });
 
   it('preserves cancellation while a request is in flight', async () => {

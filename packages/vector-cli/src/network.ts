@@ -134,13 +134,18 @@ export async function fetchWithDispatcher(
     ? AbortSignal.any([callerSignal, timeoutSignal])
     : timeoutSignal;
   const fetchInput = inputRequest ? inputRequest.url : input;
-  const inputBody = inputRequest?.body ?? undefined;
+  const inputBody = inputRequest?.body
+    ? new Uint8Array(await inputRequest.arrayBuffer())
+    : undefined;
+  const effectiveBody =
+    init && 'body' in init ? (init.body ?? undefined) : inputBody;
+  const needsDuplex =
+    typeof ReadableStream !== 'undefined' &&
+    effectiveBody instanceof ReadableStream;
   const fetchInit = inputRequest
     ? {
-        body: inputBody,
         cache: inputRequest.cache,
         credentials: inputRequest.credentials,
-        duplex: inputBody ? ('half' as const) : undefined,
         headers: inputRequest.headers,
         integrity: inputRequest.integrity,
         keepalive: inputRequest.keepalive,
@@ -150,6 +155,8 @@ export async function fetchWithDispatcher(
         referrerPolicy: inputRequest.referrerPolicy,
         redirect: inputRequest.redirect,
         ...init,
+        body: effectiveBody,
+        duplex: needsDuplex ? ('half' as const) : undefined,
         signal,
       }
     : { ...init, signal };
@@ -168,9 +175,8 @@ export async function fetchWithDispatcher(
       callerReason.name === 'TimeoutError';
     const callerAborted =
       callerSignal?.aborted === true &&
-      !timeoutSignal.aborted &&
       !callerTimedOut &&
-      callerReason !== undefined;
+      error === callerReason;
     if (callerAborted) throw error;
     throw new VectorNetworkError({
       cause: error,
