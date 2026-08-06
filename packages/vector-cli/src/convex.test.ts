@@ -51,7 +51,7 @@ describe('Convex CLI error annotation', () => {
       'https://cloud.example.com',
     );
 
-    await expect(client.query({} as never, {})).rejects.toThrow(
+    await expect(runQuery(client, {} as never, {})).rejects.toThrow(
       'is not a functionReference',
     );
   });

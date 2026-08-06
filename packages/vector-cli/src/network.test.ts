@@ -144,6 +144,33 @@ describe('CLI network transport', () => {
     expect(error).toBe(reason);
   });
 
+  it('reports a caller timeout as a contextual network failure', async () => {
+    server = createServer(() => {
+      // Keep the request open until the caller timeout expires.
+    });
+    await new Promise<void>((resolve, reject) => {
+      server!.listen(0, '127.0.0.1', () => resolve());
+      server!.once('error', reject);
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Test server did not expose a TCP port');
+    }
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+
+    const error = await fetchWithDispatcher(
+      `http://127.0.0.1:${address.port}/caller-timeout`,
+      { signal: AbortSignal.timeout(20) },
+      'runtime config request',
+      dispatcher,
+    ).catch(caught => caught);
+
+    expect(error).toBeInstanceOf(VectorNetworkError);
+    expect(error.message).toContain('runtime config request failed');
+    expect(error.message).toContain('TimeoutError');
+  });
+
   it('reports safe operation, endpoint, and network context', async () => {
     const dispatcher = {
       dispatch() {

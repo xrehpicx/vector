@@ -131,7 +131,16 @@ export async function fetchWithDispatcher(
       signal,
     })) as unknown as Response;
   } catch (error) {
-    if (init?.signal?.aborted && error === init.signal.reason) throw error;
+    const callerReason = init?.signal?.aborted ? init.signal.reason : undefined;
+    const callerAborted =
+      callerReason !== undefined &&
+      typeof callerReason === 'object' &&
+      callerReason !== null &&
+      'name' in callerReason &&
+      callerReason.name === 'AbortError' &&
+      (error === callerReason ||
+        (error instanceof Error && error.name === 'AbortError'));
+    if (callerAborted) throw error;
     throw new VectorNetworkError({
       cause: error,
       endpoint,
