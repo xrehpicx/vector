@@ -237,6 +237,7 @@ export function toAgentRun(
 export function toCollaborationMessage({
   view,
   currentUserId,
+  canModerateMessages = false,
   agents,
   runs,
   entities = [],
@@ -244,6 +245,7 @@ export function toCollaborationMessage({
 }: {
   view: MessageView;
   currentUserId?: string | null;
+  canModerateMessages?: boolean;
   agents: CollaborationAgent[];
   runs: Array<{
     run: CollaborationAgentRun;
@@ -343,8 +345,10 @@ export function toCollaborationMessage({
       view.message.actorKind === 'user' &&
       String(view.message.authorUserId) === currentUserId,
     canDelete:
-      view.message.actorKind === 'user' &&
-      String(view.message.authorUserId) === currentUserId,
+      !view.message.deletedAt &&
+      (canModerateMessages ||
+        (view.message.actorKind === 'user' &&
+          String(view.message.authorUserId) === currentUserId)),
     run: messageRun,
     threadResolved: Boolean(view.message.resolvedAt),
     followingThread: view.following,

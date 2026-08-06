@@ -10,6 +10,13 @@
 
 This package wraps the same auth and Convex-backed workflows used by the app, so people and coding agents can manage Requests, Work, Tasks, organizations, projects, documents, notifications, and admin settings without opening the UI.
 
+The CLI uses address-family racing for HTTP requests, so dual-stack endpoints
+fall back between IPv6 and IPv4 without requiring a global `NODE_OPTIONS`
+override. Network failures include the operation, sanitized endpoint, and safe
+socket context; request bodies, credentials, query strings, and fragments are
+never included in the error. Requests are bounded so a stalled route releases
+long-running bridge poll loops and can be retried.
+
 Vector's delivery model has three levels:
 
 - **Request** captures an intake, the expected output, routing, and requester review.

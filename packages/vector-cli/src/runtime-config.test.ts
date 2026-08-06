@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+vi.mock('./network', () => ({
+  vectorFetch: (input: RequestInfo | URL, init?: RequestInit) =>
+    globalThis.fetch(input, init),
+}));
+
 import {
   APP_CONFIG_CACHE_TTL_MS,
   APP_CONFIG_FETCH_TIMEOUT_MS,

@@ -6,7 +6,7 @@
  *   vcli start             — installs + starts via LaunchAgent (macOS) or systemd (Linux)
  */
 
-import { ConvexHttpClient } from 'convex/browser';
+import type { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { api } from '../../../convex/_generated/api.js';
 import type { Id, TableNames } from '../../../convex/_generated/dataModel';
@@ -48,6 +48,7 @@ import {
   type CollaborationPromptInput,
   type CollaborationRunEvent,
 } from './acp-runtime';
+import { createUnauthenticatedConvexClient } from './convex';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -334,7 +335,7 @@ export class BridgeService {
 
   constructor(config: BridgeConfig) {
     this.config = config;
-    this.client = new ConvexHttpClient(config.convexUrl);
+    this.client = createUnauthenticatedConvexClient(config.convexUrl);
     this.collaborationRuntime = new CollaborationAcpRuntime({
       onEvent: (input, event) =>
         this.postCollaborationRunEvent(input.runId, event),
@@ -993,6 +994,10 @@ export class BridgeService {
     // Initial sync is best-effort. A network or auth blip should leave the
     // bridge alive so the periodic loops can recover without LaunchAgent churn.
     await this.runStartupStep('heartbeat', () => this.heartbeat());
+    // Claim queued collaboration work before slower discovery/sync steps. Each
+    // request is bounded by the CLI transport timeout, so a stalled route
+    // cannot freeze command delivery indefinitely.
+    await this.runStartupStep('command poll', () => this.pollCommands());
     await this.runStartupStep('process discovery', () =>
       this.reportProcesses(),
     );
@@ -2654,6 +2659,14 @@ export function loadLaunchAgent(): boolean {
 }
 
 export function unloadLaunchAgent(): boolean {
+  // A process with an isolated HOME/VECTOR_HOME must never boot out another
+  // Vector installation merely because launchd labels share a user domain.
+  // This also keeps local development and tests from stopping the installed
+  // bridge when their own plist has never been created.
+  if (platform() !== 'darwin' || !existsSync(LAUNCHAGENT_PLIST)) {
+    return false;
+  }
+
   if (
     runLaunchctl(['bootout', `${launchctlGuiDomain()}/${LAUNCHAGENT_LABEL}`]) ||
     runLaunchctl(['bootout', launchctlGuiDomain(), LAUNCHAGENT_PLIST]) ||

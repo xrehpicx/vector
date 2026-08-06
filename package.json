@@ -35,7 +35,7 @@
     "cli:dev-collaboration": "VECTOR_HOME=$(pwd)/.vector-dev-collaboration tsx packages/vector-cli/src/index.ts --profile collaboration-dev --app-url http://localhost:4200",
     "cli:dev-collaboration-bridge": "VECTOR_HOME=$(pwd)/.vector-dev-collaboration VECTOR_DISABLE_MENU_BAR=1 tsx packages/vector-cli/src/index.ts --profile collaboration-dev --app-url http://localhost:4200 service run",
     "build:cli-package": "pnpm --filter @rehpic/vcli build",
-    "test:cli": "vitest run packages/vector-cli/src/auth.test.ts packages/vector-cli/src/index.test.ts packages/vector-cli/src/session.test.ts packages/vector-cli/src/runtime-config.test.ts packages/vector-cli/src/version.test.ts packages/vector-cli/src/work-watch.test.ts packages/vector-cli/src/bridge-service.test.ts packages/vector-cli/src/agent-adapters.test.ts packages/vector-cli/src/acp-runtime.test.ts",
+    "test:cli": "vitest run packages/vector-cli/src/auth.test.ts packages/vector-cli/src/index.test.ts packages/vector-cli/src/session.test.ts packages/vector-cli/src/runtime-config.test.ts packages/vector-cli/src/network.test.ts packages/vector-cli/src/version.test.ts packages/vector-cli/src/work-watch.test.ts packages/vector-cli/src/bridge-service.test.ts packages/vector-cli/src/agent-adapters.test.ts packages/vector-cli/src/acp-runtime.test.ts",
     "typecheck": "pnpm typecheck:app && pnpm typecheck:convex",
     "typecheck:app": "tsgo -p tsconfig.json --noEmit --pretty false",
     "typecheck:convex": "tsgo -p convex/tsconfig.json --noEmit --pretty false",

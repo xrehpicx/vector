@@ -2,8 +2,6 @@
 
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { setDefaultResultOrder } from 'node:dns';
-import { setDefaultAutoSelectFamilyAttemptTimeout } from 'node:net';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadEnv } from 'dotenv';
@@ -24,7 +22,14 @@ import {
   requestDeviceCode,
   signUpWithEmail,
 } from './auth';
-import { createConvexClient, runAction, runMutation, runQuery } from './convex';
+import {
+  createConvexClient,
+  createUnauthenticatedConvexClient,
+  runAction,
+  runMutation,
+  runQuery,
+} from './convex';
+import { vectorFetch } from './network';
 import { printOutput } from './output';
 import { fetchAppConfig, resolveConvexRuntime } from './runtime-config';
 import { isNewerVersion } from './version';
@@ -51,13 +56,6 @@ import {
   writeSession,
   type CliSession,
 } from './session';
-
-// Node's default address-family racing abandons slow connection attempts after
-// a few hundred milliseconds. On higher-latency networks that can make every
-// Convex request fail even though the endpoint is reachable. Prefer IPv4 first
-// and allow enough time per route while retaining IPv6 fallback.
-setDefaultResultOrder('ipv4first');
-setDefaultAutoSelectFamilyAttemptTimeout(5_000);
 
 // Machine-readable commands (especially the native menu bar's `menu-state`
 // request) require stdout to contain only the requested payload. dotenv 17
@@ -356,7 +354,11 @@ function normalizeAppUrl(raw: string): string {
 async function resolveAppUrl(raw: string): Promise<string> {
   const url = normalizeAppUrl(raw);
   try {
-    const response = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+    const response = await vectorFetch(
+      url,
+      { method: 'HEAD', redirect: 'follow' },
+      'resolve app URL',
+    );
     // Use the final URL after redirects, stripped of trailing slash and path
     const resolved = new URL(response.url).origin;
     return resolved;
@@ -519,7 +521,7 @@ function isBridgeDeviceAuthError(error: unknown): boolean {
 async function validateStoredBridgeConfig(
   config: Awaited<ReturnType<typeof setupBridgeDevice>>,
 ): Promise<boolean> {
-  const client = new ConvexHttpClient(config.convexUrl);
+  const client = createUnauthenticatedConvexClient(config.convexUrl);
 
   try {
     await client.mutation(api.agentBridge.bridgePublic.heartbeat, {
@@ -688,13 +690,17 @@ function mimeTypeForFile(filePath: string) {
 
 async function uploadFile(uploadUrl: string, filePath: string) {
   const body = await readFile(filePath);
-  const response = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': mimeTypeForFile(filePath),
+  const response = await vectorFetch(
+    uploadUrl,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': mimeTypeForFile(filePath),
+      },
+      body,
     },
-    body,
-  });
+    'upload file',
+  );
 
   if (!response.ok) {
     throw new Error(`Upload failed with HTTP ${response.status}`);

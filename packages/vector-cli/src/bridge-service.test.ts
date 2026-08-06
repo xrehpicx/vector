@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   statSync,
   writeFileSync,
@@ -184,13 +185,23 @@ describe('Bridge CLI commands', () => {
 
   it('service stop reports not running when no PID file', () => {
     const tempHome = mkdtempSync(join(tmpdir(), 'vcli-bridge-'));
+    const fakeBin = join(tempHome, 'bin');
+    const launchctlMarker = join(tempHome, 'launchctl-called');
+    mkdirSync(fakeBin);
+    const fakeLaunchctl = join(fakeBin, 'launchctl');
+    writeFileSync(
+      fakeLaunchctl,
+      `#!/bin/sh\ntouch "${launchctlMarker}"\nexit 0\n`,
+      { mode: 0o700 },
+    );
     const result = runCliRaw(['service', 'stop'], {
       ...process.env,
       HOME: tempHome,
+      PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
     });
     const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
-    // On macOS it also tries to unload LaunchAgent, so accept that output too
-    expect(output).toMatch(/not running|No PID|unload/i);
+    expect(output).toMatch(/not running|No PID/i);
+    expect(existsSync(launchctlMarker)).toBe(false);
   }, 30_000);
 
   it('includes service and bridge in root help output', () => {

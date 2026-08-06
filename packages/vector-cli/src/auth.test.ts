@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('./network', () => ({
+  vectorFetch: (input: RequestInfo | URL, init?: RequestInit) =>
+    globalThis.fetch(input, init),
+}));
+
 import {
   fetchAuthSession,
   fetchConvexToken,

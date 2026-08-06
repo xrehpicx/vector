@@ -15,6 +15,8 @@ import {
   useMutation,
 } from '@/lib/convex';
 import { Button } from '@/components/ui/button';
+import { useScopedPermission } from '@/hooks/use-permissions';
+import { PERMISSIONS } from '@/convex/_shared/permissions';
 import { CollaborationWorkspace } from '@/components/collaboration/collaboration-workspace';
 import { CollaborationWorkspaceSkeleton } from '@/components/collaboration/collaboration-skeletons';
 import { CreateRequestDialog } from '@/components/requests/create-request-dialog';
@@ -229,6 +231,10 @@ function ActiveChannel({
   const router = useRouter();
   const convex = useConvex();
   const channelId = channelItem.channel._id;
+  const { hasPermission: hasMessageModerationPermission } = useScopedPermission(
+    { orgSlug },
+    PERMISSIONS.CHANNEL_MESSAGE_MODERATE,
+  );
   const roomId = `channel/${String(channelId)}`;
   const channelMemberRows = useCachedQuery(
     api.collaboration.channels.listMembers,
@@ -440,6 +446,14 @@ function ActiveChannel({
         }),
     [channelMemberRows, currentUser.id, liveUserIds, memberStatuses],
   );
+  const canModerateMessages =
+    hasMessageModerationPermission ||
+    (channelMemberRows ?? []).some(
+      row =>
+        String(row.membership.userId) === currentUser.id &&
+        (row.membership.role === 'owner' ||
+          row.membership.role === 'moderator'),
+    );
   const channelAgents = useMemo(
     () =>
       (channelAgentRows ?? []).map(row =>
@@ -492,6 +506,7 @@ function ActiveChannel({
       const message = toCollaborationMessage({
         view,
         currentUserId: currentUser.id,
+        canModerateMessages,
         agents: availableAgents,
         runs: mappedRuns,
         entities,
@@ -513,6 +528,7 @@ function ActiveChannel({
     );
   }, [
     availableAgents,
+    canModerateMessages,
     channelMembers,
     confirmedClientMessageIds,
     currentUser.id,
@@ -542,6 +558,7 @@ function ActiveChannel({
               const message = toCollaborationMessage({
                 view,
                 currentUserId: currentUser.id,
+                canModerateMessages,
                 agents: availableAgents,
                 runs: mappedRuns,
                 reactionUsers: channelMembers,
@@ -575,6 +592,7 @@ function ActiveChannel({
     channelMembers,
     confirmedClientMessageIds,
     currentUser.id,
+    canModerateMessages,
     localAttachmentPreviews,
     mappedRuns,
     messagePage.results,

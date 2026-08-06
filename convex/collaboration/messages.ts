@@ -588,20 +588,24 @@ export const remove = mutation({
     if (!membership) {
       throw new ConvexError('CHANNEL_MEMBERSHIP_REQUIRED');
     }
-    await requireChannelPermission(
-      ctx,
-      channel._id,
-      PERMISSIONS.CHANNEL_MESSAGE_SEND,
-    );
-    const canModerate = await requireChannelManager(
-      ctx,
-      channel._id,
-      PERMISSIONS.CHANNEL_MESSAGE_MODERATE,
-    )
-      .then(() => true)
-      .catch(() => false);
-    if (message.authorUserId !== userId && !canModerate) {
-      throw new ConvexError('MESSAGE_DELETE_FORBIDDEN');
+    if (message.authorUserId === userId) {
+      await requireChannelPermission(
+        ctx,
+        channel._id,
+        PERMISSIONS.CHANNEL_MESSAGE_SEND,
+      );
+    } else {
+      const isChannelModerator =
+        membership.role === 'owner' || membership.role === 'moderator';
+      if (!isChannelModerator) {
+        await requireChannelPermission(
+          ctx,
+          channel._id,
+          PERMISSIONS.CHANNEL_MESSAGE_MODERATE,
+        ).catch(() => {
+          throw new ConvexError('MESSAGE_DELETE_FORBIDDEN');
+        });
+      }
     }
     if (message.deletedAt) return null;
     const attachments = await ctx.db

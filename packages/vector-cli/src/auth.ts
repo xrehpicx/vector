@@ -1,4 +1,5 @@
 import { isCancel, password as passwordPrompt, text } from '@clack/prompts';
+import { vectorFetch } from './network';
 import { CliSession } from './session';
 
 type AuthUser = {
@@ -95,11 +96,15 @@ async function authRequest(
     headers.set('content-type', 'application/json');
   }
 
-  const response = await fetch(buildUrl(appUrl, pathname), {
-    ...init,
-    headers,
-    redirect: 'manual',
-  });
+  const response = await vectorFetch(
+    buildUrl(appUrl, pathname),
+    {
+      ...init,
+      headers,
+      redirect: 'manual',
+    },
+    `auth ${init.method ?? 'GET'} ${pathname}`,
+  );
   const nextSession = applySetCookieHeaders(session, response);
   return { response, session: nextSession };
 }
@@ -252,11 +257,15 @@ export async function requestDeviceCode(
   appUrl: string,
   clientId: string,
 ): Promise<DeviceCodeResponse> {
-  const response = await fetch(buildUrl(appUrl, '/api/auth/device/code'), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ client_id: clientId }),
-  });
+  const response = await vectorFetch(
+    buildUrl(appUrl, '/api/auth/device/code'),
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId }),
+    },
+    'request device code',
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to request device code: HTTP ${response.status}`);

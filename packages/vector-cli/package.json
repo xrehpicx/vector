@@ -49,6 +49,7 @@
     "node-datachannel": "^0.32.3",
     "node-pty": "1.2.0-beta.14",
     "tunnelmole": "^2.4.0",
+    "undici": "8.5.0",
     "ws": "^8.21.1"
   },
   "publishConfig": {

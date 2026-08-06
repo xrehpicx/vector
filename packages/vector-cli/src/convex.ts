@@ -1,7 +1,16 @@
 import { ConvexHttpClient } from 'convex/browser';
-import { FunctionReference, OptionalRestArgs } from 'convex/server';
+import {
+  FunctionReference,
+  getFunctionName,
+  OptionalRestArgs,
+} from 'convex/server';
 import { fetchConvexToken } from './auth';
+import { annotateNetworkError, vectorFetch } from './network';
 import { CliSession } from './session';
+
+export function createUnauthenticatedConvexClient(convexUrl: string) {
+  return new ConvexHttpClient(convexUrl, { fetch: vectorFetch });
+}
 
 export async function createConvexClient(
   session: CliSession,
@@ -9,7 +18,7 @@ export async function createConvexClient(
   convexUrl: string,
 ) {
   const { token } = await fetchConvexToken(session, appUrl);
-  const client = new ConvexHttpClient(convexUrl);
+  const client = createUnauthenticatedConvexClient(convexUrl);
   client.setAuth(token);
   return client;
 }
@@ -19,7 +28,11 @@ export async function runQuery<Query extends FunctionReference<'query'>>(
   ref: Query,
   ...args: OptionalRestArgs<Query>
 ) {
-  return await client.query(ref, ...args);
+  try {
+    return await client.query(ref, ...args);
+  } catch (error) {
+    throw annotateNetworkError(error, `Convex query ${getFunctionName(ref)}`);
+  }
 }
 
 export async function runMutation<
@@ -29,7 +42,14 @@ export async function runMutation<
   ref: Mutation,
   ...args: OptionalRestArgs<Mutation>
 ) {
-  return await client.mutation(ref, ...args);
+  try {
+    return await client.mutation(ref, ...args);
+  } catch (error) {
+    throw annotateNetworkError(
+      error,
+      `Convex mutation ${getFunctionName(ref)}`,
+    );
+  }
 }
 
 export async function runAction<Action extends FunctionReference<'action'>>(
@@ -37,5 +57,9 @@ export async function runAction<Action extends FunctionReference<'action'>>(
   ref: Action,
   ...args: OptionalRestArgs<Action>
 ) {
-  return await client.action(ref, ...args);
+  try {
+    return await client.action(ref, ...args);
+  } catch (error) {
+    throw annotateNetworkError(error, `Convex action ${getFunctionName(ref)}`);
+  }
 }

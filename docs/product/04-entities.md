@@ -35,6 +35,10 @@ Core semantics:
   interrupting the main timeline.
 - Reactions, pins, saved messages, read state, and permission-safe search make
   decisions and context recoverable.
+- People can delete their own messages. Channel owners/moderators, workspace
+  admins, and custom roles with message-moderation permission can also remove
+  other human or agent messages; the timeline retains a deleted-message marker
+  without retaining its content.
 - Messages can link to or create Requests, Work, Tasks, Projects, and Documents.
   A conversation does not replace those durable delivery entities.
 - Notification defaults prioritize direct messages, mentions, replies, and
