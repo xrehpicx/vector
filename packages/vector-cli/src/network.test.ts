@@ -97,6 +97,23 @@ describe('CLI network transport', () => {
     expect(error.message).toContain('TimeoutError');
   });
 
+  it('preserves caller cancellation instead of reporting a network outage', async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException('cancelled', 'AbortError'));
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+
+    const error = await fetchWithDispatcher(
+      'https://example.com/cancelled',
+      { signal: controller.signal },
+      'cancelled request',
+      dispatcher,
+    ).catch(caught => caught);
+
+    expect(error).not.toBeInstanceOf(VectorNetworkError);
+    expect(error.name).toBe('AbortError');
+  });
+
   it('reports safe operation, endpoint, and network context', async () => {
     const dispatcher = {
       dispatch() {
