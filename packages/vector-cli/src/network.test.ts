@@ -9,6 +9,7 @@ import {
   annotateNetworkError,
   createVectorDispatcher,
   fetchWithDispatcher,
+  isCallerCancellation,
 } from './network';
 
 describe('CLI network transport', () => {
@@ -16,14 +17,17 @@ describe('CLI network transport', () => {
   const dispatchers: Dispatcher[] = [];
 
   afterEach(async () => {
-    await Promise.all(dispatchers.map(dispatcher => dispatcher.destroy()));
-    dispatchers.length = 0;
-    if (server) {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) => {
-        server!.close(error => (error ? reject(error) : resolve()));
-      });
-      server = undefined;
+    try {
+      await Promise.all(dispatchers.map(dispatcher => dispatcher.destroy()));
+    } finally {
+      dispatchers.length = 0;
+      if (server) {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) => {
+          server!.close(error => (error ? reject(error) : resolve()));
+        });
+        server = undefined;
+      }
     }
   });
 
@@ -204,7 +208,7 @@ describe('CLI network transport', () => {
 
     const response = await fetchWithDispatcher(
       request,
-      undefined,
+      { body: undefined },
       'create document',
       dispatcher,
     );
@@ -238,7 +242,10 @@ describe('CLI network transport', () => {
     }
     const dispatcher = createVectorDispatcher();
     dispatchers.push(dispatcher);
-    const request = new Request(`http://127.0.0.1:${address.port}/document`);
+    const request = new Request(`http://127.0.0.1:${address.port}/document`, {
+      method: 'POST',
+      body: 'original body',
+    });
     const body = new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode('override body'));
@@ -255,6 +262,30 @@ describe('CLI network transport', () => {
 
     expect(response.status).toBe(200);
     expect(receivedBody).toBe('override body');
+    expect(request.bodyUsed).toBe(false);
+  });
+
+  it('classifies cancellation by exact reason identity', async () => {
+    const caller = new AbortController();
+    const callerReason = new DOMException('cancelled', 'AbortError');
+    caller.abort(callerReason);
+
+    expect(isCallerCancellation(callerReason, caller.signal)).toBe(true);
+    expect(isCallerCancellation(new Error('socket reset'), caller.signal)).toBe(
+      false,
+    );
+
+    const timeout = AbortSignal.timeout(1);
+    await new Promise<void>(resolve => {
+      timeout.addEventListener(
+        'abort',
+        () => {
+          expect(isCallerCancellation(timeout.reason, timeout)).toBe(false);
+          resolve();
+        },
+        { once: true },
+      );
+    });
   });
 
   it('preserves cancellation while a request is in flight', async () => {

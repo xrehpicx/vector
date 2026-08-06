@@ -110,6 +110,18 @@ export function createVectorDispatcher(options: Agent.Options = {}): Agent {
 
 const vectorDispatcher = createVectorDispatcher();
 
+export function isCallerCancellation(
+  error: unknown,
+  callerSignal: AbortSignal | undefined,
+): boolean {
+  if (!callerSignal?.aborted) return false;
+  const callerReason = callerSignal.reason;
+  const callerTimedOut =
+    callerReason instanceof DOMException &&
+    callerReason.name === 'TimeoutError';
+  return !callerTimedOut && error === callerReason;
+}
+
 /**
  * Caller cancellations are preserved verbatim, so this may reject with a
  * caller-supplied signal reason that is not an Error.
@@ -134,14 +146,24 @@ export async function fetchWithDispatcher(
     ? AbortSignal.any([callerSignal, timeoutSignal])
     : timeoutSignal;
   const fetchInput = inputRequest ? inputRequest.url : input;
-  const inputBody = inputRequest?.body
-    ? new Uint8Array(await inputRequest.arrayBuffer())
-    : undefined;
   const effectiveBody =
-    init && 'body' in init ? (init.body ?? undefined) : inputBody;
-  const needsDuplex =
+    init?.body != null
+      ? init.body
+      : inputRequest?.body
+        ? // Buffering preserves Content-Length when adapting a native Request.
+          new Uint8Array(await inputRequest.arrayBuffer())
+        : undefined;
+  const isStreamingBody =
     typeof ReadableStream !== 'undefined' &&
     effectiveBody instanceof ReadableStream;
+  const isAsyncIterableBody =
+    effectiveBody != null &&
+    typeof (effectiveBody as { [Symbol.asyncIterator]?: unknown })[
+      Symbol.asyncIterator
+    ] === 'function';
+  const initDuplex = (init as { duplex?: 'half' } | undefined)?.duplex;
+  const duplex =
+    initDuplex ?? (isStreamingBody || isAsyncIterableBody ? 'half' : undefined);
   const fetchInit = inputRequest
     ? {
         cache: inputRequest.cache,
@@ -156,7 +178,7 @@ export async function fetchWithDispatcher(
         redirect: inputRequest.redirect,
         ...init,
         body: effectiveBody,
-        duplex: needsDuplex ? ('half' as const) : undefined,
+        duplex,
         signal,
       }
     : { ...init, signal };
@@ -167,17 +189,7 @@ export async function fetchWithDispatcher(
       dispatcher,
     })) as unknown as Response;
   } catch (error) {
-    const callerReason = callerSignal?.aborted
-      ? callerSignal.reason
-      : undefined;
-    const callerTimedOut =
-      callerReason instanceof DOMException &&
-      callerReason.name === 'TimeoutError';
-    const callerAborted =
-      callerSignal?.aborted === true &&
-      !callerTimedOut &&
-      error === callerReason;
-    if (callerAborted) throw error;
+    if (isCallerCancellation(error, callerSignal)) throw error;
     throw new VectorNetworkError({
       cause: error,
       endpoint,
