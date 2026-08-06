@@ -269,7 +269,7 @@ describe('CLI network transport', () => {
       yield new TextEncoder().encode('async iterable body');
     })() as unknown as BodyInit;
     const asyncResponse = await fetchWithDispatcher(
-      `http://127.0.0.1:${address.port}/document`,
+      new URL(`http://127.0.0.1:${address.port}/document`),
       { method: 'POST', body: asyncBody },
       'create document',
       dispatcher,
@@ -277,6 +277,31 @@ describe('CLI network transport', () => {
 
     expect(asyncResponse.status).toBe(200);
     expect(receivedBody).toBe('async iterable body');
+  });
+
+  it('adds context when an adapted Request body cannot be read', async () => {
+    const request = new Request(
+      'https://api.example.com/v1/documents?access_token=do-not-print',
+      { method: 'POST', body: 'already consumed' },
+    );
+    await request.text();
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+
+    const error = await fetchWithDispatcher(
+      request,
+      undefined,
+      'create document',
+      dispatcher,
+    ).catch(caught => caught);
+
+    expect(error).toBeInstanceOf(VectorNetworkError);
+    expect(error.message).toContain(
+      'create document failed (POST https://api.example.com/v1/documents)',
+    );
+    expect(error.message).toContain('TypeError');
+    expect(error.message).not.toContain('access_token');
+    expect(error.message).not.toContain('do-not-print');
   });
 
   it('classifies cancellation by exact reason identity', async () => {
