@@ -40,7 +40,19 @@ describe('Convex CLI error annotation', () => {
     );
 
     expect(error).toBeInstanceOf(VectorNetworkError);
-    expect(error.message).toContain('Convex query unknown function failed');
+    expect(error.message).toContain('Convex query <unknown function> failed');
     expect(error.message).toContain('ENETUNREACH');
+    expect(error.cause).toBe(networkError.cause);
+    expect(error.networkContext).toBe(networkError.networkContext);
+  });
+
+  it('preserves the client validation error for a malformed reference', async () => {
+    const client = createUnauthenticatedConvexClient(
+      'https://cloud.example.com',
+    );
+
+    await expect(client.query({} as never, {})).rejects.toThrow(
+      'is not a functionReference',
+    );
   });
 });

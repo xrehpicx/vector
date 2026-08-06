@@ -14,7 +14,7 @@ function safeFunctionName(
   try {
     return getFunctionName(ref);
   } catch {
-    return 'unknown function';
+    return '<unknown function>';
   }
 }
 

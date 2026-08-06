@@ -115,6 +115,35 @@ describe('CLI network transport', () => {
     expect(error).toBe(reason);
   });
 
+  it('preserves cancellation while a request is in flight', async () => {
+    server = createServer(() => {
+      // Keep the request open until the caller aborts it.
+    });
+    await new Promise<void>((resolve, reject) => {
+      server!.listen(0, '127.0.0.1', () => resolve());
+      server!.once('error', reject);
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Test server did not expose a TCP port');
+    }
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+    const controller = new AbortController();
+    const reason = new DOMException('cancelled in flight', 'AbortError');
+    setTimeout(() => controller.abort(reason), 20);
+
+    const error = await fetchWithDispatcher(
+      `http://127.0.0.1:${address.port}/cancelled`,
+      { signal: controller.signal },
+      'cancelled request',
+      dispatcher,
+    ).catch(caught => caught);
+
+    expect(error).not.toBeInstanceOf(VectorNetworkError);
+    expect(error).toBe(reason);
+  });
+
   it('reports safe operation, endpoint, and network context', async () => {
     const dispatcher = {
       dispatch() {

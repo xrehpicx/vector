@@ -131,7 +131,7 @@ export async function fetchWithDispatcher(
       signal,
     })) as unknown as Response;
   } catch (error) {
-    if (init?.signal?.aborted) throw error;
+    if (init?.signal?.aborted && error === init.signal.reason) throw error;
     throw new VectorNetworkError({
       cause: error,
       endpoint,
