@@ -99,7 +99,8 @@ describe('CLI network transport', () => {
 
   it('preserves caller cancellation instead of reporting a network outage', async () => {
     const controller = new AbortController();
-    controller.abort(new DOMException('cancelled', 'AbortError'));
+    const reason = new DOMException('cancelled', 'AbortError');
+    controller.abort(reason);
     const dispatcher = createVectorDispatcher();
     dispatchers.push(dispatcher);
 
@@ -111,7 +112,7 @@ describe('CLI network transport', () => {
     ).catch(caught => caught);
 
     expect(error).not.toBeInstanceOf(VectorNetworkError);
-    expect(error.name).toBe('AbortError');
+    expect(error).toBe(reason);
   });
 
   it('reports safe operation, endpoint, and network context', async () => {
