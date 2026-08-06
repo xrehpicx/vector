@@ -94,7 +94,7 @@ jobs:
       matrix:
         node:
           - 22.19.0
-          - 24.18.0
+          - 24.x
 
     steps:
       - name: Checkout repository
@@ -103,14 +103,19 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6.0.9
 
-      - name: Set up Node.js
+      - name: Set up workspace Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node }}
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Set up CLI Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
 
       - name: Run CLI tests
         run: pnpm test:cli

@@ -119,27 +119,45 @@ export async function fetchWithDispatcher(
 ): Promise<Response> {
   const endpoint = safeEndpoint(input);
   const method = safeMethod(input, init);
+  const inputRequest =
+    typeof Request !== 'undefined' && input instanceof Request ? input : null;
+  const callerSignal = init?.signal ?? inputRequest?.signal;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const signal = init?.signal
-    ? AbortSignal.any([init.signal, timeoutSignal])
+  const signal = callerSignal
+    ? AbortSignal.any([callerSignal, timeoutSignal])
     : timeoutSignal;
+  const fetchInput = inputRequest ? inputRequest.url : input;
+  const fetchInit = inputRequest
+    ? {
+        method: inputRequest.method,
+        headers: inputRequest.headers,
+        redirect: inputRequest.redirect,
+        ...init,
+        signal,
+      }
+    : { ...init, signal };
 
   try {
-    return (await undiciFetch(input as Parameters<typeof undiciFetch>[0], {
-      ...(init as Parameters<typeof undiciFetch>[1]),
+    return (await undiciFetch(fetchInput as Parameters<typeof undiciFetch>[0], {
+      ...(fetchInit as Parameters<typeof undiciFetch>[1]),
       dispatcher,
-      signal,
     })) as unknown as Response;
   } catch (error) {
-    const callerReason = init?.signal?.aborted ? init.signal.reason : undefined;
+    const callerReason = callerSignal?.aborted
+      ? callerSignal.reason
+      : undefined;
+    const callerTimedOut =
+      callerReason instanceof DOMException &&
+      callerReason.name === 'TimeoutError';
+    const matchingAbortErrors =
+      callerReason instanceof Error &&
+      callerReason.name === 'AbortError' &&
+      error instanceof Error &&
+      error.name === 'AbortError';
     const callerAborted =
       callerReason !== undefined &&
-      typeof callerReason === 'object' &&
-      callerReason !== null &&
-      'name' in callerReason &&
-      callerReason.name === 'AbortError' &&
-      (error === callerReason ||
-        (error instanceof Error && error.name === 'AbortError'));
+      !callerTimedOut &&
+      (error === callerReason || matchingAbortErrors);
     if (callerAborted) throw error;
     throw new VectorNetworkError({
       cause: error,

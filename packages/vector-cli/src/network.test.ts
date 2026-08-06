@@ -105,7 +105,7 @@ describe('CLI network transport', () => {
     dispatchers.push(dispatcher);
 
     const error = await fetchWithDispatcher(
-      'https://example.com/cancelled',
+      'http://127.0.0.1:1/cancelled',
       { signal: controller.signal },
       'cancelled request',
       dispatcher,
@@ -113,6 +113,44 @@ describe('CLI network transport', () => {
 
     expect(error).not.toBeInstanceOf(VectorNetworkError);
     expect(error).toBe(reason);
+  });
+
+  it('preserves a caller-defined cancellation reason', async () => {
+    const controller = new AbortController();
+    const reason = 'shutting down';
+    controller.abort(reason);
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+
+    const error = await fetchWithDispatcher(
+      'http://127.0.0.1:1/cancelled',
+      { signal: controller.signal },
+      'cancelled request',
+      dispatcher,
+    ).catch(caught => caught);
+
+    expect(error).not.toBeInstanceOf(VectorNetworkError);
+    expect(error).toBe(reason);
+  });
+
+  it('honors a cancellation signal carried by a Request', async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException('cancelled request', 'AbortError'));
+    const request = new Request('http://127.0.0.1:1/cancelled', {
+      signal: controller.signal,
+    });
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+
+    const error = await fetchWithDispatcher(
+      request,
+      undefined,
+      'cancelled request',
+      dispatcher,
+    ).catch(caught => caught);
+
+    expect(error).not.toBeInstanceOf(VectorNetworkError);
+    expect(error.name).toBe('AbortError');
   });
 
   it('preserves cancellation while a request is in flight', async () => {
