@@ -281,7 +281,7 @@ describe('CLI network transport', () => {
 
   it('adds context when an adapted Request body cannot be read', async () => {
     const request = new Request(
-      'https://api.example.com/v1/documents?access_token=do-not-print',
+      'http://127.0.0.1:1/v1/documents?access_token=do-not-print',
       { method: 'POST', body: 'already consumed' },
     );
     await request.text();
@@ -297,9 +297,10 @@ describe('CLI network transport', () => {
 
     expect(error).toBeInstanceOf(VectorNetworkError);
     expect(error.message).toContain(
-      'create document failed (POST https://api.example.com/v1/documents)',
+      'create document failed (POST http://127.0.0.1:1/v1/documents)',
     );
-    expect(error.message).toContain('TypeError');
+    expect(error.networkContext).toBe('TypeError');
+    expect(error.cause).toBeInstanceOf(TypeError);
     expect(error.message).not.toContain('access_token');
     expect(error.message).not.toContain('do-not-print');
   });
