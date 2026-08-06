@@ -146,44 +146,46 @@ export async function fetchWithDispatcher(
     ? AbortSignal.any([callerSignal, timeoutSignal])
     : timeoutSignal;
   const fetchInput = inputRequest ? inputRequest.url : input;
-  const effectiveBody =
-    init?.body != null
-      ? init.body
-      : inputRequest?.body
-        ? // Buffering preserves Content-Length when adapting a native Request.
-          new Uint8Array(await inputRequest.arrayBuffer())
-        : undefined;
-  const isStreamingBody =
-    typeof ReadableStream !== 'undefined' &&
-    effectiveBody instanceof ReadableStream;
-  const isAsyncIterableBody =
-    effectiveBody != null &&
-    typeof (effectiveBody as { [Symbol.asyncIterator]?: unknown })[
-      Symbol.asyncIterator
-    ] === 'function';
-  const initDuplex = (init as { duplex?: 'half' } | undefined)?.duplex;
-  const duplex =
-    initDuplex ?? (isStreamingBody || isAsyncIterableBody ? 'half' : undefined);
-  const fetchInit = inputRequest
-    ? {
-        cache: inputRequest.cache,
-        credentials: inputRequest.credentials,
-        headers: inputRequest.headers,
-        integrity: inputRequest.integrity,
-        keepalive: inputRequest.keepalive,
-        method: inputRequest.method,
-        mode: inputRequest.mode,
-        referrer: inputRequest.referrer,
-        referrerPolicy: inputRequest.referrerPolicy,
-        redirect: inputRequest.redirect,
-        ...init,
-        body: effectiveBody,
-        duplex,
-        signal,
-      }
-    : { ...init, signal };
 
   try {
+    const effectiveBody =
+      init?.body != null
+        ? init.body
+        : inputRequest?.body
+          ? // Buffering preserves Content-Length when adapting a native Request.
+            new Uint8Array(await inputRequest.arrayBuffer())
+          : undefined;
+    const isStreamingBody =
+      typeof ReadableStream !== 'undefined' &&
+      effectiveBody instanceof ReadableStream;
+    const isAsyncIterableBody =
+      effectiveBody != null &&
+      typeof (effectiveBody as { [Symbol.asyncIterator]?: unknown })[
+        Symbol.asyncIterator
+      ] === 'function';
+    const initDuplex = (init as { duplex?: 'half' } | undefined)?.duplex;
+    const duplex =
+      initDuplex ??
+      (isStreamingBody || isAsyncIterableBody ? 'half' : undefined);
+    const fetchInit = inputRequest
+      ? {
+          cache: inputRequest.cache,
+          credentials: inputRequest.credentials,
+          headers: inputRequest.headers,
+          integrity: inputRequest.integrity,
+          keepalive: inputRequest.keepalive,
+          method: inputRequest.method,
+          mode: inputRequest.mode,
+          referrer: inputRequest.referrer,
+          referrerPolicy: inputRequest.referrerPolicy,
+          redirect: inputRequest.redirect,
+          ...init,
+          body: effectiveBody,
+          duplex,
+          signal,
+        }
+      : { ...init, duplex, signal };
+
     return (await undiciFetch(fetchInput as Parameters<typeof undiciFetch>[0], {
       ...(fetchInit as Parameters<typeof undiciFetch>[1]),
       dispatcher,

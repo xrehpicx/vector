@@ -220,7 +220,7 @@ describe('CLI network transport', () => {
     );
   });
 
-  it('uses an init stream body that overrides an adapted Request', async () => {
+  it('uses init streaming bodies with Request and URL inputs', async () => {
     let receivedBody = '';
     server = createServer((request, response) => {
       request.setEncoding('utf8');
@@ -263,6 +263,20 @@ describe('CLI network transport', () => {
     expect(response.status).toBe(200);
     expect(receivedBody).toBe('override body');
     expect(request.bodyUsed).toBe(false);
+
+    receivedBody = '';
+    const asyncBody = (async function* () {
+      yield new TextEncoder().encode('async iterable body');
+    })() as unknown as BodyInit;
+    const asyncResponse = await fetchWithDispatcher(
+      `http://127.0.0.1:${address.port}/document`,
+      { method: 'POST', body: asyncBody },
+      'create document',
+      dispatcher,
+    );
+
+    expect(asyncResponse.status).toBe(200);
+    expect(receivedBody).toBe('async iterable body');
   });
 
   it('classifies cancellation by exact reason identity', async () => {
@@ -277,15 +291,9 @@ describe('CLI network transport', () => {
 
     const timeout = AbortSignal.timeout(1);
     await new Promise<void>(resolve => {
-      timeout.addEventListener(
-        'abort',
-        () => {
-          expect(isCallerCancellation(timeout.reason, timeout)).toBe(false);
-          resolve();
-        },
-        { once: true },
-      );
+      timeout.addEventListener('abort', () => resolve(), { once: true });
     });
+    expect(isCallerCancellation(timeout.reason, timeout)).toBe(false);
   });
 
   it('preserves cancellation while a request is in flight', async () => {
