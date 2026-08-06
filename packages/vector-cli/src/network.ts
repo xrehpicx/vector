@@ -110,6 +110,10 @@ export function createVectorDispatcher(options: Agent.Options = {}): Agent {
 
 const vectorDispatcher = createVectorDispatcher();
 
+/**
+ * Caller cancellations are preserved verbatim, so this may reject with a
+ * caller-supplied signal reason that is not an Error.
+ */
 export async function fetchWithDispatcher(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
@@ -121,16 +125,29 @@ export async function fetchWithDispatcher(
   const method = safeMethod(input, init);
   const inputRequest =
     typeof Request !== 'undefined' && input instanceof Request ? input : null;
-  const callerSignal = init?.signal ?? inputRequest?.signal;
+  const callerSignal =
+    init && 'signal' in init
+      ? (init.signal ?? undefined)
+      : inputRequest?.signal;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = callerSignal
     ? AbortSignal.any([callerSignal, timeoutSignal])
     : timeoutSignal;
   const fetchInput = inputRequest ? inputRequest.url : input;
+  const inputBody = inputRequest?.body ?? undefined;
   const fetchInit = inputRequest
     ? {
-        method: inputRequest.method,
+        body: inputBody,
+        cache: inputRequest.cache,
+        credentials: inputRequest.credentials,
+        duplex: inputBody ? ('half' as const) : undefined,
         headers: inputRequest.headers,
+        integrity: inputRequest.integrity,
+        keepalive: inputRequest.keepalive,
+        method: inputRequest.method,
+        mode: inputRequest.mode,
+        referrer: inputRequest.referrer,
+        referrerPolicy: inputRequest.referrerPolicy,
         redirect: inputRequest.redirect,
         ...init,
         signal,
@@ -149,15 +166,11 @@ export async function fetchWithDispatcher(
     const callerTimedOut =
       callerReason instanceof DOMException &&
       callerReason.name === 'TimeoutError';
-    const matchingAbortErrors =
-      callerReason instanceof Error &&
-      callerReason.name === 'AbortError' &&
-      error instanceof Error &&
-      error.name === 'AbortError';
     const callerAborted =
-      callerReason !== undefined &&
+      callerSignal?.aborted === true &&
+      !timeoutSignal.aborted &&
       !callerTimedOut &&
-      (error === callerReason || matchingAbortErrors);
+      callerReason !== undefined;
     if (callerAborted) throw error;
     throw new VectorNetworkError({
       cause: error,

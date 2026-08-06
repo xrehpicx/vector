@@ -133,9 +133,27 @@ describe('CLI network transport', () => {
     expect(error).toBe(reason);
   });
 
+  it('recognizes a falsy caller-defined cancellation reason', async () => {
+    const controller = new AbortController();
+    controller.abort('');
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+
+    const error = await fetchWithDispatcher(
+      'http://127.0.0.1:1/cancelled',
+      { signal: controller.signal },
+      'cancelled request',
+      dispatcher,
+    ).catch(caught => caught);
+
+    expect(error).not.toBeInstanceOf(VectorNetworkError);
+    expect(error).toBe('');
+  });
+
   it('honors a cancellation signal carried by a Request', async () => {
     const controller = new AbortController();
-    controller.abort(new DOMException('cancelled request', 'AbortError'));
+    const reason = new DOMException('cancelled request', 'AbortError');
+    controller.abort(reason);
     const request = new Request('http://127.0.0.1:1/cancelled', {
       signal: controller.signal,
     });
@@ -150,7 +168,46 @@ describe('CLI network transport', () => {
     ).catch(caught => caught);
 
     expect(error).not.toBeInstanceOf(VectorNetworkError);
-    expect(error.name).toBe('AbortError');
+    expect(error).toBe(reason);
+  });
+
+  it('preserves a Request body when adapting it for Undici', async () => {
+    let receivedBody = '';
+    server = createServer((request, response) => {
+      request.setEncoding('utf8');
+      request.on('data', chunk => {
+        receivedBody += chunk;
+      });
+      request.on('end', () => {
+        response.writeHead(200);
+        response.end();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server!.listen(0, '127.0.0.1', () => resolve());
+      server!.once('error', reject);
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Test server did not expose a TCP port');
+    }
+    const dispatcher = createVectorDispatcher();
+    dispatchers.push(dispatcher);
+    const request = new Request(`http://127.0.0.1:${address.port}/document`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Network diagnostic' }),
+    });
+
+    const response = await fetchWithDispatcher(
+      request,
+      undefined,
+      'create document',
+      dispatcher,
+    );
+
+    expect(response.status).toBe(200);
+    expect(receivedBody).toBe('{"title":"Network diagnostic"}');
   });
 
   it('preserves cancellation while a request is in flight', async () => {
