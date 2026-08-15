@@ -1,13 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FunctionReturnType } from 'convex/server';
 import {
   ArrowUpRight,
   CircleDot,
+  Columns3,
   Inbox,
+  LayoutList,
   Network,
   Search,
   UserRound,
@@ -29,8 +31,14 @@ import { CreateRequestDialog } from '@/components/requests/create-request-dialog
 import { GroupBySelector } from '@/components/ui/group-by-selector';
 import { GroupSection } from '@/components/ui/group-section';
 import { RequestActionsMenu } from '@/components/requests/request-actions-menu';
+import { RequestsKanban } from '@/components/requests/requests-kanban';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useConfirm } from '@/hooks/use-confirm';
+import {
+  usePersistedViewMode,
+  type ViewMode,
+} from '@/hooks/use-persisted-view-mode';
+import { KanbanSkeleton } from '@/components/ui/table-skeleton';
 import { toast } from 'sonner';
 
 const scopes = [
@@ -71,6 +79,7 @@ type RequestListItem = FunctionReturnType<
 type RequestGroupBy = 'none' | 'priority' | 'status';
 const requestGroupByValues: RequestGroupBy[] = ['none', 'priority', 'status'];
 const requestGroupByStorageKey = 'vector:requests:group-by';
+const requestViewModeStorageKey = 'vector:requests-list-layout';
 
 function RequestRow({
   request,
@@ -161,6 +170,7 @@ function RequestRow({
 
 export default function RequestsPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
+  const searchParams = useSearchParams();
   const [scope, setScope] = useState<(typeof scopes)[number]['value']>('inbox');
   const [groupBy, setGroupByState] = useState<RequestGroupBy>('none');
   const [searchQuery, setSearchQuery] = useState('');
@@ -171,6 +181,26 @@ export default function RequestsPage() {
   );
   const [confirmDelete, ConfirmDeleteDialog] = useConfirm();
   const removeRequest = useMutation(api.requests.mutations.remove);
+  const viewParam = searchParams.get('view');
+  const queryMode: ViewMode | null =
+    viewParam === 'kanban' || viewParam === 'table' ? viewParam : null;
+  const syncViewModeUrl = useCallback((mode: ViewMode) => {
+    const params = new URLSearchParams(window.location.search);
+    if (mode === 'table') params.delete('view');
+    else params.set('view', mode);
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      '',
+      query ? `?${query}` : window.location.pathname,
+    );
+  }, []);
+  const { viewMode, setViewMode } = usePersistedViewMode({
+    storageKey: requestViewModeStorageKey,
+    defaultMode: 'table',
+    queryMode,
+    syncUrl: syncViewModeUrl,
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -294,7 +324,7 @@ export default function RequestsPage() {
     return Array.from(grouped.values()).sort((a, b) => a.weight - b.weight);
   }, [groupBy, priorityResults, result.results]);
   return (
-    <div className='flex min-h-full flex-col'>
+    <div className='flex h-full min-h-0 flex-col'>
       <header className='flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b px-1 py-1 sm:flex-nowrap sm:gap-3 sm:py-0 sm:pr-1 sm:pl-3'>
         <div className='flex shrink-0 items-baseline gap-2'>
           <h1 className='text-sm font-semibold'>Requests</h1>
@@ -344,34 +374,66 @@ export default function RequestsPage() {
             </Button>
           )}
         </div>
-        <GroupBySelector
-          options={[
-            { value: 'none', label: 'No grouping' },
-            { value: 'priority', label: 'Priority' },
-            { value: 'status', label: 'Status' },
-          ]}
-          value={groupBy}
-          onChange={setGroupBy}
-          className='h-7 px-2 text-xs'
-        />
+        <div
+          className='border-border flex shrink-0 items-center rounded-md border'
+          role='group'
+          aria-label='Request view'
+        >
+          <Button
+            variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+            size='sm'
+            className='h-7 rounded-r-none px-2'
+            onClick={() => setViewMode('table')}
+            aria-label='Table view'
+            title='Table view'
+          >
+            <LayoutList className='size-3.5' />
+          </Button>
+          <Button
+            variant={viewMode === 'kanban' ? 'secondary' : 'ghost'}
+            size='sm'
+            className='h-7 rounded-l-none px-2'
+            onClick={() => setViewMode('kanban')}
+            aria-label='Kanban view'
+            title='Kanban view'
+          >
+            <Columns3 className='size-3.5' />
+          </Button>
+        </div>
+        {viewMode === 'table' && (
+          <GroupBySelector
+            options={[
+              { value: 'none', label: 'No grouping' },
+              { value: 'priority', label: 'Priority' },
+              { value: 'status', label: 'Status' },
+            ]}
+            value={groupBy}
+            onChange={setGroupBy}
+            className='h-7 px-2 text-xs'
+          />
+        )}
         <div className='shrink-0'>
           <CreateRequestDialog orgSlug={orgSlug} />
         </div>
       </header>
       {result.status === 'LoadingFirstPage' ? (
-        <div>
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div
-              key={index}
-              className='flex h-10 items-center gap-2 border-b px-3'
-            >
-              <Skeleton className='size-3 rounded-full' />
-              <Skeleton className='h-3 w-16' />
-              <Skeleton className='h-3 max-w-96 flex-1' />
-              <Skeleton className='h-5 w-24 rounded-full' />
-            </div>
-          ))}
-        </div>
+        viewMode === 'kanban' ? (
+          <KanbanSkeleton />
+        ) : (
+          <div>
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={index}
+                className='flex h-10 items-center gap-2 border-b px-3'
+              >
+                <Skeleton className='size-3 rounded-full' />
+                <Skeleton className='h-3 w-16' />
+                <Skeleton className='h-3 max-w-96 flex-1' />
+                <Skeleton className='h-5 w-24 rounded-full' />
+              </div>
+            ))}
+          </div>
+        )
       ) : result.results.length === 0 && result.status === 'Exhausted' ? (
         <div className='text-muted-foreground flex min-h-64 flex-col items-center justify-center gap-2 text-center'>
           <Inbox className='size-7 opacity-40' />
@@ -397,6 +459,23 @@ export default function RequestsPage() {
                     ? 'Requests you create will stay visible here through delivery and review.'
                     : 'Create a request to define an expected output and route it into Work.'}
           </p>
+        </div>
+      ) : viewMode === 'kanban' ? (
+        <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+          <div className='min-h-0 flex-1'>
+            <RequestsKanban
+              requests={result.results}
+              orgSlug={orgSlug}
+              currentTime={currentTime}
+              deletingRequestId={deletingRequestId}
+              onDelete={request => void handleDelete(request)}
+            />
+          </div>
+          <AutoLoadMore
+            status={result.status}
+            loadMore={() => result.loadMore(40)}
+            className='shrink-0'
+          />
         </div>
       ) : (
         <div>
